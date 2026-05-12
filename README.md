@@ -20,6 +20,7 @@ Railway-oriented programming for TypeScript — `Result<T>`, `Maybe<T>`, Rule En
 - [Entity Base (DDD)](#entity-base-ddd)
 - [HTTP (fetchResult)](#http-fetchresult)
 - [Design notes](#design-notes)
+- [AI Skills](#ai-skills)
 
 ## Install
 
@@ -225,6 +226,16 @@ const result = await RequestBuilder.get('https://api.example.com/users')
 - **`Rule<T>`** — just `(ctx: T) => VoidResult`, no interface hierarchy
 - **Entity base** — mixin factory pattern (`createEntityBase()`), not abstract class inheritance
 - **`sideEffects: false`** — all subpath imports are fully tree-shakeable
+
+## AI Skills
+
+Install skills for Claude Code, Cursor, Codex, and 50+ other AI agents:
+
+```bash
+npx skills add senrecep/tsentials
+```
+
+Each module has a dedicated skill with accurate API examples, correct import paths, and common pitfalls.
 
 ## License
 

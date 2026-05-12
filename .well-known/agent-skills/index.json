@@ -1,0 +1,54 @@
+{
+  "skills": [
+    {
+      "name": "tsentials-result",
+      "description": "Use when handling operation outcomes without exceptions — Result<T> for success/failure, railway-oriented chaining with map/ensure/andThen, ResultChain for fluent sync pipelines, ResultAsync<T> for async chains that resolve once at the end, and Result.combine for merging multiple results.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-maybe",
+      "description": "Use when representing optional values explicitly — Maybe<T> as a null-safe container, Maybe.from() for creation, map/filter/bind chaining, match for consumption, async support with mapAsync, and collection utilities tryFirst/tryFind/choose.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-errors",
+      "description": "Use when creating structured error values — Err factory methods (validation/notFound/conflict/unauthorized/forbidden/unexpected/custom), AppError with code/description/type/metadata, and ErrorType enum for classification.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-rules",
+      "description": "Use when composing business validation logic — define rules as functions returning VoidResult, combine with RuleEngine.and/or/linear/if, evaluate with RuleEngine.evaluate with full async support.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-entity",
+      "description": "Use when building DDD domain models — createEntityBase() mixin factory for aggregate roots with audit fields and domain events, createSoftDeletable() for soft deletion lifecycle, and DomainEvent for event-driven design.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-http",
+      "description": "Use when making HTTP calls that should return Result<T> instead of throwing exceptions — fetchResult wraps the Fetch API with error handling, RequestBuilder for fluent header/query-param request construction.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-time",
+      "description": "Use when you need testable time — DateTimeProvider interface so production code uses SystemDateTimeProvider while tests use createFakeDateTimeProvider to freeze or advance the clock without touching Date.now().",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-clone",
+      "description": "Use when objects need deep-copy semantics — implement Cloneable<T> on domain objects, use deepClone() for a single object, and cloneArray() to produce independent deep copies of every element in a collection.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-union",
+      "description": "Use when a value can be one of several distinct tagged types — Union<T> as a compile-time-safe discriminated union with Union.match() for exhaustive pattern matching, Union.is() for type guards, and Union.of() for construction.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-meta",
+      "description": "Use when deciding which tsentials module to use — overview of all 9 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.",
+      "files": ["SKILL.md"]
+    }
+  ]
+}
