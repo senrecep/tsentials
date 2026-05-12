@@ -5,7 +5,7 @@ Thank you for your interest in contributing!
 ## Development Setup
 
 ```bash
-git clone https://github.com/recepsen/TypeScriptEssentials.git
+git clone https://github.com/senrecep/tsentials.git
 cd TypeScriptEssentials
 npm install
 npm run build

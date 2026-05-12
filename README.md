@@ -3,8 +3,8 @@
 [![npm version](https://img.shields.io/npm/v/tsentials?style=flat-square&color=blue)](https://www.npmjs.com/package/tsentials)
 [![npm downloads](https://img.shields.io/npm/dm/tsentials?style=flat-square)](https://www.npmjs.com/package/tsentials)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/tsentials/result?style=flat-square&label=result%20gzip)](https://bundlephobia.com/package/tsentials)
-[![CI](https://img.shields.io/github/actions/workflow/status/recepsen/TypeScriptEssentials/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/recepsen/TypeScriptEssentials/actions)
-[![license](https://img.shields.io/github/license/recepsen/TypeScriptEssentials?style=flat-square)](./LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/senrecep/tsentials/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/senrecep/tsentials/actions)
+[![license](https://img.shields.io/github/license/senrecep/tsentials?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 
 Railway-oriented programming for TypeScript — `Result<T>`, `Maybe<T>`, Rule Engine, and DDD base classes with full async pipeline support.
@@ -226,4 +226,4 @@ const result = await RequestBuilder.get('https://api.example.com/users')
 
 ## License
 
-MIT © [Recep Şen](https://github.com/recepsen)
+MIT © [Recep Şen](https://github.com/senrecep)
