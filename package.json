@@ -1,0 +1,94 @@
+{
+  "name": "tsentials",
+  "version": "0.1.0",
+  "description": "Railway-oriented programming for TypeScript — Result<T>, Maybe<T>, Rule Engine, and DDD base classes with full async pipeline support",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./errors": {
+      "import": "./dist/errors/index.js",
+      "types": "./dist/errors/index.d.ts"
+    },
+    "./result": {
+      "import": "./dist/result/index.js",
+      "types": "./dist/result/index.d.ts"
+    },
+    "./maybe": {
+      "import": "./dist/maybe/index.js",
+      "types": "./dist/maybe/index.d.ts"
+    },
+    "./rules": {
+      "import": "./dist/rules/index.js",
+      "types": "./dist/rules/index.d.ts"
+    },
+    "./http": {
+      "import": "./dist/http/index.js",
+      "types": "./dist/http/index.d.ts"
+    },
+    "./entity": {
+      "import": "./dist/entity/index.js",
+      "types": "./dist/entity/index.d.ts"
+    },
+    "./time": {
+      "import": "./dist/time/index.js",
+      "types": "./dist/time/index.d.ts"
+    },
+    "./clone": {
+      "import": "./dist/clone/index.js",
+      "types": "./dist/clone/index.d.ts"
+    },
+    "./union": {
+      "import": "./dist/union/index.js",
+      "types": "./dist/union/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "result",
+    "maybe",
+    "option",
+    "railway-oriented-programming",
+    "functional",
+    "error-handling",
+    "ddd",
+    "domain-driven-design",
+    "rule-engine",
+    "monad",
+    "typescript",
+    "async",
+    "pipeline"
+  ],
+  "license": "MIT",
+  "author": "Recep Şen",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/recepsen/TypeScriptEssentials"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

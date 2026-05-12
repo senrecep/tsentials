@@ -1,0 +1,199 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1778617994354,
+  "projectRoot": "/Users/recepsen/Documents/projects/recep/TypeScriptEssentials",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "vitest",
+        "version": "2.0.0",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build 2>&1 && npm test 2>&1",
+    "testCommand": "npm run build 2>&1 && npm test 2>&1",
+    "lintCommand": "npm run lint",
+    "devCommand": null,
+    "scripts": {
+      "build": "tsc",
+      "test": "vitest run",
+      "test:watch": "vitest",
+      "test:coverage": "vitest run --coverage",
+      "typecheck": "tsc --noEmit",
+      "lint": "eslint src --ext .ts"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "src",
+      "tests"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1778617994200,
+      "keyFiles": [
+        "index.ts"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 0,
+      "lastAccessed": 1778617994202,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/result/result-chain.ts",
+      "accessCount": 8,
+      "lastAccessed": 1778619279819,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 5,
+      "lastAccessed": 1778623438899,
+      "type": "directory"
+    },
+    {
+      "path": "src/maybe/maybe.ts",
+      "accessCount": 4,
+      "lastAccessed": 1778619278946,
+      "type": "file"
+    },
+    {
+      "path": "src/result/result.ts",
+      "accessCount": 4,
+      "lastAccessed": 1778619287490,
+      "type": "file"
+    },
+    {
+      "path": "src/result/result-async.ts",
+      "accessCount": 4,
+      "lastAccessed": 1778619299370,
+      "type": "file"
+    },
+    {
+      "path": "tests/result/result.test.ts",
+      "accessCount": 4,
+      "lastAccessed": 1778619314743,
+      "type": "file"
+    },
+    {
+      "path": "tests/maybe/maybe.test.ts",
+      "accessCount": 4,
+      "lastAccessed": 1778619316949,
+      "type": "file"
+    },
+    {
+      "path": "src/maybe/index.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778619297865,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 3,
+      "lastAccessed": 1778620141977,
+      "type": "file"
+    },
+    {
+      "path": "src/index.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778623451418,
+      "type": "file"
+    },
+    {
+      "path": "src/result/index.ts",
+      "accessCount": 2,
+      "lastAccessed": 1778618293516,
+      "type": "file"
+    },
+    {
+      "path": "tests/result/result-chain.test.ts",
+      "accessCount": 2,
+      "lastAccessed": 1778618551036,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 2,
+      "lastAccessed": 1778623451260,
+      "type": "file"
+    },
+    {
+      "path": "src",
+      "accessCount": 2,
+      "lastAccessed": 1778623451366,
+      "type": "directory"
+    },
+    {
+      "path": "tsconfig.json",
+      "accessCount": 2,
+      "lastAccessed": 1778623533420,
+      "type": "file"
+    },
+    {
+      "path": "tests/result/result-async.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1778618353459,
+      "type": "file"
+    },
+    {
+      "path": "src/maybe/maybe-utils.ts",
+      "accessCount": 1,
+      "lastAccessed": 1778619287305,
+      "type": "file"
+    },
+    {
+      "path": "tests/maybe/maybe-utils.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1778619327943,
+      "type": "file"
+    },
+    {
+      "path": "LICENSE",
+      "accessCount": 1,
+      "lastAccessed": 1778620175684,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
