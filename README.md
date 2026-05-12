@@ -50,7 +50,8 @@ npm install tsentials
 Discriminated union `{ ok: true; value: T } | { ok: false; errors: AppError[] }`. No exceptions — errors are values.
 
 ```typescript
-import { Result, Err } from 'tsentials/result';
+import { Result } from 'tsentials/result';
+import { Err } from 'tsentials/errors';
 
 function divide(a: number, b: number): Result<number> {
   if (b === 0) return Result.failure(Err.validation('Math.DivideByZero', 'Cannot divide by zero'));
@@ -82,7 +83,8 @@ const price = ResultChain.of(Result.success(100))
 `ResultAsync<T>` implements `PromiseLike<Result<T>>` — the entire chain builds synchronously, resolves once at the end with a single `await`.
 
 ```typescript
-import { fromAsync, Err } from 'tsentials/result';
+import { fromAsync } from 'tsentials/result';
+import { Err } from 'tsentials/errors';
 
 const profile = await fromAsync(fetchUser(userId))
   .andThen(user => validateUser(user))
@@ -167,7 +169,7 @@ const result = await RuleEngine.evaluate(canRegister, user);
 ## AppError & Err factory
 
 ```typescript
-import { Err } from 'tsentials/result';
+import { Err } from 'tsentials/errors';
 
 Err.validation('Field.Required', 'Name is required')
 Err.notFound('User.NotFound', 'User does not exist')

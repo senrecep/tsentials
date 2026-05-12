@@ -9,7 +9,8 @@
 ## Import Paths
 
 ```typescript
-import { Result, ResultChain, ResultAsync, fromAsync, Err } from 'tsentials/result';
+import { Result, ResultChain, ResultAsync, fromAsync } from 'tsentials/result';
+import { Err } from 'tsentials/errors';
 import { Maybe, tryFirst, tryFind, choose } from 'tsentials/maybe';
 import { AppError, ErrorType } from 'tsentials/errors';
 import { RuleEngine } from 'tsentials/rules';

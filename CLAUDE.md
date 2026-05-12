@@ -37,7 +37,8 @@ Discriminated union: `{ ok: true; value: T } | { ok: false; errors: AppError[] }
 
 ```typescript
 // Sync pipeline
-import { Result, ResultChain, Err } from 'tsentials/result';
+import { Result, ResultChain } from 'tsentials/result';
+import { Err } from 'tsentials/errors';
 
 Result.success(value)
 Result.failure(Err.validation('Code', 'message'))
