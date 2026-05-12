@@ -24,7 +24,6 @@ async function responseToResult<T>(response: Response): Promise<Result<T>> {
 
 /**
  * fetch()-based HTTP client that returns Result<T> instead of throwing.
- * Adapted from CSharpEssentials.Http.HttpClientResultExtensions.
  *
  * All methods catch both network errors (TypeError) and HTTP error responses.
  *
@@ -36,7 +35,6 @@ async function responseToResult<T>(response: Response): Promise<Result<T>> {
 export const fetchResult = {
   /**
    * GET — returns Result<T> with deserialized JSON body on success.
-   * Replaces C#'s GetFromJsonAsResultAsync<T>.
    */
   async get<T>(url: string | URL, init?: RequestInit): Promise<Result<T>> {
     return R.tryAsync(async () => {
@@ -49,7 +47,6 @@ export const fetchResult = {
 
   /**
    * POST with JSON body — returns Result<T>.
-   * Replaces C#'s PostAsJsonAsResultAsync<T>.
    */
   async post<T>(url: string | URL, body: unknown, init?: RequestInit): Promise<Result<T>> {
     return R.tryAsync(async () => {
@@ -70,7 +67,6 @@ export const fetchResult = {
 
   /**
    * PUT with JSON body — returns Result<T>.
-   * Replaces C#'s PutAsJsonAsResultAsync<T>.
    */
   async put<T>(url: string | URL, body: unknown, init?: RequestInit): Promise<Result<T>> {
     return R.tryAsync(async () => {
@@ -91,7 +87,6 @@ export const fetchResult = {
 
   /**
    * PATCH with JSON body — returns Result<T>.
-   * Replaces C#'s PatchAsJsonAsResultAsync<T>.
    */
   async patch<T>(url: string | URL, body: unknown, init?: RequestInit): Promise<Result<T>> {
     return R.tryAsync(async () => {
@@ -112,7 +107,6 @@ export const fetchResult = {
 
   /**
    * DELETE — returns Result<void>.
-   * Replaces C#'s DeleteAsResultAsync.
    */
   async delete(url: string | URL, init?: RequestInit): Promise<Result<void>> {
     return R.tryAsync(async () => {

@@ -32,8 +32,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "npm run build 2>&1 && npm test 2>&1",
-    "testCommand": "npm run build 2>&1 && npm test 2>&1",
+    "buildCommand": "npm run build 2>&1 && npm test 2>&1 | tail -20",
+    "testCommand": "npm run build 2>&1 && npm test 2>&1 | tail -20",
     "lintCommand": "npm run lint",
     "devCommand": null,
     "scripts": {
@@ -81,9 +81,57 @@
   },
   "hotPaths": [
     {
+      "path": "src/result/result.ts",
+      "accessCount": 36,
+      "lastAccessed": 1778624245346,
+      "type": "file"
+    },
+    {
+      "path": "src/maybe/maybe.ts",
+      "accessCount": 23,
+      "lastAccessed": 1778623859811,
+      "type": "file"
+    },
+    {
+      "path": "src/result/result-async.ts",
+      "accessCount": 21,
+      "lastAccessed": 1778624245821,
+      "type": "file"
+    },
+    {
       "path": "src/result/result-chain.ts",
+      "accessCount": 10,
+      "lastAccessed": 1778623707763,
+      "type": "file"
+    },
+    {
+      "path": "src/rules/rule-engine.ts",
+      "accessCount": 9,
+      "lastAccessed": 1778623778337,
+      "type": "file"
+    },
+    {
+      "path": "src/maybe/maybe-utils.ts",
       "accessCount": 8,
-      "lastAccessed": 1778619279819,
+      "lastAccessed": 1778624262494,
+      "type": "file"
+    },
+    {
+      "path": "src/http/fetch-result.ts",
+      "accessCount": 7,
+      "lastAccessed": 1778623887321,
+      "type": "file"
+    },
+    {
+      "path": "src/rules/rule.ts",
+      "accessCount": 7,
+      "lastAccessed": 1778624258601,
+      "type": "file"
+    },
+    {
+      "path": "src/http/status-mapper.ts",
+      "accessCount": 6,
+      "lastAccessed": 1778624292181,
       "type": "file"
     },
     {
@@ -93,21 +141,21 @@
       "type": "directory"
     },
     {
-      "path": "src/maybe/maybe.ts",
-      "accessCount": 4,
-      "lastAccessed": 1778619278946,
+      "path": "package.json",
+      "accessCount": 5,
+      "lastAccessed": 1778623589323,
       "type": "file"
     },
     {
-      "path": "src/result/result.ts",
-      "accessCount": 4,
-      "lastAccessed": 1778619287490,
+      "path": "src/errors/app-error.ts",
+      "accessCount": 5,
+      "lastAccessed": 1778623747033,
       "type": "file"
     },
     {
-      "path": "src/result/result-async.ts",
-      "accessCount": 4,
-      "lastAccessed": 1778619299370,
+      "path": "src/union/union.ts",
+      "accessCount": 5,
+      "lastAccessed": 1778623961540,
       "type": "file"
     },
     {
@@ -123,21 +171,63 @@
       "type": "file"
     },
     {
+      "path": "src/time/date-time-provider.ts",
+      "accessCount": 4,
+      "lastAccessed": 1778623941922,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 4,
+      "lastAccessed": 1778624239326,
+      "type": "file"
+    },
+    {
+      "path": "src/errors/error-metadata.ts",
+      "accessCount": 4,
+      "lastAccessed": 1778624258829,
+      "type": "file"
+    },
+    {
       "path": "src/maybe/index.ts",
       "accessCount": 3,
       "lastAccessed": 1778619297865,
       "type": "file"
     },
     {
-      "path": "package.json",
-      "accessCount": 3,
-      "lastAccessed": 1778620141977,
-      "type": "file"
-    },
-    {
       "path": "src/index.ts",
       "accessCount": 3,
       "lastAccessed": 1778623451418,
+      "type": "file"
+    },
+    {
+      "path": "src/result/maybe-bridge.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778623752369,
+      "type": "file"
+    },
+    {
+      "path": "src/entity/entity-base.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778623899994,
+      "type": "file"
+    },
+    {
+      "path": "src/entity/soft-deletable.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778623905625,
+      "type": "file"
+    },
+    {
+      "path": "src/entity/domain-event.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778623910543,
+      "type": "file"
+    },
+    {
+      "path": "src/clone/cloneable.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778623948874,
       "type": "file"
     },
     {
@@ -153,12 +243,6 @@
       "type": "file"
     },
     {
-      "path": "README.md",
-      "accessCount": 2,
-      "lastAccessed": 1778623451260,
-      "type": "file"
-    },
-    {
       "path": "src",
       "accessCount": 2,
       "lastAccessed": 1778623451366,
@@ -171,15 +255,15 @@
       "type": "file"
     },
     {
-      "path": "tests/result/result-async.test.ts",
-      "accessCount": 1,
-      "lastAccessed": 1778618353459,
+      "path": "src/errors/error-type.ts",
+      "accessCount": 2,
+      "lastAccessed": 1778623962366,
       "type": "file"
     },
     {
-      "path": "src/maybe/maybe-utils.ts",
+      "path": "tests/result/result-async.test.ts",
       "accessCount": 1,
-      "lastAccessed": 1778619287305,
+      "lastAccessed": 1778618353459,
       "type": "file"
     },
     {
@@ -192,6 +276,36 @@
       "path": "LICENSE",
       "accessCount": 1,
       "lastAccessed": 1778620175684,
+      "type": "file"
+    },
+    {
+      "path": "biome.json",
+      "accessCount": 1,
+      "lastAccessed": 1778623596711,
+      "type": "file"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "accessCount": 1,
+      "lastAccessed": 1778624204294,
+      "type": "file"
+    },
+    {
+      "path": "CLAUDE.md",
+      "accessCount": 1,
+      "lastAccessed": 1778624218308,
+      "type": "file"
+    },
+    {
+      "path": "AGENTS.md",
+      "accessCount": 1,
+      "lastAccessed": 1778624235039,
+      "type": "file"
+    },
+    {
+      "path": "docs/index.html",
+      "accessCount": 1,
+      "lastAccessed": 1778624264439,
       "type": "file"
     }
   ],

@@ -1,7 +1,6 @@
 /**
  * Abstraction for current time retrieval, enabling testable time in domain logic.
  *
- * TypeScript adaptation of CSharpEssentials.Time.IDateTimeProvider.
  * Wraps the system clock behind an interface so tests can inject a fixed time.
  *
  * @example
@@ -22,7 +21,6 @@ export interface DateTimeProvider {
 
 /**
  * Production implementation — delegates to system clock.
- * Equivalent to C#'s `DateTimeProvider` wrapping `TimeProvider.System`.
  */
 export const SystemDateTimeProvider: DateTimeProvider = {
   utcNow(): Date {
@@ -39,7 +37,6 @@ export const SystemDateTimeProvider: DateTimeProvider = {
 
 /**
  * Creates a test double that returns a fixed time.
- * Equivalent to using `Microsoft.Extensions.Time.Testing.FakeTimeProvider`.
  *
  * @example
  * const fake = createFakeDateTimeProvider(new Date('2024-06-01T12:00:00Z'));

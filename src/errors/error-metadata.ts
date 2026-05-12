@@ -1,8 +1,5 @@
-import type { ErrorType } from './error-type.js';
-
 /**
  * Immutable metadata map for carrying additional error context.
- * Adapted from CSharpEssentials.Errors.ErrorMetadata (extends Dictionary<string, object?>).
  */
 export type ErrorMetadata = ReadonlyMap<string, unknown>;
 

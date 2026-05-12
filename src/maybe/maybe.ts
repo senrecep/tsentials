@@ -1,8 +1,6 @@
 /**
  * Maybe<T> represents an optional value — either Some(value) or None.
  *
- * TypeScript adaptation of CSharpEssentials.Maybe.Maybe<T> (readonly partial struct).
- *
  * Design note: While TypeScript's `T | undefined` covers many use cases,
  * an explicit Maybe<T> type provides:
  * - Explicit intent (vs accidental undefined)
@@ -17,7 +15,6 @@ export type Maybe<T> =
 
 /**
  * Factory and utility namespace for Maybe<T> operations.
- * Mirrors the static methods and module extensions of C#'s Maybe<T>.
  *
  * @example
  * const user = Maybe.from(getUserById(42));
@@ -27,7 +24,6 @@ export type Maybe<T> =
 export const Maybe = {
   /**
    * Creates a Maybe with a value (Some).
-   * Equivalent to C#'s `Maybe<T>.From(value)` when value is non-null.
    */
   some<T>(value: T): Maybe<T> {
     return Object.freeze({ hasValue: true, value }) as Maybe<T>;
@@ -35,7 +31,6 @@ export const Maybe = {
 
   /**
    * Creates an empty Maybe (None).
-   * Equivalent to C#'s `Maybe<T>.None`.
    */
   none<T>(): Maybe<T> {
     return Object.freeze({ hasValue: false }) as Maybe<T>;
@@ -43,7 +38,6 @@ export const Maybe = {
 
   /**
    * Creates a Maybe from a nullable value.
-   * Equivalent to C#'s `Maybe<T>.From(T? value)`.
    * Null and undefined both become None.
    */
   from<T>(value: T | null | undefined): Maybe<T> {
@@ -52,7 +46,6 @@ export const Maybe = {
 
   /**
    * Creates a Maybe from a factory function, catching thrown errors as None.
-   * Equivalent to C#'s `Maybe<T>.From(Func<T?> func)`.
    */
   fromTry<T>(fn: () => T | null | undefined): Maybe<T> {
     try {
@@ -79,7 +72,6 @@ export const Maybe = {
 
   /**
    * Transforms the value inside a Maybe if it has one.
-   * Equivalent to C#'s `Maybe<T>.Map<TResult>`.
    */
   map<T, U>(maybe: Maybe<T>, fn: (value: T) => U): Maybe<U> {
     return maybe.hasValue ? Maybe.some(fn(maybe.value)) : Maybe.none<U>();
@@ -87,7 +79,6 @@ export const Maybe = {
 
   /**
    * Chains a Maybe-returning function (monadic bind / flatMap).
-   * Equivalent to C#'s `Maybe<T>.Bind<TResult>`.
    */
   bind<T, U>(maybe: Maybe<T>, fn: (value: T) => Maybe<U>): Maybe<U> {
     return maybe.hasValue ? fn(maybe.value) : Maybe.none<U>();
@@ -103,7 +94,6 @@ export const Maybe = {
 
   /**
    * Exhaustive pattern match over a Maybe.
-   * Equivalent to C#'s `Match<TResult>(Func<T, TResult> some, Func<TResult> none)`.
    */
   match<T, U>(maybe: Maybe<T>, onSome: (value: T) => U, onNone: () => U): U {
     return maybe.hasValue ? onSome(maybe.value) : onNone();
@@ -111,7 +101,6 @@ export const Maybe = {
 
   /**
    * Returns the value or a fallback if None.
-   * Equivalent to C#'s `GetValueOrDefault(T defaultValue)`.
    */
   getOrDefault<T>(maybe: Maybe<T>, defaultValue: T): T {
     return maybe.hasValue ? maybe.value : defaultValue;
@@ -119,7 +108,6 @@ export const Maybe = {
 
   /**
    * Returns the value or throws if None.
-   * Equivalent to C#'s `GetValueOrThrow(string? message)`.
    */
   getOrThrow<T>(maybe: Maybe<T>, message = 'Maybe has no value.'): T {
     if (!maybe.hasValue) throw new Error(message);
@@ -144,7 +132,6 @@ export const Maybe = {
   /**
    * Returns the value, or calls the factory function if None.
    * Lazy alternative to getOrDefault — factory is only invoked when needed.
-   * Equivalent to C#'s `GetValueOrDefault(Func<T> factory)`.
    */
   getOrElse<T>(maybe: Maybe<T>, fn: () => T): T {
     return maybe.hasValue ? maybe.value : fn();
@@ -152,7 +139,6 @@ export const Maybe = {
 
   /**
    * Deconstructs a Maybe into a tuple [hasValue, value | undefined].
-   * Equivalent to C#'s `Deconstruct(out bool hasValue, out T? value)`.
    */
   deconstruct<T>(maybe: Maybe<T>): [hasValue: true, value: T] | [hasValue: false, value: undefined] {
     return maybe.hasValue ? [true, maybe.value] : [false, undefined];
@@ -162,7 +148,6 @@ export const Maybe = {
 
   /**
    * Async version of Maybe.map.
-   * Equivalent to C#'s Task<Maybe<T>> Map extension.
    */
   async mapAsync<T, U>(maybe: Maybe<T>, fn: (value: T) => Promise<U>): Promise<Maybe<U>> {
     return maybe.hasValue ? Maybe.some(await fn(maybe.value)) : Maybe.none<U>();
@@ -170,7 +155,6 @@ export const Maybe = {
 
   /**
    * Async version of Maybe.bind.
-   * Equivalent to C#'s Task<Maybe<T>> Bind extension.
    */
   async bindAsync<T, U>(maybe: Maybe<T>, fn: (value: T) => Promise<Maybe<U>>): Promise<Maybe<U>> {
     return maybe.hasValue ? fn(maybe.value) : Maybe.none<U>();
@@ -187,7 +171,6 @@ export const Maybe = {
 
   /**
    * Async version of Maybe.match.
-   * Equivalent to C#'s Task<Maybe<T>> Match extension.
    */
   async matchAsync<T, U>(
     maybe: Maybe<T>,
@@ -210,7 +193,6 @@ export const Maybe = {
 
   /**
    * Returns the Maybe if it has a value, otherwise returns the fallback Maybe.
-   * Equivalent to C#'s `Maybe<T>.Or(Maybe<T> fallback)`.
    */
   or<T>(maybe: Maybe<T>, fallback: Maybe<T>): Maybe<T> {
     return maybe.hasValue ? maybe : fallback;
@@ -219,7 +201,6 @@ export const Maybe = {
   /**
    * Returns the Maybe if it has a value, otherwise calls the factory and returns its result.
    * Factory is only invoked when needed (lazy).
-   * Equivalent to C#'s `Maybe<T>.Or(Func<Maybe<T>> fallback)`.
    */
   orElse<T>(maybe: Maybe<T>, fn: () => Maybe<T>): Maybe<T> {
     return maybe.hasValue ? maybe : fn();

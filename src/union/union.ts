@@ -1,8 +1,6 @@
 /**
  * Generic discriminated union utility type.
  *
- * TypeScript adaptation of CSharpEssentials.Any<T0,...,T7> discriminated union.
- *
  * IMPORTANT: TypeScript has NATIVE discriminated unions — this utility is for
  * when you need a programmatic, tag-based union over a record of types.
  * For most use cases, prefer native TypeScript union types directly:
@@ -48,7 +46,6 @@ export const Union = {
    * Exhaustive pattern match over a Union<T>.
    * TypeScript ensures all cases are handled at compile time.
    *
-   * Equivalent to C#'s `Any<T0,...>.Match<TResult>(...)`.
    */
   match<T extends Record<string, unknown>, R>(
     union: Union<T>,
@@ -61,7 +58,6 @@ export const Union = {
 
   /**
    * Type guard — checks if the union has a specific tag.
-   * Equivalent to C#'s `Any<T0,T1>.IsFirst`, `IsSecond`, etc.
    */
   is<T extends Record<string, unknown>, K extends keyof T>(
     union: Union<T>,
@@ -72,7 +68,6 @@ export const Union = {
 
   /**
    * Extracts the value for a specific tag, throws otherwise.
-   * Equivalent to C#'s `Any<T0,T1>.GetFirst()`, `GetSecond()`, etc.
    */
   get<T extends Record<string, unknown>, K extends keyof T>(
     union: Union<T>,

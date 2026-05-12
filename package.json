@@ -47,13 +47,17 @@
       "types": "./dist/union/index.d.ts"
     }
   },
+  "sideEffects": false,
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts",
+    "lint": "biome lint src",
+    "lint:fix": "biome lint --write src",
+    "format": "biome format --write src",
+    "check": "biome check src",
     "prepublishOnly": "npm run build && npm test"
   },
   "files": [
@@ -86,9 +90,10 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
-    "vitest": "^2.0.0",
+    "@biomejs/biome": "^2.4.15",
+    "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^2.0.0",
-    "@types/node": "^20.0.0"
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
   }
 }

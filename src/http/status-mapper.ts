@@ -3,7 +3,6 @@ import type { AppError } from '../errors/app-error.js';
 
 /**
  * Maps HTTP status codes to AppError instances.
- * Adapted from CSharpEssentials.Http.HttpStatusCodeMapper.
  *
  * @example
  * const error = httpStatusToError(404, 'User not found');
@@ -39,7 +38,9 @@ export async function extractErrorDescription(
       return undefined;
     }
     const body = await response.json() as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature tsconfig requires bracket notation
     if (typeof body['detail'] === 'string') return body['detail'];
+    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature tsconfig requires bracket notation
     if (typeof body['title'] === 'string') return body['title'];
     return undefined;
   } catch {

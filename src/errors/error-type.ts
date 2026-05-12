@@ -1,6 +1,5 @@
 /**
  * Categorizes the type of error that occurred.
- * Adapted from CSharpEssentials.Errors.ErrorType enum.
  */
 export const ErrorType = {
   Failure: 'Failure',

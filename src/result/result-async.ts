@@ -1,15 +1,13 @@
 import type { AppError } from '../errors/app-error.js';
 import { Result } from './result.js';
-import type { VoidResult } from './result.js';
 
 /**
  * ResultAsync<T> wraps a Promise<Result<T>> and provides a fully pipeable async API.
  *
- * This is the TypeScript equivalent of chaining C#'s Task<Result<T>> extension methods
- * (ThenAsync, MapAsync, EnsureAsync, TapAsync, etc.). Unlike ResultChain whose async
- * methods return Promise<ResultChain<U>> and require await at each step, ResultAsync
- * lets you build the entire pipeline without intermediate awaits — all operations
- * return ResultAsync<U> synchronously, and the whole chain resolves once at the end.
+ * Unlike ResultChain whose async methods return Promise<ResultChain<U>> and require
+ * await at each step, ResultAsync lets you build the entire pipeline without
+ * intermediate awaits — all operations return ResultAsync<U> synchronously, and
+ * the whole chain resolves once at the end.
  *
  * Implements PromiseLike<Result<T>> so it can be awaited directly to get Result<T>.
  *
@@ -32,6 +30,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
    * Implements PromiseLike so ResultAsync can be directly awaited.
    * `const result: Result<T> = await someResultAsync`
    */
+  // biome-ignore lint/suspicious/noThenProperty: implements PromiseLike<Result<T>> so ResultAsync can be awaited
   then<TResult1 = Result<T>, TResult2 = never>(
     onfulfilled?: ((value: Result<T>) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
@@ -82,7 +81,6 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
 
   /**
    * Wraps an async throwing function — exceptions become Result.failure.
-   * Replaces C#'s TryCatchAsync / TryAsync pattern.
    *
    * @example
    * const r = await ResultAsync.try(() => fetch('/api/users').then(r => r.json()))
@@ -117,7 +115,6 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
    * Promise<Result<U>>. Short-circuits on failure.
    *
    * Named `andThen` (not `then`) to avoid collision with PromiseLike.then.
-   * Replaces C#'s ThenAsync / BindAsync on Task<Result<T>>.
    *
    * @example
    * fromAsync(getOrder(id))
@@ -140,7 +137,6 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
 
   /**
    * Transforms the success value (sync or async).
-   * Replaces C#'s MapAsync on Task<Result<T>>.
    */
   map<U>(fn: (value: T) => U | Promise<U>): ResultAsync<U> {
     return new ResultAsync(
@@ -152,7 +148,6 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
 
   /**
    * Guards the success value with a sync or async predicate.
-   * Replaces C#'s EnsureAsync on Task<Result<T>>.
    */
   ensure(
     predicate: (value: T) => boolean | Promise<boolean>,
@@ -169,7 +164,6 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
 
   /**
    * Runs a sync or async side effect on success without altering the result.
-   * Replaces C#'s TapAsync on Task<Result<T>>.
    */
   tap(fn: (value: T) => void | Promise<void>): ResultAsync<T> {
     return new ResultAsync(
@@ -182,7 +176,6 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
 
   /**
    * Runs a sync or async side effect on failure without altering the result.
-   * Replaces C#'s TapErrorAsync on Task<Result<T>>.
    */
   tapError(fn: (errors: readonly AppError[]) => void | Promise<void>): ResultAsync<T> {
     return new ResultAsync(
@@ -195,7 +188,6 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
 
   /**
    * Transforms errors on failure (sync or async).
-   * Note: C# has no async MapError — this is an ergonomic TS addition.
    */
   mapError(fn: (errors: readonly AppError[]) => AppError[] | Promise<AppError[]>): ResultAsync<T> {
     return new ResultAsync(
@@ -208,7 +200,6 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
 
   /**
    * Recovers from failure by returning a new Result or ResultAsync.
-   * Replaces C#'s CompensateAsync on Task<Result<T>>.
    */
   compensate(
     fn: (errors: readonly AppError[]) => Result<T> | ResultAsync<T> | Promise<Result<T>>,
@@ -226,7 +217,6 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
 
   /**
    * Returns a fallback value on failure.
-   * Replaces C#'s ElseAsync on Task<Result<T>>.
    */
   else(fallback: T | ((errors: readonly AppError[]) => T | Promise<T>)): ResultAsync<T> {
     return new ResultAsync(
@@ -275,6 +265,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     return new ResultAsync(
       this._promise.then(r => {
         if (r.ok) return Promise.resolve(r);
+        // biome-ignore lint/style/noNonNullAssertion: errors array is non-empty when ok is false
         const next = fn(r.errors[0]!);
         if (next instanceof ResultAsync) return (next as ResultAsync<T>)._promise;
         if (next instanceof Promise) return next;
@@ -290,7 +281,9 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     return new ResultAsync(
       this._promise.then(r => {
         if (r.ok) return Promise.resolve(r);
+        // biome-ignore lint/style/noNonNullAssertion: errors array is non-empty when ok is false
         if (!predicate(r.errors[0]!)) return Promise.resolve(r);
+        // biome-ignore lint/style/noNonNullAssertion: errors array is non-empty when ok is false
         const next = fn(r.errors[0]!);
         if (next instanceof ResultAsync) return (next as ResultAsync<T>)._promise;
         if (next instanceof Promise) return next;
@@ -308,7 +301,6 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
 
   /**
    * Exhaustive pattern match — extracts a value from either branch.
-   * Replaces C#'s MatchAsync on Task<Result<T>>.
    * This is the primary way to exit the ResultAsync pipeline.
    *
    * @example

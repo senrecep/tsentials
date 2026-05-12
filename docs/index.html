@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tsentials — Railway-oriented programming for TypeScript</title>
+  <meta name="description" content="Result&lt;T&gt;, Maybe&lt;T&gt;, Rule Engine and DDD base classes with full async pipeline support for TypeScript." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent2: #79c0ff;
+      --green: #3fb950;
+      --purple: #bc8cff;
+      --orange: #ffa657;
+      --radius: 8px;
+      --font: 'Inter', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.6; }
+
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,17,23,0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 56px;
+    }
+    .nav-brand { font-weight: 700; font-size: 1.1rem; color: var(--accent); text-decoration: none; }
+    .nav-links { display: flex; gap: 1rem; align-items: center; }
+    .nav-links a {
+      color: var(--muted); text-decoration: none; font-size: 0.9rem;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-btn {
+      background: var(--accent); color: #000; font-weight: 600; font-size: 0.85rem;
+      padding: 6px 14px; border-radius: 6px; text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .nav-btn:hover { opacity: 0.85; color: #000; }
+
+    /* HERO */
+    .hero {
+      max-width: 800px; margin: 0 auto;
+      padding: 5rem 1.5rem 3rem;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.3);
+      color: var(--accent); font-size: 0.8rem; font-weight: 500;
+      padding: 4px 12px; border-radius: 20px; margin-bottom: 1.5rem;
+    }
+    h1 { font-size: clamp(2.5rem, 6vw, 3.5rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1rem; }
+    h1 span { color: var(--accent); }
+    .hero-sub { font-size: 1.15rem; color: var(--muted); max-width: 560px; margin: 0 auto 2.5rem; }
+
+    /* INSTALL */
+    .install-box {
+      display: inline-flex; align-items: center; gap: 1rem;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.75rem 1.25rem;
+      font-family: var(--mono); font-size: 0.95rem;
+    }
+    .install-cmd { color: var(--green); }
+    .copy-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      cursor: pointer; padding: 4px 10px; border-radius: 5px; font-size: 0.8rem;
+      transition: all 0.15s; font-family: var(--font);
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .copy-btn.copied { border-color: var(--green); color: var(--green); }
+
+    .badges { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
+    .badges img { height: 20px; }
+
+    /* SECTION */
+    section { max-width: 1000px; margin: 0 auto; padding: 3rem 1.5rem; }
+    h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+    h2 span { color: var(--accent); }
+    h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: var(--text); }
+
+    /* MODULES GRID */
+    .modules-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;
+    }
+    .module-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1.25rem; transition: border-color 0.15s, transform 0.15s;
+    }
+    .module-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .module-import {
+      font-family: var(--mono); font-size: 0.8rem; color: var(--accent);
+      background: rgba(88,166,255,0.08); padding: 3px 8px; border-radius: 4px;
+      display: inline-block; margin-bottom: 0.75rem;
+    }
+    .module-desc { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+
+    /* CODE EXAMPLES */
+    .examples { display: flex; flex-direction: column; gap: 2rem; }
+    .example { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .example-header {
+      background: var(--bg3); border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.25rem; font-size: 0.85rem; font-weight: 500; color: var(--muted);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .example-header .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-r { background: #ff5f57; }
+    .dot-y { background: #febc2e; }
+    .dot-g { background: #28c840; }
+    pre {
+      padding: 1.25rem; overflow-x: auto;
+      font-family: var(--mono); font-size: 0.85rem; line-height: 1.7;
+    }
+    /* simple syntax highlight */
+    .kw { color: #ff7b72; }
+    .fn { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .cmt { color: #8b949e; font-style: italic; }
+    .type { color: #ffa657; }
+    .num { color: #79c0ff; }
+    .chain { color: #7ee787; }
+
+    /* FEATURES */
+    .features { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+    .feature {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.25rem;
+    }
+    .feature-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .feature h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.4rem; }
+    .feature p { font-size: 0.85rem; color: var(--muted); }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border); text-align: center;
+      padding: 2rem 1.5rem; color: var(--muted); font-size: 0.85rem;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-brand">tsentials</a>
+  <div class="nav-links">
+    <a href="#modules">Modules</a>
+    <a href="#examples">Examples</a>
+    <a href="https://github.com/recepsen/TypeScriptEssentials">GitHub</a>
+    <a href="https://www.npmjs.com/package/tsentials" class="nav-btn">npm</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-badge">Railway-Oriented Programming</div>
+  <h1><span>tsentials</span></h1>
+  <p class="hero-sub">
+    Result&lt;T&gt;, Maybe&lt;T&gt;, Rule Engine, and DDD base classes
+    for TypeScript — with full async pipeline support.
+  </p>
+
+  <div class="install-box">
+    <span class="install-cmd">npm install tsentials</span>
+    <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+  </div>
+
+  <div class="badges">
+    <img src="https://img.shields.io/npm/v/tsentials?style=flat-square&color=blue" alt="npm" />
+    <img src="https://img.shields.io/npm/dm/tsentials?style=flat-square" alt="downloads" />
+    <img src="https://img.shields.io/github/actions/workflow/status/recepsen/TypeScriptEssentials/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" />
+    <img src="https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript" alt="TypeScript" />
+    <img src="https://img.shields.io/github/license/recepsen/TypeScriptEssentials?style=flat-square" alt="license" />
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section>
+  <div class="features">
+    <div class="feature">
+      <div class="feature-icon">🚂</div>
+      <h4>Railway-Oriented</h4>
+      <p>Chain operations that automatically short-circuit on failure — no try/catch.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">⚡</div>
+      <h4>Async-first</h4>
+      <p>ResultAsync&lt;T&gt; chains build synchronously, resolve once. Zero intermediate awaits.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🌲</div>
+      <h4>Tree-shakeable</h4>
+      <p>Subpath exports + sideEffects:false. Import only what you use.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔒</div>
+      <h4>Strictly typed</h4>
+      <p>Built with strict:true, exactOptionalPropertyTypes, noUncheckedIndexedAccess.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🏛️</div>
+      <h4>DDD-ready</h4>
+      <p>Entity base classes, domain events, and soft-delete via mixin factory pattern.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📦</div>
+      <h4>Zero dependencies</h4>
+      <p>No runtime dependencies. Pure TypeScript that compiles to clean ESM.</p>
+    </div>
+  </div>
+</section>
+
+<!-- MODULES -->
+<section id="modules">
+  <h2><span>#</span> Modules</h2>
+  <div class="modules-grid">
+    <div class="module-card">
+      <div class="module-import">tsentials/result</div>
+      <div class="module-desc">Result&lt;T&gt;, ResultAsync&lt;T&gt;, ResultChain&lt;T&gt;, fromAsync — the full railway pipeline</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/maybe</div>
+      <div class="module-desc">Maybe&lt;T&gt; monad with sync + async pipeline, plus collection utilities</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/errors</div>
+      <div class="module-desc">AppError, ErrorType enum, Err factory — structured error creation</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/rules</div>
+      <div class="module-desc">Rule&lt;T&gt; function type and RuleEngine — composable validation rules</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/entity</div>
+      <div class="module-desc">createEntityBase(), createSoftDeletable(), DomainEvent — DDD building blocks</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/http</div>
+      <div class="module-desc">fetchResult(), RequestBuilder — type-safe HTTP calls returning Result&lt;T&gt;</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/time</div>
+      <div class="module-desc">DateTimeProvider interface with real + fake implementations for testing</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/clone</div>
+      <div class="module-desc">Cloneable&lt;T&gt; interface, deepClone(), cloneArray()</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/union</div>
+      <div class="module-desc">Union&lt;T&gt; — discriminated union utility with exhaustive match</div>
+    </div>
+  </div>
+</section>
+
+<!-- EXAMPLES -->
+<section id="examples">
+  <h2><span>#</span> Examples</h2>
+  <div class="examples">
+
+    <div class="example">
+      <div class="example-header">
+        <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+        <span>Async pipeline — ResultAsync&lt;T&gt;</span>
+      </div>
+      <pre><code><span class="kw">import</span> { <span class="fn">fromAsync</span>, <span class="type">Err</span> } <span class="kw">from</span> <span class="str">'tsentials/result'</span>;
+
+<span class="kw">const</span> profile = <span class="kw">await</span> <span class="fn">fromAsync</span>(<span class="fn">fetchUser</span>(userId))
+  <span class="chain">.<span class="fn">andThen</span></span>(user => <span class="fn">validateUser</span>(user))       <span class="cmt">// Result&lt;User&gt; | ResultAsync&lt;User&gt;</span>
+  <span class="chain">.<span class="fn">ensure</span></span>(user => user.isActive, <span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'User.Inactive'</span>, <span class="str">'Not active'</span>))
+  <span class="chain">.<span class="fn">map</span></span>(user => user.profile)
+  <span class="chain">.<span class="fn">tap</span></span>(p => console.<span class="fn">log</span>(<span class="str">'fetched'</span>, p.name))
+  <span class="chain">.<span class="fn">match</span></span>(
+    profile => profile,
+    () => <span class="kw">null</span>,
+  );</code></pre>
+    </div>
+
+    <div class="example">
+      <div class="example-header">
+        <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+        <span>Maybe&lt;T&gt; — null-safe pipelines</span>
+      </div>
+      <pre><code><span class="kw">import</span> { <span class="type">Maybe</span>, <span class="fn">tryFind</span>, <span class="fn">choose</span> } <span class="kw">from</span> <span class="str">'tsentials/maybe'</span>;
+
+<span class="cmt">// Wrap nullable, chain operations</span>
+<span class="kw">const</span> display = <span class="type">Maybe</span>.<span class="fn">getOrElse</span>(
+  <span class="type">Maybe</span>.<span class="fn">filter</span>(
+    <span class="type">Maybe</span>.<span class="fn">map</span>(<span class="type">Maybe</span>.<span class="fn">from</span>(user.nickname), s => s.<span class="fn">trim</span>()),
+    s => s.length > <span class="num">0</span>
+  ),
+  () => user.email
+);
+
+<span class="cmt">// Collection utilities</span>
+<span class="kw">const</span> admin = <span class="fn">tryFind</span>(users, u => u.role === <span class="str">'admin'</span>); <span class="cmt">// Maybe&lt;User&gt;</span>
+<span class="kw">const</span> names = <span class="fn">choose</span>(users.<span class="fn">map</span>(u => <span class="type">Maybe</span>.<span class="fn">from</span>(u.displayName))); <span class="cmt">// string[]</span></code></pre>
+    </div>
+
+    <div class="example">
+      <div class="example-header">
+        <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+        <span>Rule Engine — composable validation</span>
+      </div>
+      <pre><code><span class="kw">import</span> { <span class="type">RuleEngine</span> } <span class="kw">from</span> <span class="str">'tsentials/rules'</span>;
+<span class="kw">import</span> <span class="kw">type</span> { <span class="type">Rule</span> } <span class="kw">from</span> <span class="str">'tsentials/rules'</span>;
+
+<span class="kw">const</span> isAdult: <span class="type">Rule</span>&lt;<span class="type">User</span>&gt; = ctx =>
+  ctx.age >= <span class="num">18</span> ? <span class="type">Result</span>.<span class="fn">ok</span>() : <span class="type">Result</span>.<span class="fn">failure</span>(<span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'Age.TooLow'</span>, <span class="str">'Must be 18+'</span>));
+
+<span class="kw">const</span> hasEmail: <span class="type">Rule</span>&lt;<span class="type">User</span>&gt; = ctx =>
+  ctx.email ? <span class="type">Result</span>.<span class="fn">ok</span>() : <span class="type">Result</span>.<span class="fn">failure</span>(<span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'Email.Missing'</span>, <span class="str">'Email required'</span>));
+
+<span class="kw">const</span> canRegister = <span class="type">RuleEngine</span>.<span class="fn">and</span>(isAdult, hasEmail);
+
+<span class="kw">const</span> result = <span class="kw">await</span> <span class="type">RuleEngine</span>.<span class="fn">evaluate</span>(canRegister, user);</code></pre>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  <p>
+    <strong>tsentials</strong> — MIT License ·
+    <a href="https://github.com/recepsen/TypeScriptEssentials">GitHub</a> ·
+    <a href="https://www.npmjs.com/package/tsentials">npm</a>
+  </p>
+</footer>
+
+<script>
+  function copyInstall(btn) {
+    navigator.clipboard.writeText('npm install tsentials').then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+</script>
+
+</body>
+</html>

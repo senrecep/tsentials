@@ -4,7 +4,7 @@ import { Result } from './result.js';
 /**
  * Fluent chainable wrapper around Result<T>.
  *
- * Provides a method-chaining API similar to C#'s instance method style,
+ * Provides a fluent method-chaining API for Result<T>,
  * while internally using the pure-function Result utilities.
  *
  * @example

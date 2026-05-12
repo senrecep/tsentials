@@ -4,11 +4,10 @@ import { ErrorMetadata } from './error-metadata.js';
 /**
  * Represents a structured, immutable application error value.
  *
- * TypeScript adaptation of CSharpEssentials.Errors.Error (readonly record struct).
  * Named AppError to avoid collision with the native JavaScript Error class.
  *
- * Key design decisions vs C#:
- * - `Object.freeze` provides runtime immutability (vs C#'s readonly struct)
+ * Design notes:
+ * - `Object.freeze` provides runtime immutability
  * - Factory functions instead of implicit operators
  * - `Err` namespace instead of static class methods on `Error`
  */
@@ -28,7 +27,7 @@ const make = (
 
 /**
  * Factory namespace for creating AppError instances.
- * Mirrors the static factory methods of C#'s Error struct.
+ * Static factory methods for creating AppError instances.
  *
  * @example
  * const err = Err.validation('User.Email', 'Email is invalid');
@@ -109,7 +108,6 @@ export const Err = {
 
   /**
    * Combines multiple errors into an array.
-   * Replaces C#'s `operator +(Error left, Error right) => [left, right]`.
    */
   combine(...errors: AppError[]): AppError[] {
     return errors;
@@ -117,7 +115,6 @@ export const Err = {
 
   /**
    * Checks structural equality between two AppError instances.
-   * Replaces C#'s built-in structural equality from `readonly record struct`.
    */
   equals(a: AppError, b: AppError): boolean {
     return a.code === b.code && a.description === b.description && a.type === b.type;

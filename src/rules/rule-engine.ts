@@ -5,11 +5,7 @@ import type { AsyncRule, Rule } from './rule.js';
 /**
  * Composable rule engine for evaluating business rules.
  *
- * TypeScript adaptation of CSharpEssentials.Rules.RuleEngine (RuleEngine.cs,
- * Linear.cs, And.cs, Or.cs, Conditional.cs).
- *
- * The entire C# rule engine (30+ files, 12 interfaces, 9 adapters) is expressed
- * here as pure function combinators. Each combinator returns a new Rule — they
+ * Implemented as pure function combinators. Each combinator returns a new Rule — they
  * are composable and nest arbitrarily.
  *
  * @example
@@ -30,7 +26,6 @@ export const RuleEngine = {
 
   /**
    * Sequential chain — stops on first failure.
-   * Replaces C#'s ILinearRule / Linear.cs.
    *
    * Use when rules must pass in order and later rules depend on earlier ones.
    */
@@ -46,7 +41,6 @@ export const RuleEngine = {
 
   /**
    * Async sequential chain — stops on first failure.
-   * Replaces C#'s ILinearAsyncRule.
    */
   linearAsync<TContext>(...rules: AsyncRule<TContext>[]): AsyncRule<TContext> {
     return async (context: TContext) => {
@@ -60,7 +54,6 @@ export const RuleEngine = {
 
   /**
    * All rules must pass — collects ALL errors (does not short-circuit).
-   * Replaces C#'s IAndRule / And.cs.
    *
    * Use when you want to report all validation failures at once.
    */
@@ -91,7 +84,6 @@ export const RuleEngine = {
 
   /**
    * At least one rule must pass — collects all errors if all fail.
-   * Replaces C#'s IOrRule / Or.cs.
    */
   or<TContext>(...rules: Rule<TContext>[]): Rule<TContext> {
     return (context: TContext) => {
@@ -122,7 +114,6 @@ export const RuleEngine = {
 
   /**
    * Conditional rule — if/then/else branching.
-   * Replaces C#'s IConditionalRule / Conditional.cs.
    */
   if<TContext>(
     condition: Rule<TContext>,
@@ -157,7 +148,6 @@ export const RuleEngine = {
 
   /**
    * Creates a rule from a synchronous predicate function.
-   * Replaces C#'s `.ToRule()` extension in Extensions.cs.
    *
    * @example
    * const isAdult = RuleEngine.fromPredicate<User>(
@@ -194,7 +184,6 @@ export const RuleEngine = {
 
   /**
    * Evaluates a rule against a context.
-   * Replaces C#'s `RuleEngine.Evaluate(rule, context)`.
    */
   evaluate<TContext>(rule: Rule<TContext>, context: TContext) {
     return rule(context);

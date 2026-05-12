@@ -1,14 +1,33 @@
 # tsentials
 
+[![npm version](https://img.shields.io/npm/v/tsentials?style=flat-square&color=blue)](https://www.npmjs.com/package/tsentials)
+[![npm downloads](https://img.shields.io/npm/dm/tsentials?style=flat-square)](https://www.npmjs.com/package/tsentials)
+[![bundle size](https://img.shields.io/bundlephobia/minzip/tsentials/result?style=flat-square&label=result%20gzip)](https://bundlephobia.com/package/tsentials)
+[![CI](https://img.shields.io/github/actions/workflow/status/recepsen/TypeScriptEssentials/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/recepsen/TypeScriptEssentials/actions)
+[![license](https://img.shields.io/github/license/recepsen/TypeScriptEssentials?style=flat-square)](./LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+
 Railway-oriented programming for TypeScript — `Result<T>`, `Maybe<T>`, Rule Engine, and DDD base classes with full async pipeline support.
 
-> TypeScript port of [CSharpEssentials](https://github.com/recepsen/CSharpEssentials) — same patterns, idiomatic TypeScript.
+## Table of Contents
+
+- [Install](#install)
+- [Modules](#modules)
+- [Result\<T\>](#resultt)
+- [Maybe\<T\>](#maybet)
+- [Rule Engine](#rule-engine)
+- [AppError & Err factory](#apperror--err-factory)
+- [Entity Base (DDD)](#entity-base-ddd)
+- [HTTP (fetchResult)](#http-fetchresult)
+- [Design notes](#design-notes)
 
 ## Install
 
 ```bash
 npm install tsentials
 ```
+
+**Requirements:** Node.js ≥ 18, TypeScript ≥ 5.0
 
 ## Modules
 
@@ -18,7 +37,7 @@ npm install tsentials
 | `tsentials/maybe` | `Maybe<T>`, collection utilities |
 | `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory |
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
-| `tsentials/entity` | `EntityBase`, `SoftDeletable`, `DomainEvent` |
+| `tsentials/entity` | `createEntityBase`, `createSoftDeletable`, `DomainEvent` |
 | `tsentials/http` | `fetchResult`, `RequestBuilder` |
 | `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
@@ -32,7 +51,6 @@ Discriminated union `{ ok: true; value: T } | { ok: false; errors: AppError[] }`
 
 ```typescript
 import { Result, Err } from 'tsentials/result';
-import { ErrorType } from 'tsentials/errors';
 
 function divide(a: number, b: number): Result<number> {
   if (b === 0) return Result.failure(Err.validation('Math.DivideByZero', 'Cannot divide by zero'));
@@ -44,11 +62,6 @@ if (result.ok) console.log(result.value); // 5
 ```
 
 ### Pipeline (sync)
-
-```typescript
-const price = Result.success(100)
-  |> Result.map(%, n => n * 1.2)           // not yet in TS, use chain below
-```
 
 ```typescript
 import { ResultChain } from 'tsentials/result';
@@ -69,10 +82,10 @@ const price = ResultChain.of(Result.success(100))
 `ResultAsync<T>` implements `PromiseLike<Result<T>>` — the entire chain builds synchronously, resolves once at the end with a single `await`.
 
 ```typescript
-import { ResultAsync, fromAsync, Err } from 'tsentials/result';
+import { fromAsync, Err } from 'tsentials/result';
 
 const profile = await fromAsync(fetchUser(userId))
-  .andThen(user => validateUser(user))          // Result<User> or ResultAsync<User>
+  .andThen(user => validateUser(user))
   .ensure(user => user.isActive, Err.validation('User.Inactive', 'Not active'))
   .map(user => user.profile)
   .tap(p => console.log('fetched', p.name))
@@ -99,9 +112,9 @@ Result.flatten(Result.success(Result.success(42))) // Result<number>
 import { Maybe } from 'tsentials/maybe';
 
 const name = Maybe.from(user.nickname)         // Some | None
-  |> (m => Maybe.map(m, s => s.trim()))
-  |> (m => Maybe.filter(m, s => s.length > 0))
-  |> (m => Maybe.getOrElse(m, () => user.email));
+const trimmed = Maybe.map(name, s => s.trim());
+const filtered = Maybe.filter(trimmed, s => s.length > 0);
+const display = Maybe.getOrElse(filtered, () => user.email);
 ```
 
 ### Functional style
@@ -155,7 +168,6 @@ const result = await RuleEngine.evaluate(canRegister, user);
 
 ```typescript
 import { Err } from 'tsentials/result';
-import { ErrorType } from 'tsentials/errors';
 
 Err.validation('Field.Required', 'Name is required')
 Err.notFound('User.NotFound', 'User does not exist')
@@ -171,12 +183,12 @@ Err.custom(ErrorType.Validation, 'Custom.Code', 'message', { field: 'email' })
 ## Entity Base (DDD)
 
 ```typescript
-import { createEntityBase, withSoftDelete, DomainEvent } from 'tsentials/entity';
+import { createEntityBase, createSoftDeletable } from 'tsentials/entity';
 
 const EntityBase = createEntityBase<string>();
-const SoftDeletableEntity = withSoftDelete(EntityBase);
+const SoftDeletableBase = createSoftDeletable(EntityBase);
 
-class Order extends SoftDeletableEntity {
+class Order extends SoftDeletableBase {
   constructor(public readonly total: number) {
     super({ id: crypto.randomUUID() });
   }
@@ -198,27 +210,20 @@ const result = await RequestBuilder.get('https://api.example.com/users')
   .header('Authorization', `Bearer ${token}`)
   .query('page', '1')
   .fetchResult<User[]>();
-
-// or low-level:
-const result2 = await fetchResult<User>('https://api.example.com/users/1');
 ```
 
 ---
 
 ## Design notes
 
-- `Result<T>` — discriminated union, no class, zero runtime overhead
-- `ResultAsync<T>` — implements `PromiseLike<Result<T>>` for direct `await`; monadic bind named `andThen` to avoid thenable collision
-- `ResultChain<T>` — fluent sync wrapper; monadic bind named `bind` (not `then`) for the same reason
-- `Maybe<T>` — pure functional namespace (no class), all operations are static functions
-- Rule<T> — just `(ctx: T) => VoidResult`, no interface hierarchy
-- Entity base — mixin factory pattern, no deep inheritance
-
-## Requirements
-
-- Node.js ≥ 18
-- TypeScript ≥ 5.0 (strict mode recommended)
+- **`Result<T>`** — discriminated union, no class, zero runtime overhead
+- **`ResultAsync<T>`** — implements `PromiseLike<Result<T>>` for direct `await`; monadic bind named `andThen` to avoid thenable collision
+- **`ResultChain<T>`** — fluent sync wrapper; monadic bind named `bind` (not `then`) for the same reason
+- **`Maybe<T>`** — pure functional namespace, all operations are static functions
+- **`Rule<T>`** — just `(ctx: T) => VoidResult`, no interface hierarchy
+- **Entity base** — mixin factory pattern (`createEntityBase()`), not abstract class inheritance
+- **`sideEffects: false`** — all subpath imports are fully tree-shakeable
 
 ## License
 
-MIT
+MIT © [Recep Şen](https://github.com/recepsen)

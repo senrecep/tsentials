@@ -1,6 +1,5 @@
 /**
  * Interface for entities that support soft deletion.
- * Adapted from CSharpEssentials.Entity.SoftDeletableEntityBase.
  */
 export interface SoftDeletable {
   readonly deletedAt?: Date | undefined;
@@ -14,7 +13,6 @@ export interface SoftDeletable {
 
 /**
  * Mixin factory for soft delete behavior.
- * Replaces C#'s SoftDeletableEntityBase abstract class.
  *
  * @example
  * class Post implements SoftDeletable {

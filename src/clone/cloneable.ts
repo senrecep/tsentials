@@ -1,8 +1,7 @@
 /**
  * Generic interface for objects that can produce deep copies of themselves.
  *
- * TypeScript adaptation of CSharpEssentials.Clone.ICloneable<T>.
- * The covariant `out T` constraint maps to TypeScript's covariant return type.
+ * The covariant return type provides type-safe cloning.
  *
  * Note: For plain data objects, prefer the native `structuredClone()`.
  * Use ICloneable<T> when clone behavior needs custom logic (e.g., resetting
@@ -22,7 +21,6 @@ export interface Cloneable<T> {
 
 /**
  * Deep-clones an array of cloneable items.
- * Adapted from CSharpEssentials.Clone.Extensions.Clone<T>(IEnumerable<T>).
  *
  * @example
  * const cloned = cloneArray(entities);

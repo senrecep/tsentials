@@ -2,9 +2,9 @@ import { Maybe } from './maybe.js';
 
 /**
  * Returns the first element of an array as Maybe<T>, or None if empty.
- * Equivalent to C#'s `IEnumerable<T>.TryFirst()` extension.
  */
 export function tryFirst<T>(arr: readonly T[]): Maybe<T> {
+  // biome-ignore lint/style/noNonNullAssertion: arr[0] is defined because arr.length > 0 is checked
   return arr.length > 0 ? Maybe.some(arr[0]!) : Maybe.none<T>();
 }
 
@@ -12,12 +12,12 @@ export function tryFirst<T>(arr: readonly T[]): Maybe<T> {
  * Returns the last element as Maybe<T>, or None if empty.
  */
 export function tryLast<T>(arr: readonly T[]): Maybe<T> {
+  // biome-ignore lint/style/noNonNullAssertion: arr[arr.length - 1] is defined because arr.length > 0 is checked
   return arr.length > 0 ? Maybe.some(arr[arr.length - 1]!) : Maybe.none<T>();
 }
 
 /**
  * Returns the first element matching the predicate as Maybe<T>, or None.
- * Equivalent to C#'s `IEnumerable<T>.TryFirst(predicate)`.
  */
 export function tryFind<T>(arr: readonly T[], predicate: (value: T) => boolean): Maybe<T> {
   const found = arr.find(predicate);
@@ -26,7 +26,6 @@ export function tryFind<T>(arr: readonly T[], predicate: (value: T) => boolean):
 
 /**
  * Extracts all Some values from an array of Maybe<T>, discarding None values.
- * Equivalent to C#'s `IEnumerable<Maybe<T>>.Choose()`.
  *
  * @example
  * const users = choose([Maybe.some(user1), Maybe.none(), Maybe.some(user2)]);

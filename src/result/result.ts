@@ -5,14 +5,11 @@ import { Err } from '../errors/app-error.js';
  * Result<T> represents either a successful value or one or more errors.
  * Uses a discriminated union for zero-cost type narrowing at compile time.
  *
- * TypeScript adaptation of CSharpEssentials.Results.Result<TValue>
- * (readonly partial record struct).
- *
- * Key design decisions vs C#:
+ * Design notes:
  * - Discriminated union `{ ok: true; value: T } | { ok: false; errors: ... }`
- *   replaces null-check on internal `_errors` field
+ *   for zero-cost type narrowing at compile time
  * - `Result` namespace merging: same identifier works as both type and factory
- * - Sync + async pipeline in one file instead of 40+ partial class files
+ * - Sync + async pipeline in one file
  * - No implicit conversions — explicit `Result.success()` / `Result.failure()`
  */
 export type Result<T> =
@@ -21,10 +18,10 @@ export type Result<T> =
 
 /**
  * Non-generic Result for operations with no meaningful return value.
- * Equivalent to C#'s non-generic `Result` struct.
  */
 export type VoidResult = Result<void>;
 
+// biome-ignore lint/suspicious/noConfusingVoidType: void is required here to match the Result<void> type
 const _success = Object.freeze({ ok: true as const, value: undefined as void });
 
 export const Result = {
@@ -32,7 +29,6 @@ export const Result = {
 
   /**
    * Creates a successful Result wrapping a value.
-   * Replaces C#'s `Result.Success<T>(value)` and implicit `TValue → Result<TValue>`.
    */
   success<T>(value: T): Result<T> {
     return Object.freeze({ ok: true, value }) as Result<T>;
@@ -47,7 +43,6 @@ export const Result = {
 
   /**
    * Creates a failed Result with one or more errors.
-   * Replaces C#'s `Result.Failure(Error)` and implicit `Error → Result<T>`.
    */
   failure<T = never>(...errors: AppError[]): Result<T> {
     if (errors.length === 0) {
@@ -92,7 +87,6 @@ export const Result = {
 
   /**
    * Returns success if condition is true, failure otherwise.
-   * Replaces C#'s `Result.SuccessIf(bool, value, error)`.
    */
   successIf<T>(condition: boolean, value: T, error: AppError): Result<T> {
     return condition ? Result.success(value) : Result.failure(error);
@@ -100,7 +94,6 @@ export const Result = {
 
   /**
    * Returns failure if condition is true, success otherwise.
-   * Replaces C#'s `Result.FailIf(bool, value, error)`.
    */
   failIf<T>(condition: boolean, value: T, error: AppError): Result<T> {
     return condition ? Result.failure(error) : Result.success(value);
@@ -110,16 +103,15 @@ export const Result = {
 
   /**
    * Chains a function that returns a new Result (monadic bind).
-   * Replaces C#'s `ResultT.Then.cs` `Then<TNextValue>`.
    * Short-circuits on failure — the function is not called.
    */
+  // biome-ignore lint/suspicious/noThenProperty: intentional monadic bind method on Result namespace, not a Promise
   then<T, U>(result: Result<T>, fn: (value: T) => Result<U>): Result<U> {
     return result.ok ? fn(result.value) : Result.failureFrom<U>(result.errors);
   },
 
   /**
    * Transforms the success value (functor map).
-   * Replaces C#'s `ResultT.Map.cs` `Map<TNextValue>`.
    */
   map<T, U>(result: Result<T>, fn: (value: T) => U): Result<U> {
     return result.ok ? Result.success(fn(result.value)) : Result.failureFrom<U>(result.errors);
@@ -127,7 +119,6 @@ export const Result = {
 
   /**
    * Guards the success value with a predicate.
-   * Replaces C#'s `ResultT.Ensure.cs` `Ensure(predicate, error)`.
    */
   ensure<T>(
     result: Result<T>,
@@ -141,7 +132,6 @@ export const Result = {
 
   /**
    * Runs a side effect on success without altering the result.
-   * Replaces C#'s `ResultT.Tap.cs` `Tap(action)`.
    */
   tap<T>(result: Result<T>, fn: (value: T) => void): Result<T> {
     if (result.ok) fn(result.value);
@@ -150,7 +140,6 @@ export const Result = {
 
   /**
    * Runs a side effect on failure without altering the result.
-   * Replaces C#'s `ResultT.TapError.cs` `TapError(action)`.
    */
   tapError<T>(result: Result<T>, fn: (errors: readonly AppError[]) => void): Result<T> {
     if (!result.ok) fn(result.errors);
@@ -159,7 +148,6 @@ export const Result = {
 
   /**
    * Transforms errors on failure (error functor map).
-   * Replaces C#'s `ResultT.MapError.cs` `MapError<TNextValue>`.
    */
   mapError<T>(result: Result<T>, fn: (errors: readonly AppError[]) => AppError[]): Result<T> {
     if (result.ok) return result;
@@ -168,7 +156,6 @@ export const Result = {
 
   /**
    * Exhaustive pattern match — extracts a value from either branch.
-   * Replaces C#'s `ResultT.Match.cs` `Match<TNextValue>(onSuccess, onError)`.
    */
   match<T, U>(
     result: Result<T>,
@@ -180,7 +167,6 @@ export const Result = {
 
   /**
    * Returns a fallback Result on failure.
-   * Replaces C#'s `ResultT.Else.cs` `Else(value)` and `Else(onError)`.
    */
   else<T>(
     result: Result<T>,
@@ -195,7 +181,6 @@ export const Result = {
 
   /**
    * Recovers from failure by returning a new Result.
-   * Replaces C#'s `ResultT.Compensate.cs` `Compensate(onError)`.
    */
   compensate<T>(
     result: Result<T>,
@@ -206,7 +191,6 @@ export const Result = {
 
   /**
    * Wraps a throwing function, catching exceptions as Result.failure.
-   * Replaces C#'s `Result.Try.cs` `Result.Try(Func<T>)`.
    */
   try<T>(fn: () => T, onError?: (error: unknown) => AppError): Result<T> {
     try {
@@ -218,7 +202,6 @@ export const Result = {
 
   /**
    * Async version of Result.try.
-   * Replaces C#'s `Result.TryCatch.cs` `Result.TryAsync`.
    */
   async tryAsync<T>(
     fn: () => Promise<T>,
@@ -235,7 +218,6 @@ export const Result = {
 
   /**
    * Async version of Result.then.
-   * Replaces C#'s Task<Result<T>> extension methods in ResultT.Then.cs.
    */
   async thenAsync<T, U>(
     result: Result<T>,
@@ -274,7 +256,6 @@ export const Result = {
   /**
    * Collects multiple Results — succeeds only if ALL succeed.
    * Collects ALL errors on failure (does not short-circuit).
-   * Replaces C#'s `Result.And(IEnumerable<Result>)`.
    */
   and<T>(results: ReadonlyArray<Result<T>>): Result<T[]> {
     const errors: AppError[] = [];
@@ -289,7 +270,6 @@ export const Result = {
   /**
    * Returns first success from multiple Results.
    * Collects ALL errors if all fail.
-   * Replaces C#'s `Result.Or(IEnumerable<Result>)`.
    */
   or<T>(results: ReadonlyArray<Result<T>>): Result<T> {
     const errors: AppError[] = [];
@@ -302,7 +282,6 @@ export const Result = {
 
   /**
    * Throws a ResultUnwrapError if the result is a failure.
-   * Replaces C#'s `ResultT.Unwrap.cs` `Unwrap()`.
    * Use sparingly — prefer match/then for safe pipelines.
    */
   unwrap<T>(result: Result<T>): T {
@@ -314,7 +293,6 @@ export const Result = {
 
   /**
    * Deconstructs a Result into a tuple.
-   * Replaces C#'s `ResultT.Deconstruct.cs`.
    */
   deconstruct<T>(
     result: Result<T>,
@@ -351,7 +329,6 @@ export const Result = {
 
   /**
    * Async version of Result.tap.
-   * Replaces C#'s TapAsync extension on Task<Result<T>>.
    */
   async tapAsync<T>(result: Result<T>, fn: (value: T) => Promise<void>): Promise<Result<T>> {
     if (result.ok) await fn(result.value);
@@ -360,7 +337,6 @@ export const Result = {
 
   /**
    * Async version of Result.tapError.
-   * Replaces C#'s TapErrorAsync extension on Task<Result<T>>.
    */
   async tapErrorAsync<T>(
     result: Result<T>,
@@ -372,7 +348,6 @@ export const Result = {
 
   /**
    * Async version of Result.compensate.
-   * Replaces C#'s CompensateAsync extension on Task<Result<T>>.
    */
   async compensateAsync<T>(
     result: Result<T>,
@@ -383,7 +358,6 @@ export const Result = {
 
   /**
    * Async version of Result.mapError.
-   * Note: C# has no async MapError — this is an ergonomic TS addition.
    */
   async mapErrorAsync<T>(
     result: Result<T>,
@@ -535,7 +509,6 @@ export const Result = {
   /**
    * Collects multiple heterogeneous Results into a tuple Result.
    * Succeeds only if ALL succeed; collects ALL errors if any fail.
-   * Replaces C#'s applicative-style `Combine` helpers.
    */
   combine<T extends readonly Result<unknown>[]>(
     ...results: T
@@ -553,7 +526,6 @@ export const Result = {
 
 /**
  * Error thrown when calling Result.unwrap() on a failed Result.
- * Adapted from CSharpEssentials.Results.ResultUnwrapException.
  */
 export class ResultUnwrapError extends Error {
   constructor(public readonly errors: readonly AppError[]) {

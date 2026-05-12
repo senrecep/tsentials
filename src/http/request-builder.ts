@@ -3,7 +3,6 @@ import { fetchResult } from './fetch-result.js';
 
 /**
  * Fluent builder for HTTP requests that returns Result<T>.
- * Adapted from CSharpEssentials.Http.HttpRequestBuilder.
  *
  * @example
  * const result = await RequestBuilder

@@ -4,7 +4,6 @@ import { Result } from './result.js';
 
 /**
  * Converts a Maybe<T> to a Result<T>.
- * Replaces C#'s `Maybe.ToResult.cs` bridge module.
  *
  * @example
  * const result = maybeToResult(Maybe.from(user), Err.notFound('User.NotFound', '...'));
@@ -17,7 +16,6 @@ export function maybeToResult<T>(maybe: Maybe<T>, noneError: AppError): Result<T
 
 /**
  * Converts a Result<T> to a Maybe<T>.
- * Replaces C#'s `Result.AsMaybe.cs` bridge module.
  * Failure becomes None; success becomes Some.
  *
  * @example

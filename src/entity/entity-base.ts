@@ -4,8 +4,6 @@ import type { FullAudit } from './audit.js';
 /**
  * Base interface for all auditable domain entities with domain event support.
  *
- * TypeScript adaptation of CSharpEssentials.Entity.EntityBase (abstract class).
- *
  * Design decision: Uses composition (mixin factory) instead of class inheritance.
  * This keeps the entity model ORM-agnostic and more flexible for TypeScript's
  * structural type system.
@@ -20,7 +18,7 @@ export interface EntityBase extends FullAudit {
 
 /**
  * Mixin factory that adds domain event tracking and audit capabilities
- * to any object. Replaces C#'s abstract class inheritance.
+ * to any object.
  *
  * @example
  * class UserAggregate implements EntityBase {
