@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"npm view tsentials 2>&1 | head -5; echo \\\"---\\\"; npm view tsentials version 2>&1\",\"description\":\"Check if tsentials is taken on npm\"}",
-  "error": "Exit code 1\nnpm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/tsentials - Not found\nnpm error 404\nnpm error 404  'tsentials@*' is not in this registry.\nnpm error 404\n---\nnpm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/tsentials - Not found\nnpm error 404\nnpm error 404  'tsentials@*' is not in this registry.\nnpm error 404\nnpm error 404 Note that you can also install from a\nnpm error 404 tarball, folder, http url, or git url.\nnpm error A compl...",
-  "timestamp": "2026-05-12T22:03:58.516Z",
-  "retry_count": 2
-}
