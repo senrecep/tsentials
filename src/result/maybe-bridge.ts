@@ -1,5 +1,5 @@
-import type { Maybe } from '../maybe/maybe.js';
 import type { AppError } from '../errors/app-error.js';
+import type { Maybe } from '../maybe/maybe.js';
 import { Result } from './result.js';
 
 /**
@@ -9,9 +9,7 @@ import { Result } from './result.js';
  * const result = maybeToResult(Maybe.from(user), Err.notFound('User.NotFound', '...'));
  */
 export function maybeToResult<T>(maybe: Maybe<T>, noneError: AppError): Result<T> {
-  return maybe.hasValue
-    ? Result.success(maybe.value)
-    : Result.failure(noneError);
+  return maybe.hasValue ? Result.success(maybe.value) : Result.failure(noneError);
 }
 
 /**

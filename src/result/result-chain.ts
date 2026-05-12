@@ -64,7 +64,10 @@ export class ResultChain<T> {
     return new ResultChain(Result.compensate(this._result, fn));
   }
 
-  bindIf(condition: boolean | ((value: T) => boolean), fn: (value: T) => Result<T>): ResultChain<T> {
+  bindIf(
+    condition: boolean | ((value: T) => boolean),
+    fn: (value: T) => Result<T>,
+  ): ResultChain<T> {
     return new ResultChain(Result.bindIf(this._result, condition, fn));
   }
 
@@ -83,7 +86,10 @@ export class ResultChain<T> {
     return new ResultChain(Result.compensateFirst(this._result, fn));
   }
 
-  recover(predicate: (error: AppError) => boolean, fn: (error: AppError) => Result<T>): ResultChain<T> {
+  recover(
+    predicate: (error: AppError) => boolean,
+    fn: (error: AppError) => Result<T>,
+  ): ResultChain<T> {
     return new ResultChain(Result.recover(this._result, predicate, fn));
   }
 
@@ -95,15 +101,23 @@ export class ResultChain<T> {
     return Result.alwaysAsync(this._result, fn);
   }
 
-  async bindIfAsync(condition: boolean | ((value: T) => boolean), fn: (value: T) => Promise<Result<T>>): Promise<ResultChain<T>> {
+  async bindIfAsync(
+    condition: boolean | ((value: T) => boolean),
+    fn: (value: T) => Promise<Result<T>>,
+  ): Promise<ResultChain<T>> {
     return new ResultChain(await Result.bindIfAsync(this._result, condition, fn));
   }
 
-  async compensateFirstAsync(fn: (firstError: AppError) => Promise<Result<T>>): Promise<ResultChain<T>> {
+  async compensateFirstAsync(
+    fn: (firstError: AppError) => Promise<Result<T>>,
+  ): Promise<ResultChain<T>> {
     return new ResultChain(await Result.compensateFirstAsync(this._result, fn));
   }
 
-  async recoverAsync(predicate: (error: AppError) => boolean, fn: (error: AppError) => Promise<Result<T>>): Promise<ResultChain<T>> {
+  async recoverAsync(
+    predicate: (error: AppError) => boolean,
+    fn: (error: AppError) => Promise<Result<T>>,
+  ): Promise<ResultChain<T>> {
     return new ResultChain(await Result.recoverAsync(this._result, predicate, fn));
   }
 
@@ -142,7 +156,9 @@ export class ResultChain<T> {
     return new ResultChain(await Result.compensateAsync(this._result, fn));
   }
 
-  async mapErrorAsync(fn: (errors: readonly AppError[]) => Promise<AppError[]>): Promise<ResultChain<T>> {
+  async mapErrorAsync(
+    fn: (errors: readonly AppError[]) => Promise<AppError[]>,
+  ): Promise<ResultChain<T>> {
     return new ResultChain(await Result.mapErrorAsync(this._result, fn));
   }
 
@@ -150,9 +166,10 @@ export class ResultChain<T> {
     fallback: T | ((errors: readonly AppError[]) => Promise<T>),
   ): Promise<ResultChain<T>> {
     if (this._result.ok) return new ResultChain(this._result);
-    const value = typeof fallback === 'function'
-      ? await (fallback as (errors: readonly AppError[]) => Promise<T>)(this._result.errors)
-      : fallback;
+    const value =
+      typeof fallback === 'function'
+        ? await (fallback as (errors: readonly AppError[]) => Promise<T>)(this._result.errors)
+        : fallback;
     return new ResultChain(Result.success(value));
   }
 
@@ -160,9 +177,7 @@ export class ResultChain<T> {
     onSuccess: (value: T) => Promise<U>,
     onError: (errors: readonly AppError[]) => Promise<U>,
   ): Promise<U> {
-    return this._result.ok
-      ? onSuccess(this._result.value)
-      : onError(this._result.errors);
+    return this._result.ok ? onSuccess(this._result.value) : onError(this._result.errors);
   }
 
   unwrapOr(defaultValue: T): T {

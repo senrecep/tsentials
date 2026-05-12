@@ -1,5 +1,5 @@
-import { Err } from '../errors/app-error.js';
 import type { AppError } from '../errors/app-error.js';
+import { Err } from '../errors/app-error.js';
 
 /**
  * Maps HTTP status codes to AppError instances.
@@ -29,15 +29,16 @@ export function httpStatusToError(status: number, description?: string): AppErro
  * Reads a ProblemDetails (RFC 9457) response body from a failed response.
  * Returns the error description from the ProblemDetails if available.
  */
-export async function extractErrorDescription(
-  response: Response,
-): Promise<string | undefined> {
+export async function extractErrorDescription(response: Response): Promise<string | undefined> {
   try {
     const contentType = response.headers.get('content-type') ?? '';
-    if (!contentType.includes('application/problem+json') && !contentType.includes('application/json')) {
+    if (
+      !contentType.includes('application/problem+json') &&
+      !contentType.includes('application/json')
+    ) {
       return undefined;
     }
-    const body = await response.json() as Record<string, unknown>;
+    const body = (await response.json()) as Record<string, unknown>;
     // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature tsconfig requires bracket notation
     if (typeof body['detail'] === 'string') return body['detail'];
     // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature tsconfig requires bracket notation

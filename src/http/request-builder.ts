@@ -84,11 +84,11 @@ export class RequestBuilder {
       case 'GET':
         return fetchResult.get<T>(this.#url, init);
       case 'POST':
-        return fetchResult.post<T>(this.#url, JSON.parse(this.#body as string ?? 'null'), init);
+        return fetchResult.post<T>(this.#url, JSON.parse((this.#body as string) ?? 'null'), init);
       case 'PUT':
-        return fetchResult.put<T>(this.#url, JSON.parse(this.#body as string ?? 'null'), init);
+        return fetchResult.put<T>(this.#url, JSON.parse((this.#body as string) ?? 'null'), init);
       case 'PATCH':
-        return fetchResult.patch<T>(this.#url, JSON.parse(this.#body as string ?? 'null'), init);
+        return fetchResult.patch<T>(this.#url, JSON.parse((this.#body as string) ?? 'null'), init);
       default:
         return fetchResult.get<T>(this.#url, init);
     }

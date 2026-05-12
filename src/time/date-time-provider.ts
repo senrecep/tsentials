@@ -49,12 +49,22 @@ export function createFakeDateTimeProvider(fixed: Date): DateTimeProvider & {
   let current = new Date(fixed.getTime());
 
   return {
-    utcNow(): Date { return new Date(current.getTime()); },
-    utcNowDate(): Date {
-      return new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate()));
+    utcNow(): Date {
+      return new Date(current.getTime());
     },
-    utcNowMs(): number { return current.getTime(); },
-    advance(ms: number): void { current = new Date(current.getTime() + ms); },
-    setTime(date: Date): void { current = new Date(date.getTime()); },
+    utcNowDate(): Date {
+      return new Date(
+        Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate()),
+      );
+    },
+    utcNowMs(): number {
+      return current.getTime();
+    },
+    advance(ms: number): void {
+      current = new Date(current.getTime() + ms);
+    },
+    setTime(date: Date): void {
+      current = new Date(date.getTime());
+    },
   };
 }

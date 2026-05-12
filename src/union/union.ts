@@ -35,10 +35,7 @@ export const Union = {
   /**
    * Creates a tagged union value.
    */
-  of<T extends Record<string, unknown>, K extends keyof T>(
-    tag: K,
-    value: T[K],
-  ): Union<T> {
+  of<T extends Record<string, unknown>, K extends keyof T>(tag: K, value: T[K]): Union<T> {
     return Object.freeze({ tag, value }) as Union<T>;
   },
 
@@ -51,7 +48,9 @@ export const Union = {
     union: Union<T>,
     handlers: { [K in keyof T]: (value: T[K]) => R },
   ): R {
-    const handler = (handlers as Record<string | symbol, (value: unknown) => R>)[union.tag as string | symbol];
+    const handler = (handlers as Record<string | symbol, (value: unknown) => R>)[
+      union.tag as string | symbol
+    ];
     if (handler === undefined) throw new Error(`Unhandled union tag: ${String(union.tag)}`);
     return handler(union.value);
   },
@@ -69,10 +68,7 @@ export const Union = {
   /**
    * Extracts the value for a specific tag, throws otherwise.
    */
-  get<T extends Record<string, unknown>, K extends keyof T>(
-    union: Union<T>,
-    tag: K,
-  ): T[K] {
+  get<T extends Record<string, unknown>, K extends keyof T>(union: Union<T>, tag: K): T[K] {
     if (union.tag !== tag) {
       throw new Error(`Expected union tag '${String(tag)}' but got '${String(union.tag)}'.`);
     }

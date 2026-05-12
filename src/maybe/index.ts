@@ -1,2 +1,2 @@
 export { Maybe } from './maybe.js';
-export { tryFirst, tryLast, tryFind, choose, asMaybe } from './maybe-utils.js';
+export { asMaybe, choose, tryFind, tryFirst, tryLast } from './maybe-utils.js';

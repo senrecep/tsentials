@@ -1,5 +1,5 @@
-import type { DomainEvent } from './domain-event.js';
 import type { FullAudit } from './audit.js';
+import type { DomainEvent } from './domain-event.js';
 
 /**
  * Base interface for all auditable domain entities with domain event support.
@@ -39,10 +39,18 @@ export function createEntityBase(): EntityBase {
     get domainEvents(): readonly DomainEvent[] {
       return Object.freeze([..._domainEvents]);
     },
-    get createdAt(): Date { return _createdAt; },
-    get createdBy(): string { return _createdBy; },
-    get updatedAt(): Date | undefined { return _updatedAt; },
-    get updatedBy(): string | undefined { return _updatedBy; },
+    get createdAt(): Date {
+      return _createdAt;
+    },
+    get createdBy(): string {
+      return _createdBy;
+    },
+    get updatedAt(): Date | undefined {
+      return _updatedAt;
+    },
+    get updatedBy(): string | undefined {
+      return _updatedBy;
+    },
 
     raise(event: DomainEvent): void {
       _domainEvents.push(event);

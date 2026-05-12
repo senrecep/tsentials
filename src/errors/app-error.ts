@@ -1,5 +1,5 @@
-import { ErrorType } from './error-type.js';
 import { ErrorMetadata } from './error-metadata.js';
+import { ErrorType } from './error-type.js';
 
 /**
  * Represents a structured, immutable application error value.

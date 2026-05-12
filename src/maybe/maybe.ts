@@ -140,7 +140,9 @@ export const Maybe = {
   /**
    * Deconstructs a Maybe into a tuple [hasValue, value | undefined].
    */
-  deconstruct<T>(maybe: Maybe<T>): [hasValue: true, value: T] | [hasValue: false, value: undefined] {
+  deconstruct<T>(
+    maybe: Maybe<T>,
+  ): [hasValue: true, value: T] | [hasValue: false, value: undefined] {
     return maybe.hasValue ? [true, maybe.value] : [false, undefined];
   },
 
@@ -184,7 +186,10 @@ export const Maybe = {
    * Async version of Maybe.filter.
    * Becomes None if the async predicate returns false.
    */
-  async filterAsync<T>(maybe: Maybe<T>, predicate: (value: T) => Promise<boolean>): Promise<Maybe<T>> {
+  async filterAsync<T>(
+    maybe: Maybe<T>,
+    predicate: (value: T) => Promise<boolean>,
+  ): Promise<Maybe<T>> {
     if (!maybe.hasValue) return maybe;
     return (await predicate(maybe.value)) ? maybe : Maybe.none<T>();
   },

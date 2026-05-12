@@ -26,7 +26,7 @@ export interface Cloneable<T> {
  * const cloned = cloneArray(entities);
  */
 export function cloneArray<T extends Cloneable<T>>(items: readonly T[]): T[] {
-  return items.map(item => item.clone());
+  return items.map((item) => item.clone());
 }
 
 /**

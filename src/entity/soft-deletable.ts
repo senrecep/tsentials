@@ -29,10 +29,18 @@ export function createSoftDeletable(): SoftDeletable {
   let _isHardDeleted = false;
 
   return {
-    get deletedAt(): Date | undefined { return _deletedAt; },
-    get deletedBy(): string | undefined { return _deletedBy; },
-    get isDeleted(): boolean { return _isDeleted; },
-    get isHardDeleted(): boolean { return _isHardDeleted; },
+    get deletedAt(): Date | undefined {
+      return _deletedAt;
+    },
+    get deletedBy(): string | undefined {
+      return _deletedBy;
+    },
+    get isDeleted(): boolean {
+      return _isDeleted;
+    },
+    get isHardDeleted(): boolean {
+      return _isHardDeleted;
+    },
 
     markAsDeleted(deletedAt: Date, deletedBy: string): void {
       _deletedAt = deletedAt;

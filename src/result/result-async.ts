@@ -104,8 +104,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     fn: (...args: A) => Promise<T>,
     onError?: (e: unknown) => AppError,
   ): (...args: A) => ResultAsync<T> {
-    return (...args: A) =>
-      new ResultAsync(Result.tryAsync(() => fn(...args), onError));
+    return (...args: A) => new ResultAsync(Result.tryAsync(() => fn(...args), onError));
   }
 
   // ─── PIPELINE ─────────────────────────────────────────────────────────────
@@ -121,11 +120,9 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
    *   .andThen(order => validateOrder(order))   // Result<Order> or ResultAsync<Order>
    *   .andThen(order => fulfillOrder(order))
    */
-  andThen<U>(
-    fn: (value: T) => Result<U> | ResultAsync<U> | Promise<Result<U>>,
-  ): ResultAsync<U> {
+  andThen<U>(fn: (value: T) => Result<U> | ResultAsync<U> | Promise<Result<U>>): ResultAsync<U> {
     return new ResultAsync(
-      this._promise.then(r => {
+      this._promise.then((r) => {
         if (!r.ok) return Promise.resolve(Result.failureFrom<U>(r.errors));
         const next = fn(r.value);
         if (next instanceof ResultAsync) return (next as ResultAsync<U>)._promise;
@@ -140,7 +137,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
    */
   map<U>(fn: (value: T) => U | Promise<U>): ResultAsync<U> {
     return new ResultAsync(
-      this._promise.then(async r =>
+      this._promise.then(async (r) =>
         r.ok ? Result.success(await fn(r.value)) : Result.failureFrom<U>(r.errors),
       ),
     );
@@ -154,7 +151,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     error: AppError | ((value: T) => AppError),
   ): ResultAsync<T> {
     return new ResultAsync(
-      this._promise.then(async r => {
+      this._promise.then(async (r) => {
         if (!r.ok) return r;
         const err = typeof error === 'function' ? error(r.value) : error;
         return (await predicate(r.value)) ? r : Result.failure(err);
@@ -167,7 +164,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
    */
   tap(fn: (value: T) => void | Promise<void>): ResultAsync<T> {
     return new ResultAsync(
-      this._promise.then(async r => {
+      this._promise.then(async (r) => {
         if (r.ok) await fn(r.value);
         return r;
       }),
@@ -179,7 +176,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
    */
   tapError(fn: (errors: readonly AppError[]) => void | Promise<void>): ResultAsync<T> {
     return new ResultAsync(
-      this._promise.then(async r => {
+      this._promise.then(async (r) => {
         if (!r.ok) await fn(r.errors);
         return r;
       }),
@@ -191,7 +188,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
    */
   mapError(fn: (errors: readonly AppError[]) => AppError[] | Promise<AppError[]>): ResultAsync<T> {
     return new ResultAsync(
-      this._promise.then(async r => {
+      this._promise.then(async (r) => {
         if (r.ok) return r;
         return Result.failureFrom<T>(await fn(r.errors));
       }),
@@ -205,7 +202,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     fn: (errors: readonly AppError[]) => Result<T> | ResultAsync<T> | Promise<Result<T>>,
   ): ResultAsync<T> {
     return new ResultAsync(
-      this._promise.then(r => {
+      this._promise.then((r) => {
         if (r.ok) return Promise.resolve(r);
         const next = fn(r.errors);
         if (next instanceof ResultAsync) return (next as ResultAsync<T>)._promise;
@@ -220,7 +217,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
    */
   else(fallback: T | ((errors: readonly AppError[]) => T | Promise<T>)): ResultAsync<T> {
     return new ResultAsync(
-      this._promise.then(async r => {
+      this._promise.then(async (r) => {
         if (r.ok) return r;
         const value =
           typeof fallback === 'function'
@@ -236,7 +233,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     fn: (value: T) => Result<T> | ResultAsync<T> | Promise<Result<T>>,
   ): ResultAsync<T> {
     return new ResultAsync(
-      this._promise.then(async r => {
+      this._promise.then(async (r) => {
         if (!r.ok) return r;
         const cond = typeof condition === 'function' ? condition(r.value) : condition;
         if (!cond) return r;
@@ -248,9 +245,12 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     );
   }
 
-  tapIf(condition: boolean | ((value: T) => boolean), fn: (value: T) => void | Promise<void>): ResultAsync<T> {
+  tapIf(
+    condition: boolean | ((value: T) => boolean),
+    fn: (value: T) => void | Promise<void>,
+  ): ResultAsync<T> {
     return new ResultAsync(
-      this._promise.then(async r => {
+      this._promise.then(async (r) => {
         if (!r.ok) return r;
         const cond = typeof condition === 'function' ? condition(r.value) : condition;
         if (cond) await fn(r.value);
@@ -263,7 +263,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     fn: (firstError: AppError) => Result<T> | ResultAsync<T> | Promise<Result<T>>,
   ): ResultAsync<T> {
     return new ResultAsync(
-      this._promise.then(r => {
+      this._promise.then((r) => {
         if (r.ok) return Promise.resolve(r);
         // biome-ignore lint/style/noNonNullAssertion: errors array is non-empty when ok is false
         const next = fn(r.errors[0]!);
@@ -279,7 +279,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     fn: (error: AppError) => Result<T> | ResultAsync<T> | Promise<Result<T>>,
   ): ResultAsync<T> {
     return new ResultAsync(
-      this._promise.then(r => {
+      this._promise.then((r) => {
         if (r.ok) return Promise.resolve(r);
         // biome-ignore lint/style/noNonNullAssertion: errors array is non-empty when ok is false
         if (!predicate(r.errors[0]!)) return Promise.resolve(r);

@@ -74,13 +74,23 @@ export const Result = {
   // ─── ERROR ACCESSORS ──────────────────────────────────────────────────────
 
   firstError<T>(result: Result<T>): AppError {
-    if (result.ok) return Err.unexpected('Result.NoFirstError', 'First error cannot be retrieved from a successful Result.');
+    if (result.ok)
+      return Err.unexpected(
+        'Result.NoFirstError',
+        'First error cannot be retrieved from a successful Result.',
+      );
     return result.errors[0] ?? Err.unexpected('Result.Empty', 'No errors found.');
   },
 
   lastError<T>(result: Result<T>): AppError {
-    if (result.ok) return Err.unexpected('Result.NoLastError', 'Last error cannot be retrieved from a successful Result.');
-    return result.errors[result.errors.length - 1] ?? Err.unexpected('Result.Empty', 'No errors found.');
+    if (result.ok)
+      return Err.unexpected(
+        'Result.NoLastError',
+        'Last error cannot be retrieved from a successful Result.',
+      );
+    return (
+      result.errors[result.errors.length - 1] ?? Err.unexpected('Result.Empty', 'No errors found.')
+    );
   },
 
   // ─── CONDITIONAL CREATION ─────────────────────────────────────────────────
@@ -168,24 +178,19 @@ export const Result = {
   /**
    * Returns a fallback Result on failure.
    */
-  else<T>(
-    result: Result<T>,
-    fallback: T | ((errors: readonly AppError[]) => T),
-  ): Result<T> {
+  else<T>(result: Result<T>, fallback: T | ((errors: readonly AppError[]) => T)): Result<T> {
     if (result.ok) return result;
-    const value = typeof fallback === 'function'
-      ? (fallback as (errors: readonly AppError[]) => T)(result.errors)
-      : fallback;
+    const value =
+      typeof fallback === 'function'
+        ? (fallback as (errors: readonly AppError[]) => T)(result.errors)
+        : fallback;
     return Result.success(value);
   },
 
   /**
    * Recovers from failure by returning a new Result.
    */
-  compensate<T>(
-    result: Result<T>,
-    fn: (errors: readonly AppError[]) => Result<T>,
-  ): Result<T> {
+  compensate<T>(result: Result<T>, fn: (errors: readonly AppError[]) => Result<T>): Result<T> {
     return result.ok ? result : fn(result.errors);
   },
 
@@ -229,10 +234,7 @@ export const Result = {
   /**
    * Async version of Result.map.
    */
-  async mapAsync<T, U>(
-    result: Result<T>,
-    fn: (value: T) => Promise<U>,
-  ): Promise<Result<U>> {
+  async mapAsync<T, U>(result: Result<T>, fn: (value: T) => Promise<U>): Promise<Result<U>> {
     return result.ok
       ? Result.success(await fn(result.value))
       : Result.failureFrom<U>(result.errors);
@@ -297,9 +299,7 @@ export const Result = {
   deconstruct<T>(
     result: Result<T>,
   ): [ok: true, value: T, errors: null] | [ok: false, value: null, errors: readonly AppError[]] {
-    return result.ok
-      ? [true, result.value, null]
-      : [false, null, result.errors];
+    return result.ok ? [true, result.value, null] : [false, null, result.errors];
   },
 
   /**
@@ -435,10 +435,7 @@ export const Result = {
    * Recovers from failure using only the first error.
    * Passes through success unchanged.
    */
-  compensateFirst<T>(
-    result: Result<T>,
-    fn: (firstError: AppError) => Result<T>,
-  ): Result<T> {
+  compensateFirst<T>(result: Result<T>, fn: (firstError: AppError) => Result<T>): Result<T> {
     if (result.ok) return result;
     const firstError = result.errors[0] ?? Err.unexpected('Result.Empty', 'No errors found.');
     return fn(firstError);
@@ -529,7 +526,7 @@ export const Result = {
  */
 export class ResultUnwrapError extends Error {
   constructor(public readonly errors: readonly AppError[]) {
-    super(`Cannot unwrap a failed Result. Errors: ${errors.map(e => e.code).join(', ')}`);
+    super(`Cannot unwrap a failed Result. Errors: ${errors.map((e) => e.code).join(', ')}`);
     this.name = 'ResultUnwrapError';
   }
 }
