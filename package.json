@@ -1,6 +1,6 @@
 {
   "name": "tsentials",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Railway-oriented programming for TypeScript — Result<T>, Maybe<T>, Rule Engine, and DDD base classes with full async pipeline support",
   "type": "module",
   "main": "./dist/index.js",
