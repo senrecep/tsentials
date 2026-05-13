@@ -17,6 +17,17 @@ export { fetchResult } from './http/fetch-result.js';
 export { RequestBuilder } from './http/request-builder.js';
 // HTTP utilities
 export { httpStatusToError } from './http/status-mapper.js';
+export type { Json, JsonArray, JsonObject, JsonPrimitive } from './json/index.js';
+// JSON utilities
+export {
+  isJson,
+  isJsonArray,
+  isJsonObject,
+  isJsonPrimitive,
+  parseAndValidate,
+  safeJsonParse,
+  safeJsonStringify,
+} from './json/index.js';
 // Maybe monad
 export { asMaybe, choose, Maybe, tryFind, tryFirst, tryLast } from './maybe/index.js';
 export { maybeToResult, resultToMaybe } from './result/maybe-bridge.js';

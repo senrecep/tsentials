@@ -45,6 +45,10 @@
     "./union": {
       "import": "./dist/union/index.js",
       "types": "./dist/union/index.d.ts"
+    },
+    "./json": {
+      "import": "./dist/json/index.js",
+      "types": "./dist/json/index.d.ts"
     }
   },
   "sideEffects": false,

@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/tsentials?style=flat-square&color=blue)](https://www.npmjs.com/package/tsentials)
 [![npm downloads](https://img.shields.io/npm/dm/tsentials?style=flat-square)](https://www.npmjs.com/package/tsentials)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/tsentials?style=flat-square&label=gzip)](https://bundlephobia.com/package/tsentials)
-[![tests](https://img.shields.io/badge/tests-614%20passing-brightgreen?style=flat-square)](./tests)
+[![tests](https://img.shields.io/badge/tests-652%20passing-brightgreen?style=flat-square)](./tests)
 [![CI](https://img.shields.io/github/actions/workflow/status/senrecep/tsentials/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/senrecep/tsentials/actions)
 [![license](https://img.shields.io/github/license/senrecep/tsentials?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
@@ -38,6 +38,7 @@ Railway-oriented programming for TypeScript — `Result<T>`, `Maybe<T>`, Rule En
 - [Union\<T\>](#uniont)
 - [Time & Fake Providers](#time--fake-providers)
 - [Clone Utilities](#clone-utilities)
+- [JSON Utilities](#json-utilities)
 - [Design Notes](#design-notes)
 - [AI Skills](#ai-skills)
 
@@ -62,6 +63,7 @@ npm install tsentials
 | `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
 | `tsentials/union` | `Union<T>` |
+| `tsentials/json` | `Json`, `JsonObject`, `JsonArray`, `JsonPrimitive`, `safeJsonParse`, `safeJsonStringify`, `parseAndValidate`, type guards |
 
 ---
 
@@ -600,6 +602,72 @@ class Product implements Cloneable<Product> {
   clone() { return new Product(this.id); }
 }
 const cloned = cloneArray([new Product(1), new Product(2)]);
+```
+
+---
+
+## JSON Utilities
+
+Type-safe JSON parsing and validation that returns `Result<T>` — no exceptions, fits directly into the railway pipeline.
+
+```typescript
+import { safeJsonParse, safeJsonStringify, parseAndValidate } from 'tsentials/json';
+import { isJsonObject } from 'tsentials/json';
+
+// Parse — returns Result<Json>
+const result = safeJsonParse('{"name":"Alice","age":30}');
+if (result.ok) {
+  console.log(result.value); // { name: "Alice", age: 30 }
+} else {
+  console.error(result.errors[0].code); // "Json.SyntaxError" | "Json.ValidationError"
+}
+
+// Stringify — returns Result<string>
+const json = safeJsonStringify({ id: 1, tags: ['a', 'b'] });
+if (json.ok) console.log(json.value); // '{"id":1,"tags":["a","b"]}'
+
+// Parse + validate with a custom type guard
+interface User { name: string; age: number }
+
+function isUser(value: unknown): value is User {
+  return isJsonObject(value) && typeof value.name === 'string' && typeof value.age === 'number';
+}
+
+const user = parseAndValidate<User>('{"name":"Alice","age":30}', isUser);
+if (user.ok) console.log(user.value.name); // "Alice" — fully typed
+```
+
+### Type Guards
+
+```typescript
+import { isJson, isJsonObject, isJsonArray, isJsonPrimitive } from 'tsentials/json';
+
+isJsonPrimitive('hello');        // true — string | number | boolean | null
+isJsonArray([1, 2, 3]);          // true
+isJsonObject({ a: 1 });          // true — plain objects only, rejects Date/RegExp/class instances
+isJson({ nested: [1, null] });   // true — recursive validation
+isJson({ fn: () => {} });        // false — functions are not valid JSON
+isJson({ key: undefined });      // false — undefined is not valid JSON
+```
+
+### Error Codes
+
+| Code | Cause |
+|------|-------|
+| `Json.SyntaxError` | `JSON.parse` failed — malformed input |
+| `Json.ValidationError` | Parsed value failed type guard |
+| `Json.StringifyFailed` | `JSON.stringify` failed (e.g. circular reference) |
+
+### Pipeline Integration
+
+```typescript
+import { Result } from 'tsentials/result';
+import { safeJsonParse } from 'tsentials/json';
+
+const processed = Result.then(
+  safeJsonParse(rawInput),
+  data => validatePayload(data),
+);
 ```
 
 ---
