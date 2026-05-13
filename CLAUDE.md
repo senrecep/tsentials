@@ -1,7 +1,7 @@
 # tsentials — Developer Guide
 
 Railway-oriented programming toolkit for TypeScript.  
-Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`, `union`.
+Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`, `union`, `json`.
 
 ## Commands
 
@@ -30,6 +30,7 @@ src/
   time/           — DateTimeProvider, SystemDateTimeProvider, createFakeDateTimeProvider
   clone/          — Cloneable<T>, deepClone(), cloneArray()
   union/          — Union<T> discriminated union utility
+  json/           — Json types, isJson/isJsonObject guards, safeJsonParse(), safeJsonStringify(), parseAndValidate()
 ```
 
 ### Result<T>
@@ -122,13 +123,47 @@ class Order extends SoftBase {
 }
 ```
 
+### Json
+Safe JSON parsing — returns `Result<T>`, never throws.
+
+```typescript
+import { safeJsonParse, safeJsonStringify, parseAndValidate } from 'tsentials/json';
+import { isJson, isJsonObject, isJsonArray, isJsonPrimitive } from 'tsentials/json';
+import type { Json, JsonObject } from 'tsentials/json';
+
+// Parse — Result<Json>
+const result = safeJsonParse('{"name":"Alice","age":30}');
+if (result.ok) console.log(result.value);            // { name: "Alice", age: 30 }
+else console.error(result.errors[0].code);           // 'Json.SyntaxError' | 'Json.ValidationError'
+
+// Stringify — Result<string>, catches circular refs
+safeJsonStringify({ id: 1, tags: ['a'] })            // Result<string> — 'Json.StringifyFailed' on error
+
+// Parse + validate to domain type
+function isUser(v: unknown): v is User {
+  return isJsonObject(v) && typeof v.name === 'string' && typeof v.age === 'number';
+}
+parseAndValidate<User>(raw, isUser)                  // Result<User>
+
+// Type guards
+isJsonPrimitive('hello')   // true  — string | number | boolean | null
+isJsonArray([1, 2])        // true
+isJsonObject({ a: 1 })     // true  — plain objects only
+isJsonObject(new Date())   // false — rejects Date, Map, class instances
+isJson({ nested: [null] }) // true  — recursive validation
+isJson({ fn: () => {} })   // false — functions not valid JSON
+
+// Pipeline integration
+const processed = Result.then(safeJsonParse(rawInput), data => validatePayload(data));
+```
+
 ## TypeScript configuration
 - `strict: true`, `exactOptionalPropertyTypes: true`, `noUncheckedIndexedAccess: true`
 - ESM only (`"type": "module"`), `moduleResolution: "bundler"`
 - `"sideEffects": false` in package.json for full tree-shaking
 
 ## Testing
-Vitest — `npm test` runs all 264 tests across 12 test files.
+Vitest — `npm test` runs all 652 tests across 22 test files.
 Test files mirror src/ structure under `tests/`.
 
 ## Publishing

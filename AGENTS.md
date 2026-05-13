@@ -20,6 +20,8 @@ import { fetchResult, RequestBuilder } from 'tsentials/http';
 import { SystemDateTimeProvider } from 'tsentials/time';
 import { deepClone, cloneArray } from 'tsentials/clone';
 import { Union } from 'tsentials/union';
+import { safeJsonParse, safeJsonStringify, parseAndValidate, isJsonObject } from 'tsentials/json';
+import type { Json, JsonObject } from 'tsentials/json';
 ```
 
 ## Core Patterns
@@ -63,6 +65,33 @@ const isAdult: Rule<User> = ctx =>
 const result = await RuleEngine.evaluate(RuleEngine.and(isAdult, hasEmail), user);
 ```
 
+### JSON — always use safeJsonParse, never JSON.parse
+```typescript
+import { safeJsonParse, safeJsonStringify, parseAndValidate, isJsonObject } from 'tsentials/json';
+
+// Never throws — returns Result<Json>
+const result = safeJsonParse('{"name":"Alice","age":30}');
+if (result.ok) console.log(result.value);          // { name: "Alice", age: 30 }
+else console.error(result.errors[0].code);
+// error codes: 'Json.SyntaxError' | 'Json.ValidationError' | 'Json.StringifyFailed'
+
+// Stringify — catches circular references
+const json = safeJsonStringify({ id: 1, tags: ['a', 'b'] }); // Result<string>
+
+// Parse + type guard in one step — returns typed Result<T>
+function isUser(v: unknown): v is User {
+  return isJsonObject(v) && typeof v.name === 'string' && typeof v.age === 'number';
+}
+const user = parseAndValidate<User>(rawString, isUser); // Result<User>
+
+// isJsonObject — plain objects ONLY, rejects Date / Map / class instances
+isJsonObject(new Date())  // false  ← typeof check would pass, this does not
+isJsonObject({ a: 1 })    // true
+
+// Chains directly into railway pipeline
+const processed = Result.then(safeJsonParse(raw), data => validatePayload(data));
+```
+
 ## Important: Naming Pitfalls
 
 | Wrong | Correct | Why |
@@ -76,7 +105,7 @@ const result = await RuleEngine.evaluate(RuleEngine.and(isAdult, hasEmail), user
 
 ```bash
 npm run build      # tsc compile
-npm test           # vitest run (264 tests)
+npm test           # vitest run (652 tests)
 npm run check      # biome lint + format check
 npm run lint:fix   # auto-fix lint
 ```
