@@ -54,10 +54,10 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "biome lint src",
-    "lint:fix": "biome lint --write src",
-    "format": "biome format --write src",
-    "check": "biome check src",
+    "lint": "biome lint src tests",
+    "lint:fix": "biome lint --write src tests",
+    "format": "biome format --write src tests",
+    "check": "biome check src tests",
     "prepublishOnly": "npm run build && npm test"
   },
   "files": [

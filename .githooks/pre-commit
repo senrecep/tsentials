@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# pre-commit: Runs biome check + tests, then auto-fixes README.md test badge.
+# Setup: git config core.hooksPath .githooks
+
+set -euo pipefail
+
+README="README.md"
+MISMATCH=0
+
+# ── Run checks ────────────────────────────────────────────────────────────────
+echo "🔍 Running biome check..."
+npm run check
+
+echo "🧪 Running tests..."
+TEST_OUTPUT=$(npm test 2>&1)
+echo "$TEST_OUTPUT"
+
+# ── Test count ────────────────────────────────────────────────────────────────
+ACTUAL_TESTS=$(echo "$TEST_OUTPUT" | grep -oE 'Tests\s+[0-9]+\s+passed' | grep -oE '[0-9]+' | head -n1 || echo "")
+BADGE_TESTS=$(grep -oE 'tests-[0-9]+%20passing' "$README" | sed 's/tests-\([0-9]*\)%20passing/\1/' || echo "")
+
+if [ -z "$BADGE_TESTS" ]; then
+    echo "⚠️  $README: tests badge not found — skipping auto-fix."
+    MISMATCH=1
+elif [ -z "$ACTUAL_TESTS" ]; then
+    echo "⚠️  Could not detect test count from npm test output."
+    MISMATCH=1
+elif [ "$ACTUAL_TESTS" != "$BADGE_TESTS" ]; then
+    echo "🔧 Auto-fixing tests badge: $BADGE_TESTS → $ACTUAL_TESTS"
+    sed -i '' "s/tests-[0-9]*%20passing/tests-${ACTUAL_TESTS}%20passing/" "$README"
+    git add "$README"
+fi
+
+# ── Result ─────────────────────────────────────────────────────────────────────
+if [ "$MISMATCH" -eq 1 ]; then
+    echo ""
+    echo "Could not auto-fix one or more badges — please update $README manually."
+    exit 1
+fi
+
+echo "✅ Pre-commit checks passed."
+exit 0
