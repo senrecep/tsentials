@@ -179,7 +179,7 @@
   <div class="hero-badge">Railway-Oriented Programming</div>
   <h1><span>tsentials</span></h1>
   <p class="hero-sub">
-    Result&lt;T&gt;, Maybe&lt;T&gt;, Rule Engine, DDD base classes, and type-safe JSON — with full async pipeline support.
+    Result&lt;T&gt;, Maybe&lt;T&gt;, Rule Engine, DDD base classes, type-safe JSON, and functional utilities — with full async pipeline support.
   </p>
 
   <div class="install-box">
@@ -312,6 +312,38 @@
       <div class="module-import">tsentials/json</div>
       <div class="module-desc">safeJsonParse, safeJsonStringify, parseAndValidate — type-safe JSON without exceptions</div>
     </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/function</div>
+      <div class="module-desc">pipe, flow, identity, constant, flip — function composition and pipelines</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/array</div>
+      <div class="module-desc">NonEmptyArray&lt;T&gt; — arrays guaranteed to have at least one element</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/eq</div>
+      <div class="module-desc">Eq&lt;T&gt; — composable structural equality with struct, contramap, getArrayEq</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/ord</div>
+      <div class="module-desc">Ord&lt;T&gt; — type-safe ordering with sortBy, min, max, clamp, between</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/predicate</div>
+      <div class="module-desc">Predicate&lt;T&gt;, Refinement&lt;A,B&gt; — composable boolean conditions with and/or/not/all/any</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/these</div>
+      <div class="module-desc">These&lt;E,A&gt; — partial success, a value together with errors/warnings</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/tree</div>
+      <div class="module-desc">Tree&lt;T&gt; — recursive hierarchies with map, filter, fold, drawTree</div>
+    </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/record</div>
+      <div class="module-desc">Functional object utilities — map, filter, pick, omit, reduce, partition</div>
+    </div>
   </div>
 </section>
 
@@ -399,6 +431,78 @@
 }
 <span class="kw">const</span> user = <span class="fn">parseAndValidate</span>&lt;<span class="type">User</span>&gt;(<span class="str">'{"name":"Alice","age":30}'</span>, isUser);
 <span class="kw">if</span> (user.ok) console.<span class="fn">log</span>(user.value.name); <span class="cmt">// "Alice" — typed as User</span></code></pre>
+    </div>
+
+    <div class="example">
+      <div class="example-header">
+        <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+        <span>pipe &amp; flow — function composition</span>
+      </div>
+      <pre><code><span class="kw">import</span> { <span class="fn">pipe</span>, <span class="fn">flow</span> } <span class="kw">from</span> <span class="str">'tsentials/function'</span>;
+
+<span class="cmt">// pipe — start with a value, thread through functions</span>
+<span class="kw">const</span> result = <span class="fn">pipe</span>(
+  <span class="num">5</span>,
+  n => n * <span class="num">2</span>,
+  n => n + <span class="num">1</span>,
+  n => <span class="type">String</span>(n),
+); <span class="cmt">// "11"</span>
+
+<span class="cmt">// flow — reusable composed function</span>
+<span class="kw">const</span> doubleAndStringify = <span class="fn">flow</span>(
+  (n: <span class="type">number</span>) => n * <span class="num">2</span>,
+  n => <span class="type">String</span>(n),
+);
+doubleAndStringify(<span class="num">5</span>); <span class="cmt">// "10"</span></code></pre>
+    </div>
+
+    <div class="example">
+      <div class="example-header">
+        <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+        <span>NonEmptyArray&lt;T&gt; — guaranteed non-empty</span>
+      </div>
+      <pre><code><span class="kw">import</span> { <span class="type">NonEmptyArray</span>, <span class="fn">head</span>, <span class="fn">asNonEmptyArray</span> } <span class="kw">from</span> <span class="str">'tsentials/array'</span>;
+
+<span class="cmt">// Type-safe: the array is guaranteed to have at least one element</span>
+<span class="kw">const</span> items: <span class="type">NonEmptyArray</span>&lt;<span class="type">string</span>&gt; = [<span class="str">'a'</span>, <span class="str">'b'</span>, <span class="str">'c'</span>];
+<span class="fn">head</span>(items); <span class="cmt">// 'a' — no null check needed</span>
+
+<span class="cmt">// Safe conversion from plain array</span>
+<span class="kw">const</span> maybe = <span class="fn">asNonEmptyArray</span>([]);        <span class="cmt">// None</span>
+<span class="kw">const</span> sure  = <span class="fn">asNonEmptyArray</span>([<span class="num">1</span>, <span class="num">2</span>]);  <span class="cmt">// Some([1, 2])</span></code></pre>
+    </div>
+
+    <div class="example">
+      <div class="example-header">
+        <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+        <span>These&lt;E,A&gt; — partial success</span>
+      </div>
+      <pre><code><span class="kw">import</span> { <span class="type">These</span> } <span class="kw">from</span> <span class="str">'tsentials/these'</span>;
+
+<span class="cmt">// A value together with warnings/errors</span>
+<span class="kw">const</span> parseAge = (raw: <span class="type">string</span>): <span class="type">These</span>&lt;<span class="type">AppError</span>, <span class="type">number</span>&gt; => {
+  <span class="kw">const</span> age = <span class="type">Number</span>(raw);
+  <span class="kw">if</span> (<span class="type">Number</span>.<span class="fn">isNaN</span>(age)) <span class="kw">return</span> <span class="type">These</span>.<span class="fn">left</span>(<span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'Age.NaN'</span>, <span class="str">'Not a number'</span>));
+  <span class="kw">if</span> (age &lt; <span class="num">0</span>) <span class="kw">return</span> <span class="type">These</span>.<span class="fn">both</span>(<span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'Age.Negative'</span>, <span class="str">'Negative age'</span>), <span class="num">0</span>);
+  <span class="kw">return</span> <span class="type">These</span>.<span class="fn">right</span>(age);
+};
+
+<span class="type">These</span>.<span class="fn">toResult</span>(parseAge(<span class="str">'-5'</span>)); <span class="cmt">// failure (Both → failure)</span></code></pre>
+    </div>
+
+    <div class="example">
+      <div class="example-header">
+        <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+        <span>Ord&lt;T&gt; — type-safe ordering</span>
+      </div>
+      <pre><code><span class="kw">import</span> { <span class="type">Ord</span>, <span class="fn">sortBy</span>, <span class="fn">clamp</span> } <span class="kw">from</span> <span class="str">'tsentials/ord'</span>;
+
+<span class="kw">interface</span> <span class="type">User</span> { <span class="kw">readonly</span> age: <span class="type">number</span>; }
+
+<span class="kw">const</span> byAge = <span class="type">Ord</span>.<span class="fn">contramap</span>(<span class="type">Ord</span>.number, (u: <span class="type">User</span>) => u.age);
+<span class="fn">sortBy</span>(users, byAge); <span class="cmt">// sorted by age ascending</span>
+
+<span class="fn">clamp</span>(<span class="type">Ord</span>.number, <span class="num">0</span>, <span class="num">100</span>, <span class="num">150</span>); <span class="cmt">// 100</span></code></pre>
     </div>
 
   </div>
