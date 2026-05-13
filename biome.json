@@ -35,5 +35,17 @@
       "trailingCommas": "all",
       "arrowParentheses": "always"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["tests/**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
+    }
+  ]
 }

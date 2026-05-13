@@ -1,4 +1,4 @@
-import type { CreationAudit, ModificationAudit, FullAudit } from '../../src/entity/audit.js';
+import type { CreationAudit, FullAudit, ModificationAudit } from '../../src/entity/audit.js';
 
 describe('Audit interfaces type compatibility', () => {
   it('CreationAudit requires createdAt and createdBy', () => {

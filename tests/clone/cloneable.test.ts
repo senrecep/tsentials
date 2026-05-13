@@ -8,9 +8,13 @@ class Product implements Cloneable<Product> {
     private _stock: number,
   ) {}
 
-  get stock(): number { return this._stock; }
+  get stock(): number {
+    return this._stock;
+  }
 
-  adjustStock(delta: number): void { this._stock += delta; }
+  adjustStock(delta: number): void {
+    this._stock += delta;
+  }
 
   clone(): Product {
     return new Product(this.id, this.name, this._stock);
@@ -38,10 +42,7 @@ describe('Cloneable interface', () => {
 
 describe('cloneArray', () => {
   it('clones each element in the array', () => {
-    const items = [
-      new Product('a', 'Alpha', 10),
-      new Product('b', 'Beta', 20),
-    ];
+    const items = [new Product('a', 'Alpha', 10), new Product('b', 'Beta', 20)];
     const cloned = cloneArray(items);
     expect(cloned).toHaveLength(2);
     expect(cloned[0]).not.toBe(items[0]);
@@ -79,7 +80,10 @@ describe('deepClone', () => {
   });
 
   it('deep clones nested arrays', () => {
-    const arr = [[1, 2], [3, 4]];
+    const arr = [
+      [1, 2],
+      [3, 4],
+    ];
     const copy = deepClone(arr);
     expect(copy).toEqual(arr);
     copy[0]![0] = 99;

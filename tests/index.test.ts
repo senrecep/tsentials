@@ -1,52 +1,34 @@
 import {
+  // maybe
+  asMaybe,
+  type Cloneable,
+  chain,
+  choose,
   // clone
   cloneArray,
-  deepClone,
-  type Cloneable,
-  // entity
-  type CreationAudit,
-  type FullAudit,
-  type ModificationAudit,
-  type DomainEvent,
-  type DomainEventTiming,
-  type EntityBase,
   createEntityBase,
-  type SoftDeletable,
+  createFakeDateTimeProvider,
   createSoftDeletable,
-  // errors
-  type AppError,
+  deepClone,
   Err,
   ErrorMetadata,
   ErrorType,
   // http
   fetchResult,
-  RequestBuilder,
   httpStatusToError,
-  // maybe
-  asMaybe,
-  choose,
   Maybe,
+  // result
+  maybeToResult,
+  RequestBuilder,
+  Result,
+  ResultChain,
+  ResultUnwrapError,
+  RuleEngine,
+  resultToMaybe,
+  SystemDateTimeProvider,
   tryFind,
   tryFirst,
   tryLast,
-  // result
-  maybeToResult,
-  resultToMaybe,
-  type VoidResult,
-  Result,
-  ResultUnwrapError,
-  chain,
-  ResultChain,
-  // rules
-  type AsyncRule,
-  type Rule,
-  type TypedAsyncRule,
-  type TypedRule,
-  RuleEngine,
-  // time
-  type DateTimeProvider,
-  createFakeDateTimeProvider,
-  SystemDateTimeProvider,
   // union
   Union,
 } from '~/index';
@@ -158,13 +140,15 @@ describe('index runtime integration', () => {
   });
 
   it('can use RuleEngine', () => {
-    const rule = RuleEngine.fromPredicate<number>((n) => n > 0, Err.validation('Test', 'Must be positive'));
+    const rule = RuleEngine.fromPredicate<number>(
+      (n) => n > 0,
+      Err.validation('Test', 'Must be positive'),
+    );
     expect(rule(5).ok).toBe(true);
     expect(rule(-1).ok).toBe(false);
   });
 
   it('can use Union', () => {
-    type MyUnion = { tag: 'a'; value: number } | { tag: 'b'; value: string };
     const u = Union.of<{ a: number; b: string }>('a', 42);
     const result = Union.match(u, {
       a: (n) => n * 2,

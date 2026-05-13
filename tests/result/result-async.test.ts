@@ -1,6 +1,6 @@
-import { Result } from '../../src/result/result.js';
-import { ResultAsync, fromAsync } from '../../src/result/result-async.js';
 import { Err } from '../../src/errors/app-error.js';
+import { Result } from '../../src/result/result.js';
+import { fromAsync, ResultAsync } from '../../src/result/result-async.js';
 
 const err = Err.validation('Test.Invalid', 'invalid');
 const notFound = Err.notFound('Test.NotFound', 'not found');
@@ -49,17 +49,23 @@ describe('ResultAsync factories', () => {
   });
 
   it('try catches async throws', async () => {
-    const r = await ResultAsync.try(async () => { throw new Error('boom'); });
+    const r = await ResultAsync.try(async () => {
+      throw new Error('boom');
+    });
     expect(r.ok).toBe(false);
   });
 
   it('try catches non-Error throws', async () => {
-    const r = await ResultAsync.try(async () => { throw 'string error'; });
+    const r = await ResultAsync.try(async () => {
+      throw 'string error';
+    });
     expect(r.ok).toBe(false);
   });
 
   it('try catches null throws', async () => {
-    const r = await ResultAsync.try(async () => { throw null; });
+    const r = await ResultAsync.try(async () => {
+      throw null;
+    });
     expect(r.ok).toBe(false);
   });
 
@@ -101,44 +107,41 @@ describe('ResultAsync PromiseLike (direct await)', () => {
 
 describe('ResultAsync.andThen', () => {
   it('chains on success with Result<U>', async () => {
-    const r = await fromAsync(okAsync(5))
-      .andThen(n => Result.success(n * 2));
+    const r = await fromAsync(okAsync(5)).andThen((n) => Result.success(n * 2));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(10);
   });
 
   it('chains on success with ResultAsync<U>', async () => {
-    const r = await fromAsync(okAsync(5))
-      .andThen(n => ResultAsync.success(n + 1));
+    const r = await fromAsync(okAsync(5)).andThen((n) => ResultAsync.success(n + 1));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(6);
   });
 
   it('chains on success with Promise<Result<U>>', async () => {
-    const r = await fromAsync(okAsync(3))
-      .andThen(n => okAsync(n * 10));
+    const r = await fromAsync(okAsync(3)).andThen((n) => okAsync(n * 10));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(30);
   });
 
   it('short-circuits on failure', async () => {
     const called: boolean[] = [];
-    const r = await fromAsync(failAsync<number>())
-      .andThen(n => { called.push(true); return Result.success(n); });
+    const r = await fromAsync(failAsync<number>()).andThen((n) => {
+      called.push(true);
+      return Result.success(n);
+    });
     expect(r.ok).toBe(false);
     expect(called).toHaveLength(0);
   });
 
   it('propagates failure from chained fn', async () => {
-    const r = await fromAsync(okAsync(5))
-      .andThen(() => Result.failure<number>(notFound));
+    const r = await fromAsync(okAsync(5)).andThen(() => Result.failure<number>(notFound));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.code).toBe('Test.NotFound');
   });
 
   it('propagates failure from chained ResultAsync', async () => {
-    const r = await fromAsync(okAsync(5))
-      .andThen(() => ResultAsync.failure<number>(notFound));
+    const r = await fromAsync(okAsync(5)).andThen(() => ResultAsync.failure<number>(notFound));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.code).toBe('Test.NotFound');
   });
@@ -146,56 +149,58 @@ describe('ResultAsync.andThen', () => {
 
 describe('ResultAsync.map', () => {
   it('transforms success value (sync fn)', async () => {
-    const r = await fromAsync(okAsync('hello')).map(s => s.toUpperCase());
+    const r = await fromAsync(okAsync('hello')).map((s) => s.toUpperCase());
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe('HELLO');
   });
 
   it('transforms success value (async fn)', async () => {
-    const r = await fromAsync(okAsync(4)).map(async n => n * n);
+    const r = await fromAsync(okAsync(4)).map(async (n) => n * n);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(16);
   });
 
   it('passes through failure', async () => {
-    const r = await fromAsync(failAsync<string>()).map(s => s.toUpperCase());
+    const r = await fromAsync(failAsync<string>()).map((s) => s.toUpperCase());
     expect(r.ok).toBe(false);
   });
 });
 
 describe('ResultAsync.ensure', () => {
   it('passes when sync predicate is true', async () => {
-    const r = await fromAsync(okAsync(10)).ensure(n => n > 5, err);
+    const r = await fromAsync(okAsync(10)).ensure((n) => n > 5, err);
     expect(r.ok).toBe(true);
   });
 
   it('fails when sync predicate is false', async () => {
-    const r = await fromAsync(okAsync(3)).ensure(n => n > 5, err);
+    const r = await fromAsync(okAsync(3)).ensure((n) => n > 5, err);
     expect(r.ok).toBe(false);
   });
 
   it('passes when async predicate resolves true', async () => {
-    const r = await fromAsync(okAsync(10)).ensure(async n => n > 5, err);
+    const r = await fromAsync(okAsync(10)).ensure(async (n) => n > 5, err);
     expect(r.ok).toBe(true);
   });
 
   it('fails when async predicate resolves false', async () => {
-    const r = await fromAsync(okAsync(3)).ensure(async n => n > 5, err);
+    const r = await fromAsync(okAsync(3)).ensure(async (n) => n > 5, err);
     expect(r.ok).toBe(false);
   });
 
   it('short-circuits on existing failure', async () => {
     const called: boolean[] = [];
-    const r = await fromAsync(failAsync<number>())
-      .ensure(n => { called.push(true); return n > 0; }, err);
+    const r = await fromAsync(failAsync<number>()).ensure((n) => {
+      called.push(true);
+      return n > 0;
+    }, err);
     expect(r.ok).toBe(false);
     expect(called).toHaveLength(0);
   });
 
   it('supports function error factory', async () => {
     const r = await fromAsync(okAsync(3)).ensure(
-      n => n > 5,
-      n => Err.validation('Value', `Bad ${n}`),
+      (n) => n > 5,
+      (n) => Err.validation('Value', `Bad ${n}`),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.description).toBe('Bad 3');
@@ -205,20 +210,26 @@ describe('ResultAsync.ensure', () => {
 describe('ResultAsync.tap', () => {
   it('runs sync effect on success', async () => {
     const seen: number[] = [];
-    const r = await fromAsync(okAsync(7)).tap(n => { seen.push(n); });
+    const r = await fromAsync(okAsync(7)).tap((n) => {
+      seen.push(n);
+    });
     expect(r.ok).toBe(true);
     expect(seen).toEqual([7]);
   });
 
   it('runs async effect on success', async () => {
     const seen: number[] = [];
-    const r = await fromAsync(okAsync(7)).tap(async n => { seen.push(n); });
+    const _r = await fromAsync(okAsync(7)).tap(async (n) => {
+      seen.push(n);
+    });
     expect(seen).toEqual([7]);
   });
 
   it('skips effect on failure', async () => {
     const seen: number[] = [];
-    await fromAsync(failAsync<number>()).tap(n => { seen.push(n); });
+    await fromAsync(failAsync<number>()).tap((n) => {
+      seen.push(n);
+    });
     expect(seen).toHaveLength(0);
   });
 });
@@ -226,49 +237,51 @@ describe('ResultAsync.tap', () => {
 describe('ResultAsync.tapError', () => {
   it('runs on failure', async () => {
     const seen: string[] = [];
-    await fromAsync(failAsync()).tapError(async errs => { seen.push(errs[0]!.code); });
+    await fromAsync(failAsync()).tapError(async (errs) => {
+      seen.push(errs[0]!.code);
+    });
     expect(seen).toEqual(['Test.Invalid']);
   });
 
   it('skips on success', async () => {
     const seen: string[] = [];
-    await fromAsync(okAsync(1)).tapError(async errs => { seen.push(errs[0]!.code); });
+    await fromAsync(okAsync(1)).tapError(async (errs) => {
+      seen.push(errs[0]!.code);
+    });
     expect(seen).toHaveLength(0);
   });
 });
 
 describe('ResultAsync.mapError', () => {
   it('transforms errors on failure', async () => {
-    const r = await fromAsync(failAsync())
-      .mapError(errs => errs.map(e => ({ ...e, code: `X.${e.code}` })));
+    const r = await fromAsync(failAsync()).mapError((errs) =>
+      errs.map((e) => ({ ...e, code: `X.${e.code}` })),
+    );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.code).toBe('X.Test.Invalid');
   });
 
   it('passes through success', async () => {
-    const r = await fromAsync(okAsync(1)).mapError(errs => errs);
+    const r = await fromAsync(okAsync(1)).mapError((errs) => errs);
     expect(r.ok).toBe(true);
   });
 });
 
 describe('ResultAsync.compensate', () => {
   it('recovers with Result<T>', async () => {
-    const r = await fromAsync(failAsync<number>())
-      .compensate(() => Result.success(99));
+    const r = await fromAsync(failAsync<number>()).compensate(() => Result.success(99));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(99);
   });
 
   it('recovers with ResultAsync<T>', async () => {
-    const r = await fromAsync(failAsync<number>())
-      .compensate(() => ResultAsync.success(88));
+    const r = await fromAsync(failAsync<number>()).compensate(() => ResultAsync.success(88));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(88);
   });
 
   it('passes through success', async () => {
-    const r = await fromAsync(okAsync(5))
-      .compensate(() => Result.success(99));
+    const r = await fromAsync(okAsync(5)).compensate(() => Result.success(99));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(5);
   });
@@ -282,8 +295,7 @@ describe('ResultAsync.else', () => {
   });
 
   it('calls factory on failure', async () => {
-    const r = await fromAsync(failAsync<number>())
-      .else(async () => -1);
+    const r = await fromAsync(failAsync<number>()).else(async () => -1);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(-1);
   });
@@ -298,7 +310,7 @@ describe('ResultAsync.else', () => {
 describe('ResultAsync terminal operations', () => {
   it('match extracts success value', async () => {
     const msg = await fromAsync(okAsync(10)).match(
-      n => `val:${n}`,
+      (n) => `val:${n}`,
       () => 'err',
     );
     expect(msg).toBe('val:10');
@@ -307,14 +319,14 @@ describe('ResultAsync terminal operations', () => {
   it('match extracts error branch', async () => {
     const msg = await fromAsync(failAsync()).match(
       () => 'ok',
-      errs => errs[0]!.code,
+      (errs) => errs[0]!.code,
     );
     expect(msg).toBe('Test.Invalid');
   });
 
   it('match accepts async handlers', async () => {
     const msg = await fromAsync(okAsync(5)).match(
-      async n => `async:${n}`,
+      async (n) => `async:${n}`,
       async () => 'fail',
     );
     expect(msg).toBe('async:5');
@@ -346,33 +358,39 @@ describe('ResultAsync terminal operations', () => {
 describe('ResultAsync pipeline chaining', () => {
   it('multi-step pipeline resolves correctly', async () => {
     const result = await fromAsync(okAsync(2))
-      .map(n => n * 3)
-      .ensure(n => n < 100, err)
-      .andThen(n => ResultAsync.success(n + 1))
-      .match(n => n, () => -1);
+      .map((n) => n * 3)
+      .ensure((n) => n < 100, err)
+      .andThen((n) => ResultAsync.success(n + 1))
+      .match(
+        (n) => n,
+        () => -1,
+      );
     expect(result).toBe(7);
   });
 
   it('short-circuits midway and collects first error', async () => {
     const result = await fromAsync(okAsync(200))
-      .ensure(n => n < 100, err)
-      .map(n => n * 2)
-      .match(() => 'ok', errs => errs[0]!.code);
+      .ensure((n) => n < 100, err)
+      .map((n) => n * 2)
+      .match(
+        () => 'ok',
+        (errs) => errs[0]!.code,
+      );
     expect(result).toBe('Test.Invalid');
   });
 
   it('chains multiple maps', async () => {
     const r = await fromAsync(okAsync(2))
-      .map(n => n + 1)
-      .map(n => n * 2);
+      .map((n) => n + 1)
+      .map((n) => n * 2);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(6);
   });
 
   it('chains multiple andThens', async () => {
     const r = await fromAsync(okAsync(2))
-      .andThen(n => Result.success(n + 1))
-      .andThen(n => ResultAsync.success(n * 2));
+      .andThen((n) => Result.success(n + 1))
+      .andThen((n) => ResultAsync.success(n * 2));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(6);
   });

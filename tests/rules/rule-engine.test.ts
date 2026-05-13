@@ -1,6 +1,5 @@
-import { RuleEngine } from '../../src/rules/rule-engine.js';
 import { Err } from '../../src/errors/app-error.js';
-import { Result } from '../../src/result/result.js';
+import { RuleEngine } from '../../src/rules/rule-engine.js';
 
 interface UserContext {
   age: number;
@@ -12,9 +11,9 @@ const ageErr = Err.validation('User.Underage', 'Must be 18 or older');
 const emailErr = Err.validation('User.Email', 'Invalid email');
 const termsErr = Err.validation('User.Terms', 'Must accept terms');
 
-const isAdult = RuleEngine.fromPredicate<UserContext>(u => u.age >= 18, ageErr);
-const hasEmail = RuleEngine.fromPredicate<UserContext>(u => u.email.includes('@'), emailErr);
-const acceptedTerms = RuleEngine.fromPredicate<UserContext>(u => u.hasAcceptedTerms, termsErr);
+const isAdult = RuleEngine.fromPredicate<UserContext>((u) => u.age >= 18, ageErr);
+const hasEmail = RuleEngine.fromPredicate<UserContext>((u) => u.email.includes('@'), emailErr);
+const acceptedTerms = RuleEngine.fromPredicate<UserContext>((u) => u.hasAcceptedTerms, termsErr);
 
 const validUser: UserContext = { age: 25, email: 'user@example.com', hasAcceptedTerms: true };
 const minorUser: UserContext = { age: 16, email: 'user@example.com', hasAcceptedTerms: true };
@@ -34,8 +33,8 @@ describe('RuleEngine.fromPredicate', () => {
 
   it('supports dynamic error factory', () => {
     const rule = RuleEngine.fromPredicate<UserContext>(
-      u => u.age >= 18,
-      u => Err.validation('User.Underage', `Age ${u.age} is below 18`)
+      (u) => u.age >= 18,
+      (u) => Err.validation('User.Underage', `Age ${u.age} is below 18`),
     );
     const result = rule(minorUser);
     expect(result.ok).toBe(false);
@@ -79,11 +78,14 @@ describe('RuleEngine.linear', () => {
     const called: string[] = [];
     const r1 = RuleEngine.fromPredicate<UserContext>(
       () => false,
-      Err.validation('Step1.Fail', 'Step 1 failed')
+      Err.validation('Step1.Fail', 'Step 1 failed'),
     );
     const r2 = RuleEngine.fromPredicate<UserContext>(
-      () => { called.push('r2'); return true; },
-      Err.validation('Step2.Fail', 'Step 2 failed')
+      () => {
+        called.push('r2');
+        return true;
+      },
+      Err.validation('Step2.Fail', 'Step 2 failed'),
     );
     const rule = RuleEngine.linear(r1, r2);
     rule(validUser);
@@ -143,10 +145,7 @@ describe('RuleEngine.if', () => {
 
 describe('RuleEngine async', () => {
   it('linearAsync works', async () => {
-    const asyncAdult = RuleEngine.fromPredicateAsync<UserContext>(
-      async u => u.age >= 18,
-      ageErr
-    );
+    const asyncAdult = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
     const rule = RuleEngine.linearAsync(asyncAdult);
     expect((await rule(validUser)).ok).toBe(true);
     expect((await rule(minorUser)).ok).toBe(false);
@@ -155,15 +154,21 @@ describe('RuleEngine async', () => {
   it('linearAsync short-circuits', async () => {
     const called: string[] = [];
     const r1 = RuleEngine.fromPredicateAsync<UserContext>(async () => false, ageErr);
-    const r2 = RuleEngine.fromPredicateAsync<UserContext>(async () => { called.push('r2'); return true; }, emailErr);
+    const r2 = RuleEngine.fromPredicateAsync<UserContext>(async () => {
+      called.push('r2');
+      return true;
+    }, emailErr);
     const rule = RuleEngine.linearAsync(r1, r2);
     await rule(validUser);
     expect(called).toHaveLength(0);
   });
 
   it('andAsync collects all async errors', async () => {
-    const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async u => u.age >= 18, ageErr);
-    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(async u => u.email.includes('@'), emailErr);
+    const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
+    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(
+      async (u) => u.email.includes('@'),
+      emailErr,
+    );
     const rule = RuleEngine.andAsync(asyncAge, asyncEmail);
     const result = await rule(invalidUser);
     expect(result.ok).toBe(false);
@@ -171,23 +176,29 @@ describe('RuleEngine async', () => {
   });
 
   it('andAsync returns ok when all pass', async () => {
-    const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async u => u.age >= 18, ageErr);
+    const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
     const rule = RuleEngine.andAsync(asyncAge);
     const result = await rule(validUser);
     expect(result.ok).toBe(true);
   });
 
   it('orAsync returns first success', async () => {
-    const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async u => u.age >= 18, ageErr);
-    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(async u => u.email.includes('@'), emailErr);
+    const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
+    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(
+      async (u) => u.email.includes('@'),
+      emailErr,
+    );
     const rule = RuleEngine.orAsync(asyncAge, asyncEmail);
     const result = await rule(minorUser);
     expect(result.ok).toBe(true);
   });
 
   it('orAsync collects all errors when all fail', async () => {
-    const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async u => u.age >= 18, ageErr);
-    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(async u => u.email.includes('@'), emailErr);
+    const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
+    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(
+      async (u) => u.email.includes('@'),
+      emailErr,
+    );
     const rule = RuleEngine.orAsync(asyncAge, asyncEmail);
     const result = await rule(invalidUser);
     expect(result.ok).toBe(false);
@@ -195,17 +206,26 @@ describe('RuleEngine async', () => {
   });
 
   it('ifAsync evaluates onTrue when condition passes', async () => {
-    const asyncAdult = RuleEngine.fromPredicateAsync<UserContext>(async u => u.age >= 18, ageErr);
-    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(async u => u.email.includes('@'), emailErr);
+    const asyncAdult = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
+    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(
+      async (u) => u.email.includes('@'),
+      emailErr,
+    );
     const rule = RuleEngine.ifAsync(asyncAdult, asyncEmail);
     const result = await rule(validUser);
     expect(result.ok).toBe(true);
   });
 
   it('ifAsync evaluates onFalse when condition fails', async () => {
-    const asyncAdult = RuleEngine.fromPredicateAsync<UserContext>(async u => u.age >= 18, ageErr);
-    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(async u => u.email.includes('@'), emailErr);
-    const asyncTerms = RuleEngine.fromPredicateAsync<UserContext>(async u => u.hasAcceptedTerms, termsErr);
+    const asyncAdult = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
+    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(
+      async (u) => u.email.includes('@'),
+      emailErr,
+    );
+    const asyncTerms = RuleEngine.fromPredicateAsync<UserContext>(
+      async (u) => u.hasAcceptedTerms,
+      termsErr,
+    );
     const rule = RuleEngine.ifAsync(asyncAdult, asyncEmail, asyncTerms);
     const result = await rule(minorUser);
     expect(result.ok).toBe(true);
@@ -213,8 +233,8 @@ describe('RuleEngine async', () => {
 
   it('fromPredicateAsync supports dynamic error factory', async () => {
     const rule = RuleEngine.fromPredicateAsync<UserContext>(
-      async u => u.age >= 18,
-      u => Err.validation('User.Underage', `Age ${u.age} is below 18`),
+      async (u) => u.age >= 18,
+      (u) => Err.validation('User.Underage', `Age ${u.age} is below 18`),
     );
     const result = await rule(minorUser);
     expect(result.ok).toBe(false);
@@ -229,7 +249,7 @@ describe('RuleEngine.evaluate', () => {
   });
 
   it('evaluateAsync delegates to async rule', async () => {
-    const asyncAdult = RuleEngine.fromPredicateAsync<UserContext>(async u => u.age >= 18, ageErr);
+    const asyncAdult = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
     const result = await RuleEngine.evaluateAsync(asyncAdult, validUser);
     expect(result.ok).toBe(true);
   });

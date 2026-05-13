@@ -34,7 +34,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('chains headers fluently', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -52,7 +54,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('overwrites header with same name', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -67,7 +71,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('appends query parameters', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -83,7 +89,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('appends duplicate query keys', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -98,7 +106,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('preserves existing query string and appends new params', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -113,14 +123,14 @@ describe('RequestBuilder fluent API', () => {
 
   it('sets JSON body and Content-Type header', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
     const body = { name: 'Alice', email: 'alice@example.com' };
-    await RequestBuilder.post('https://api.example.com/users')
-      .json(body)
-      .send<unknown>();
+    await RequestBuilder.post('https://api.example.com/users').json(body).send<unknown>();
 
     const init = fetchSpy.mock.calls[0]![1] as RequestInit;
     expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
@@ -129,7 +139,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('json() overwrites previous body', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -144,13 +156,13 @@ describe('RequestBuilder fluent API', () => {
 
   it('body() sets raw body on init', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
-    await RequestBuilder.get('https://api.example.com/upload')
-      .body('raw text')
-      .send<unknown>();
+    await RequestBuilder.get('https://api.example.com/upload').body('raw text').send<unknown>();
 
     const init = fetchSpy.mock.calls[0]![1] as RequestInit;
     expect(init.body).toBe('raw text');
@@ -158,7 +170,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('overwrites Content-Type when json() is called after header()', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -173,7 +187,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('accepts URL object', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -185,7 +201,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('sends GET request correctly', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -197,7 +215,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('sends POST request correctly', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 201, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 201, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -211,7 +231,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('sends PUT request correctly', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -225,7 +247,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('sends PATCH request correctly', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -240,7 +264,9 @@ describe('RequestBuilder fluent API', () => {
   it('sends DELETE request with GET fallback in send()', async () => {
     // RequestBuilder.send does not have DELETE case, falls through to default (GET behavior via fetchResult.get)
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -253,7 +279,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('parses JSON body before passing to fetchResult.post', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -267,7 +295,9 @@ describe('RequestBuilder fluent API', () => {
 
   it('handles string URL without protocol by using localhost base', async () => {
     const fetchSpy = vi.fn(() =>
-      Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })),
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -300,7 +330,10 @@ describe('RequestBuilder fluent API', () => {
       ),
     );
 
-    const result = await RequestBuilder.get('https://api.example.com/users/1').send<{ id: number; name: string }>();
+    const result = await RequestBuilder.get('https://api.example.com/users/1').send<{
+      id: number;
+      name: string;
+    }>();
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.id).toBe(1);

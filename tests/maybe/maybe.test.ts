@@ -29,7 +29,9 @@ describe('Maybe factories', () => {
   });
 
   it('fromTry catches thrown errors as None', () => {
-    const m = Maybe.fromTry(() => { throw new Error(); });
+    const m = Maybe.fromTry(() => {
+      throw new Error();
+    });
     expect(m.hasValue).toBe(false);
   });
 
@@ -65,46 +67,54 @@ describe('Maybe type guards', () => {
 
 describe('Maybe pipeline', () => {
   it('map transforms value', () => {
-    const m = Maybe.map(Maybe.some(5), n => n * 3);
+    const m = Maybe.map(Maybe.some(5), (n) => n * 3);
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(15);
   });
 
   it('map passes through none', () => {
-    const m = Maybe.map(Maybe.none<number>(), n => n * 3);
+    const m = Maybe.map(Maybe.none<number>(), (n) => n * 3);
     expect(m.hasValue).toBe(false);
   });
 
   it('bind chains maybe', () => {
-    const m = Maybe.bind(Maybe.some(5), n => Maybe.from(n > 3 ? n : null));
+    const m = Maybe.bind(Maybe.some(5), (n) => Maybe.from(n > 3 ? n : null));
     expect(m.hasValue).toBe(true);
   });
 
   it('bind returns none when predicate fails', () => {
-    const m = Maybe.bind(Maybe.some(2), n => Maybe.from(n > 3 ? n : null));
+    const m = Maybe.bind(Maybe.some(2), (n) => Maybe.from(n > 3 ? n : null));
     expect(m.hasValue).toBe(false);
   });
 
   it('tap runs side effect on Some', () => {
     const seen: number[] = [];
-    const m = Maybe.tap(Maybe.some(7), n => seen.push(n));
+    const m = Maybe.tap(Maybe.some(7), (n) => seen.push(n));
     expect(seen).toEqual([7]);
     expect(m.hasValue).toBe(true);
   });
 
   it('tap skips on None', () => {
     const seen: number[] = [];
-    Maybe.tap(Maybe.none<number>(), n => seen.push(n));
+    Maybe.tap(Maybe.none<number>(), (n) => seen.push(n));
     expect(seen).toHaveLength(0);
   });
 
   it('match handles some', () => {
-    const result = Maybe.match(Maybe.some(10), v => `value:${v}`, () => 'none');
+    const result = Maybe.match(
+      Maybe.some(10),
+      (v) => `value:${v}`,
+      () => 'none',
+    );
     expect(result).toBe('value:10');
   });
 
   it('match handles none', () => {
-    const result = Maybe.match(Maybe.none<number>(), v => `value:${v}`, () => 'none');
+    const result = Maybe.match(
+      Maybe.none<number>(),
+      (v) => `value:${v}`,
+      () => 'none',
+    );
     expect(result).toBe('none');
   });
 
@@ -125,7 +135,9 @@ describe('Maybe pipeline', () => {
   });
 
   it('getOrThrow uses custom message', () => {
-    expect(() => Maybe.getOrThrow(Maybe.none<number>(), 'Custom message')).toThrow('Custom message');
+    expect(() => Maybe.getOrThrow(Maybe.none<number>(), 'Custom message')).toThrow(
+      'Custom message',
+    );
   });
 
   it('getOrUndefined returns value when some', () => {
@@ -137,18 +149,21 @@ describe('Maybe pipeline', () => {
   });
 
   it('filter keeps value when predicate passes', () => {
-    const m = Maybe.filter(Maybe.some(10), n => n > 5);
+    const m = Maybe.filter(Maybe.some(10), (n) => n > 5);
     expect(m.hasValue).toBe(true);
   });
 
   it('filter returns none when predicate fails', () => {
-    const m = Maybe.filter(Maybe.some(3), n => n > 5);
+    const m = Maybe.filter(Maybe.some(3), (n) => n > 5);
     expect(m.hasValue).toBe(false);
   });
 
   it('filter passes through none', () => {
     const called: boolean[] = [];
-    const m = Maybe.filter(Maybe.none<number>(), n => { called.push(true); return n > 5; });
+    const m = Maybe.filter(Maybe.none<number>(), (n) => {
+      called.push(true);
+      return n > 5;
+    });
     expect(m.hasValue).toBe(false);
     expect(called).toHaveLength(0);
   });
@@ -159,7 +174,10 @@ describe('Maybe pipeline', () => {
 
   it('getOrElse calls factory when none', () => {
     const called: boolean[] = [];
-    const v = Maybe.getOrElse(Maybe.none<number>(), () => { called.push(true); return 99; });
+    const v = Maybe.getOrElse(Maybe.none<number>(), () => {
+      called.push(true);
+      return 99;
+    });
     expect(v).toBe(99);
     expect(called).toHaveLength(1);
   });
@@ -179,35 +197,33 @@ describe('Maybe pipeline', () => {
 
 describe('Maybe async pipeline', () => {
   it('mapAsync transforms value', async () => {
-    const m = await Maybe.mapAsync(Maybe.some(5), async n => n * 3);
+    const m = await Maybe.mapAsync(Maybe.some(5), async (n) => n * 3);
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(15);
   });
 
   it('mapAsync passes through none', async () => {
-    const m = await Maybe.mapAsync(Maybe.none<number>(), async n => n * 3);
+    const m = await Maybe.mapAsync(Maybe.none<number>(), async (n) => n * 3);
     expect(m.hasValue).toBe(false);
   });
 
   it('bindAsync chains maybe', async () => {
-    const m = await Maybe.bindAsync(
-      Maybe.some(5),
-      async n => (n > 3 ? Maybe.some(n) : Maybe.none<number>()),
+    const m = await Maybe.bindAsync(Maybe.some(5), async (n) =>
+      n > 3 ? Maybe.some(n) : Maybe.none<number>(),
     );
     expect(m.hasValue).toBe(true);
   });
 
   it('bindAsync returns none when fn returns none', async () => {
-    const m = await Maybe.bindAsync(
-      Maybe.some(2),
-      async n => (n > 3 ? Maybe.some(n) : Maybe.none<number>()),
+    const m = await Maybe.bindAsync(Maybe.some(2), async (n) =>
+      n > 3 ? Maybe.some(n) : Maybe.none<number>(),
     );
     expect(m.hasValue).toBe(false);
   });
 
   it('bindAsync passes through none', async () => {
     const called: boolean[] = [];
-    const m = await Maybe.bindAsync(Maybe.none<number>(), async n => {
+    const m = await Maybe.bindAsync(Maybe.none<number>(), async (n) => {
       called.push(true);
       return Maybe.some(n);
     });
@@ -217,21 +233,25 @@ describe('Maybe async pipeline', () => {
 
   it('tapAsync runs effect when some', async () => {
     const seen: number[] = [];
-    const m = await Maybe.tapAsync(Maybe.some(7), async n => { seen.push(n); });
+    const m = await Maybe.tapAsync(Maybe.some(7), async (n) => {
+      seen.push(n);
+    });
     expect(seen).toEqual([7]);
     expect(m.hasValue).toBe(true);
   });
 
   it('tapAsync skips when none', async () => {
     const seen: number[] = [];
-    await Maybe.tapAsync(Maybe.none<number>(), async n => { seen.push(n); });
+    await Maybe.tapAsync(Maybe.none<number>(), async (n) => {
+      seen.push(n);
+    });
     expect(seen).toHaveLength(0);
   });
 
   it('matchAsync handles some', async () => {
     const result = await Maybe.matchAsync(
       Maybe.some(10),
-      async v => `value:${v}`,
+      async (v) => `value:${v}`,
       async () => 'none',
     );
     expect(result).toBe('value:10');
@@ -240,25 +260,25 @@ describe('Maybe async pipeline', () => {
   it('matchAsync handles none', async () => {
     const result = await Maybe.matchAsync(
       Maybe.none<number>(),
-      async v => `value:${v}`,
+      async (v) => `value:${v}`,
       async () => 'none',
     );
     expect(result).toBe('none');
   });
 
   it('filterAsync keeps value when predicate resolves true', async () => {
-    const m = await Maybe.filterAsync(Maybe.some(10), async n => n > 5);
+    const m = await Maybe.filterAsync(Maybe.some(10), async (n) => n > 5);
     expect(m.hasValue).toBe(true);
   });
 
   it('filterAsync returns none when predicate resolves false', async () => {
-    const m = await Maybe.filterAsync(Maybe.some(3), async n => n > 5);
+    const m = await Maybe.filterAsync(Maybe.some(3), async (n) => n > 5);
     expect(m.hasValue).toBe(false);
   });
 
   it('filterAsync passes through none without calling predicate', async () => {
     const called: boolean[] = [];
-    const m = await Maybe.filterAsync(Maybe.none<number>(), async n => {
+    const m = await Maybe.filterAsync(Maybe.none<number>(), async (n) => {
       called.push(true);
       return n > 0;
     });
@@ -301,7 +321,10 @@ describe('Maybe new methods', () => {
 
   it('orElse factory is NOT called when Some (lazy)', () => {
     const called: boolean[] = [];
-    Maybe.orElse(Maybe.some(1), () => { called.push(true); return Maybe.some(99); });
+    Maybe.orElse(Maybe.some(1), () => {
+      called.push(true);
+      return Maybe.some(99);
+    });
     expect(called).toHaveLength(0);
   });
 
@@ -325,85 +348,110 @@ describe('Maybe new methods', () => {
 
   it('orAsync factory is NOT called when Some (lazy)', async () => {
     const called: boolean[] = [];
-    await Maybe.orAsync(Maybe.some(1), async () => { called.push(true); return Maybe.some(99); });
+    await Maybe.orAsync(Maybe.some(1), async () => {
+      called.push(true);
+      return Maybe.some(99);
+    });
     expect(called).toHaveLength(0);
   });
 
   // tapNone
   it('tapNone calls fn when None', () => {
     const called: boolean[] = [];
-    Maybe.tapNone(Maybe.none<number>(), () => { called.push(true); });
+    Maybe.tapNone(Maybe.none<number>(), () => {
+      called.push(true);
+    });
     expect(called).toHaveLength(1);
   });
 
   it('tapNone skips fn when Some', () => {
     const called: boolean[] = [];
-    Maybe.tapNone(Maybe.some(1), () => { called.push(true); });
+    Maybe.tapNone(Maybe.some(1), () => {
+      called.push(true);
+    });
     expect(called).toHaveLength(0);
   });
 
   it('tapNone returns the maybe unchanged', () => {
     const original = Maybe.some(42);
-    const result = Maybe.tapNone(original, () => { /* no-op */ });
+    const result = Maybe.tapNone(original, () => {
+      /* no-op */
+    });
     expect(result).toBe(original);
   });
 
   // mapIf
   it('mapIf transforms value when condition is true (boolean)', () => {
-    const m = Maybe.mapIf(Maybe.some(5), true, n => n * 2);
+    const m = Maybe.mapIf(Maybe.some(5), true, (n) => n * 2);
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(10);
   });
 
   it('mapIf passes through when condition is false', () => {
-    const m = Maybe.mapIf(Maybe.some(5), false, n => n * 2);
+    const m = Maybe.mapIf(Maybe.some(5), false, (n) => n * 2);
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(5);
   });
 
   it('mapIf uses predicate function as condition', () => {
-    const m = Maybe.mapIf(Maybe.some(5), n => n > 3, n => n * 2);
+    const m = Maybe.mapIf(
+      Maybe.some(5),
+      (n) => n > 3,
+      (n) => n * 2,
+    );
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(10);
   });
 
   it('mapIf skips transformation when predicate returns false', () => {
-    const m = Maybe.mapIf(Maybe.some(5), n => n > 10, n => n * 2);
+    const m = Maybe.mapIf(
+      Maybe.some(5),
+      (n) => n > 10,
+      (n) => n * 2,
+    );
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(5);
   });
 
   it('mapIf passes through None', () => {
-    const m = Maybe.mapIf(Maybe.none<number>(), true, n => n * 2);
+    const m = Maybe.mapIf(Maybe.none<number>(), true, (n) => n * 2);
     expect(m.hasValue).toBe(false);
   });
 
   // bindIf
   it('bindIf binds when condition is true', () => {
-    const m = Maybe.bindIf(Maybe.some(5), true, n => Maybe.some(n * 2));
+    const m = Maybe.bindIf(Maybe.some(5), true, (n) => Maybe.some(n * 2));
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(10);
   });
 
   it('bindIf passes through when condition is false', () => {
-    const m = Maybe.bindIf(Maybe.some(5), false, n => Maybe.some(n * 2));
+    const m = Maybe.bindIf(Maybe.some(5), false, (n) => Maybe.some(n * 2));
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(5);
   });
 
   it('bindIf uses predicate function as condition', () => {
-    const m = Maybe.bindIf(Maybe.some(5), n => n > 10, n => Maybe.some(n * 2));
+    const m = Maybe.bindIf(
+      Maybe.some(5),
+      (n) => n > 10,
+      (n) => Maybe.some(n * 2),
+    );
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(5);
   });
 
   it('bindIf passes through None', () => {
-    const m = Maybe.bindIf(Maybe.none<number>(), true, n => Maybe.some(n * 2));
+    const m = Maybe.bindIf(Maybe.none<number>(), true, (n) => Maybe.some(n * 2));
     expect(m.hasValue).toBe(false);
   });
 
   it('bindIf binds when predicate returns true', () => {
-    const m = Maybe.bindIf(Maybe.some(15), n => n > 10, n => Maybe.some(n * 2));
+    const m = Maybe.bindIf(
+      Maybe.some(15),
+      (n) => n > 10,
+      (n) => Maybe.some(n * 2),
+    );
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(30);
   });

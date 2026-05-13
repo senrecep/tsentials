@@ -1,6 +1,6 @@
-import type { Rule, AsyncRule, TypedRule, TypedAsyncRule } from '../../src/rules/rule.js';
-import { Result } from '../../src/result/result.js';
 import { Err } from '../../src/errors/app-error.js';
+import { Result } from '../../src/result/result.js';
+import type { AsyncRule, Rule, TypedAsyncRule, TypedRule } from '../../src/rules/rule.js';
 
 describe('Rule types runtime behavior', () => {
   const ctx = { value: 10 };
@@ -72,14 +72,15 @@ describe('Rule types runtime behavior', () => {
 
     it('returns failure with correct type', () => {
       const rule: TypedRule<{ value: number }, string> = (c) =>
-        c.value > 20 ? Result.success('valid') : Result.failure(Err.validation('Test', 'too small'));
+        c.value > 20
+          ? Result.success('valid')
+          : Result.failure(Err.validation('Test', 'too small'));
       const result = rule(ctx);
       expect(result.ok).toBe(false);
     });
 
     it('can transform context into different type', () => {
-      const rule: TypedRule<{ a: number; b: number }, number> = (c) =>
-        Result.success(c.a + c.b);
+      const rule: TypedRule<{ a: number; b: number }, number> = (c) => Result.success(c.a + c.b);
       const result = rule({ a: 3, b: 4 });
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toBe(7);
@@ -97,7 +98,9 @@ describe('Rule types runtime behavior', () => {
 
     it('returns async failure with correct type', async () => {
       const rule: TypedAsyncRule<{ value: number }, string> = async (c) =>
-        c.value > 20 ? Result.success('valid') : Result.failure(Err.validation('Test', 'too small'));
+        c.value > 20
+          ? Result.success('valid')
+          : Result.failure(Err.validation('Test', 'too small'));
       const result = await rule(ctx);
       expect(result.ok).toBe(false);
     });

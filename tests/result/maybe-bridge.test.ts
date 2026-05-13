@@ -1,7 +1,7 @@
-import { maybeToResult, resultToMaybe } from '../../src/result/maybe-bridge.js';
-import { Maybe } from '../../src/maybe/maybe.js';
-import { Result } from '../../src/result/result.js';
 import { Err } from '../../src/errors/app-error.js';
+import { Maybe } from '../../src/maybe/maybe.js';
+import { maybeToResult, resultToMaybe } from '../../src/result/maybe-bridge.js';
+import { Result } from '../../src/result/result.js';
 
 const notFoundError = Err.notFound('Test.NotFound', 'Value not found');
 

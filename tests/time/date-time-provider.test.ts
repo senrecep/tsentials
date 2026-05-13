@@ -1,4 +1,7 @@
-import { SystemDateTimeProvider, createFakeDateTimeProvider } from '../../src/time/date-time-provider.js';
+import {
+  createFakeDateTimeProvider,
+  SystemDateTimeProvider,
+} from '../../src/time/date-time-provider.js';
 
 describe('SystemDateTimeProvider', () => {
   it('returns a current date', () => {
@@ -63,7 +66,7 @@ describe('createFakeDateTimeProvider', () => {
     const t1 = fake.utcNow();
     const t2 = fake.utcNow();
     expect(t1).not.toBe(t2); // different object references
-    expect(t1).toEqual(t2);  // same value
+    expect(t1).toEqual(t2); // same value
   });
 
   it('utcNowMs returns correct milliseconds', () => {

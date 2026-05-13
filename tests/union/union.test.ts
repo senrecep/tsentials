@@ -8,7 +8,14 @@ type Shape = Union<{
 
 describe('Union.of', () => {
   it('creates a tagged union value', () => {
-    const circle = Union.of<{ circle: { radius: number }; rect: { width: number; height: number }; triangle: { base: number; height: number } }, 'circle'>('circle', { radius: 5 });
+    const circle = Union.of<
+      {
+        circle: { radius: number };
+        rect: { width: number; height: number };
+        triangle: { base: number; height: number };
+      },
+      'circle'
+    >('circle', { radius: 5 });
     expect(circle.tag).toBe('circle');
     expect(circle.value).toEqual({ radius: 5 });
   });
@@ -106,6 +113,8 @@ describe('Union.get', () => {
 
   it('throws with correct message for another mismatch', () => {
     const triangle: Shape = { tag: 'triangle', value: { base: 10, height: 5 } };
-    expect(() => Union.get(triangle, 'circle')).toThrow("Expected union tag 'circle' but got 'triangle'.");
+    expect(() => Union.get(triangle, 'circle')).toThrow(
+      "Expected union tag 'circle' but got 'triangle'.",
+    );
   });
 });

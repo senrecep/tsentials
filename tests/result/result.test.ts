@@ -1,5 +1,5 @@
-import { Result } from '../../src/result/result.js';
 import { Err } from '../../src/errors/app-error.js';
+import { Result } from '../../src/result/result.js';
 
 const validationError = Err.validation('Test.Invalid', 'Test validation error');
 const notFoundError = Err.notFound('Test.NotFound', 'Test not found');
@@ -115,47 +115,47 @@ describe('Result error accessors', () => {
 
 describe('Result pipeline', () => {
   it('then chains on success', () => {
-    const r = Result.then(Result.success(5), n => Result.success(n * 2));
+    const r = Result.then(Result.success(5), (n) => Result.success(n * 2));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(10);
   });
 
   it('then short-circuits on failure', () => {
     const called: boolean[] = [];
-    const r = Result.then(
-      Result.failure(validationError),
-      () => { called.push(true); return Result.success(99); }
-    );
+    const r = Result.then(Result.failure(validationError), () => {
+      called.push(true);
+      return Result.success(99);
+    });
     expect(r.ok).toBe(false);
     expect(called).toHaveLength(0);
   });
 
   it('map transforms the value', () => {
-    const r = Result.map(Result.success('hello'), s => s.toUpperCase());
+    const r = Result.map(Result.success('hello'), (s) => s.toUpperCase());
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe('HELLO');
   });
 
   it('map passes through failure', () => {
-    const r = Result.map(Result.failure<string>(validationError), s => s.toUpperCase());
+    const r = Result.map(Result.failure<string>(validationError), (s) => s.toUpperCase());
     expect(r.ok).toBe(false);
   });
 
   it('ensure passes when predicate is true', () => {
-    const r = Result.ensure(Result.success(10), n => n > 5, validationError);
+    const r = Result.ensure(Result.success(10), (n) => n > 5, validationError);
     expect(r.ok).toBe(true);
   });
 
   it('ensure fails when predicate is false', () => {
-    const r = Result.ensure(Result.success(3), n => n > 5, validationError);
+    const r = Result.ensure(Result.success(3), (n) => n > 5, validationError);
     expect(r.ok).toBe(false);
   });
 
   it('ensure supports function error factory', () => {
     const r = Result.ensure(
       Result.success(3),
-      n => n > 5,
-      n => Err.validation('Value.TooSmall', `Value ${n} is too small`),
+      (n) => n > 5,
+      (n) => Err.validation('Value.TooSmall', `Value ${n} is too small`),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.description).toBe('Value 3 is too small');
@@ -163,51 +163,58 @@ describe('Result pipeline', () => {
 
   it('tap runs side effect on success', () => {
     const seen: number[] = [];
-    const r = Result.tap(Result.success(42), n => seen.push(n));
+    const r = Result.tap(Result.success(42), (n) => seen.push(n));
     expect(r.ok).toBe(true);
     expect(seen).toEqual([42]);
   });
 
   it('tap skips side effect on failure', () => {
     const seen: number[] = [];
-    Result.tap(Result.failure<number>(validationError), n => seen.push(n));
+    Result.tap(Result.failure<number>(validationError), (n) => seen.push(n));
     expect(seen).toHaveLength(0);
   });
 
   it('tapError runs on failure', () => {
     const seen: string[] = [];
-    Result.tapError(Result.failure(validationError), errs => seen.push(errs[0]!.code));
+    Result.tapError(Result.failure(validationError), (errs) => seen.push(errs[0]!.code));
     expect(seen).toEqual(['Test.Invalid']);
   });
 
   it('tapError skips on success', () => {
     const seen: string[] = [];
-    Result.tapError(Result.success(1), errs => seen.push(errs[0]!.code));
+    Result.tapError(Result.success(1), (errs) => seen.push(errs[0]!.code));
     expect(seen).toHaveLength(0);
   });
 
   it('mapError transforms errors', () => {
-    const r = Result.mapError(
-      Result.failure<number>(validationError),
-      errs => errs.map(e => ({ ...e, code: `WRAPPED.${e.code}` })),
+    const r = Result.mapError(Result.failure<number>(validationError), (errs) =>
+      errs.map((e) => ({ ...e, code: `WRAPPED.${e.code}` })),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.code).toBe('WRAPPED.Test.Invalid');
   });
 
   it('mapError passes through success', () => {
-    const r = Result.mapError(Result.success(42), errs => errs);
+    const r = Result.mapError(Result.success(42), (errs) => errs);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(42);
   });
 
   it('match returns success branch value', () => {
-    const msg = Result.match(Result.success(42), v => `Got ${v}`, () => 'Failed');
+    const msg = Result.match(
+      Result.success(42),
+      (v) => `Got ${v}`,
+      () => 'Failed',
+    );
     expect(msg).toBe('Got 42');
   });
 
   it('match returns error branch value', () => {
-    const msg = Result.match(Result.failure(validationError), () => 'OK', errs => errs[0]!.code);
+    const msg = Result.match(
+      Result.failure(validationError),
+      () => 'OK',
+      (errs) => errs[0]!.code,
+    );
     expect(msg).toBe('Test.Invalid');
   });
 
@@ -224,23 +231,23 @@ describe('Result pipeline', () => {
   });
 
   it('else calls factory function on failure', () => {
-    const r = Result.else(Result.failure<number>(validationError), errs => errs.length);
+    const r = Result.else(Result.failure<number>(validationError), (errs) => errs.length);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(1);
   });
 
   it('compensate recovers from failure', () => {
-    const r = Result.compensate(
-      Result.failure<number>(validationError),
-      () => Result.success(-1)
-    );
+    const r = Result.compensate(Result.failure<number>(validationError), () => Result.success(-1));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(-1);
   });
 
   it('compensate passes through success', () => {
     const called: boolean[] = [];
-    const r = Result.compensate(Result.success(5), () => { called.push(true); return Result.success(-1); });
+    const r = Result.compensate(Result.success(5), () => {
+      called.push(true);
+      return Result.success(-1);
+    });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(5);
     expect(called).toHaveLength(0);
@@ -274,7 +281,9 @@ describe('Result.try', () => {
 
   it('uses custom onError mapper', () => {
     const r = Result.try(
-      () => { throw new Error('boom'); },
+      () => {
+        throw new Error('boom');
+      },
       () => Err.validation('Custom', 'Mapped'),
     );
     expect(r.ok).toBe(false);
@@ -288,13 +297,17 @@ describe('Result.try', () => {
   });
 
   it('tryAsync catches async errors', async () => {
-    const r = await Result.tryAsync(async () => { throw new Error('boom'); });
+    const r = await Result.tryAsync(async () => {
+      throw new Error('boom');
+    });
     expect(r.ok).toBe(false);
   });
 
   it('tryAsync uses custom onError mapper', async () => {
     const r = await Result.tryAsync(
-      async () => { throw new Error('async boom'); },
+      async () => {
+        throw new Error('async boom');
+      },
       () => Err.validation('Custom.Async', 'Mapped async'),
     );
     expect(r.ok).toBe(false);
@@ -348,7 +361,9 @@ describe('Result.unwrap', () => {
   });
 
   it('throws ResultUnwrapError on failure', () => {
-    expect(() => Result.unwrap(Result.failure(validationError))).toThrow('Cannot unwrap a failed Result');
+    expect(() => Result.unwrap(Result.failure(validationError))).toThrow(
+      'Cannot unwrap a failed Result',
+    );
   });
 
   it('ResultUnwrapError contains errors array', () => {
@@ -391,7 +406,7 @@ describe('Result utilities', () => {
   });
 
   it('unwrapOrElse calls fn on failure', () => {
-    const r = Result.unwrapOrElse(Result.failure<number>(validationError), errs => errs.length);
+    const r = Result.unwrapOrElse(Result.failure<number>(validationError), (errs) => errs.length);
     expect(r).toBe(1);
   });
 
@@ -419,47 +434,49 @@ describe('Result utilities', () => {
 
 describe('Result async pipeline', () => {
   it('thenAsync chains on success', async () => {
-    const r = await Result.thenAsync(Result.success(5), async n => Result.success(n * 2));
+    const r = await Result.thenAsync(Result.success(5), async (n) => Result.success(n * 2));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(10);
   });
 
   it('thenAsync short-circuits on failure', async () => {
     const called: boolean[] = [];
-    const r = await Result.thenAsync(
-      Result.failure<number>(validationError),
-      async () => { called.push(true); return Result.success(99); },
-    );
+    const r = await Result.thenAsync(Result.failure<number>(validationError), async () => {
+      called.push(true);
+      return Result.success(99);
+    });
     expect(r.ok).toBe(false);
     expect(called).toHaveLength(0);
   });
 
   it('mapAsync transforms the value', async () => {
-    const r = await Result.mapAsync(Result.success('hello'), async s => s.toUpperCase());
+    const r = await Result.mapAsync(Result.success('hello'), async (s) => s.toUpperCase());
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe('HELLO');
   });
 
   it('mapAsync passes through failure', async () => {
-    const r = await Result.mapAsync(Result.failure<string>(validationError), async s => s.toUpperCase());
+    const r = await Result.mapAsync(Result.failure<string>(validationError), async (s) =>
+      s.toUpperCase(),
+    );
     expect(r.ok).toBe(false);
   });
 
   it('ensureAsync passes when predicate resolves true', async () => {
-    const r = await Result.ensureAsync(Result.success(10), async n => n > 5, validationError);
+    const r = await Result.ensureAsync(Result.success(10), async (n) => n > 5, validationError);
     expect(r.ok).toBe(true);
   });
 
   it('ensureAsync fails when predicate resolves false', async () => {
-    const r = await Result.ensureAsync(Result.success(3), async n => n > 5, validationError);
+    const r = await Result.ensureAsync(Result.success(3), async (n) => n > 5, validationError);
     expect(r.ok).toBe(false);
   });
 
   it('ensureAsync supports function error factory', async () => {
     const r = await Result.ensureAsync(
       Result.success(3),
-      async n => n > 5,
-      n => Err.validation('Value.TooSmall', `Value ${n} is too small`),
+      async (n) => n > 5,
+      (n) => Err.validation('Value.TooSmall', `Value ${n} is too small`),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.description).toBe('Value 3 is too small');
@@ -467,33 +484,40 @@ describe('Result async pipeline', () => {
 
   it('tapAsync runs on success', async () => {
     const seen: number[] = [];
-    const r = await Result.tapAsync(Result.success(7), async n => { seen.push(n); });
+    const r = await Result.tapAsync(Result.success(7), async (n) => {
+      seen.push(n);
+    });
     expect(r.ok).toBe(true);
     expect(seen).toEqual([7]);
   });
 
   it('tapAsync skips on failure', async () => {
     const seen: number[] = [];
-    await Result.tapAsync(Result.failure<number>(validationError), async n => { seen.push(n); });
+    await Result.tapAsync(Result.failure<number>(validationError), async (n) => {
+      seen.push(n);
+    });
     expect(seen).toHaveLength(0);
   });
 
   it('tapErrorAsync runs on failure', async () => {
     const seen: string[] = [];
-    await Result.tapErrorAsync(Result.failure(validationError), async errs => { seen.push(errs[0]!.code); });
+    await Result.tapErrorAsync(Result.failure(validationError), async (errs) => {
+      seen.push(errs[0]!.code);
+    });
     expect(seen).toEqual(['Test.Invalid']);
   });
 
   it('tapErrorAsync skips on success', async () => {
     const seen: string[] = [];
-    await Result.tapErrorAsync(Result.success(1), async errs => { seen.push(errs[0]!.code); });
+    await Result.tapErrorAsync(Result.success(1), async (errs) => {
+      seen.push(errs[0]!.code);
+    });
     expect(seen).toHaveLength(0);
   });
 
   it('compensateAsync recovers from failure', async () => {
-    const r = await Result.compensateAsync(
-      Result.failure<number>(validationError),
-      async () => Result.success(99),
+    const r = await Result.compensateAsync(Result.failure<number>(validationError), async () =>
+      Result.success(99),
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(99);
@@ -506,16 +530,15 @@ describe('Result async pipeline', () => {
   });
 
   it('mapErrorAsync transforms errors', async () => {
-    const r = await Result.mapErrorAsync(
-      Result.failure<number>(validationError),
-      async errs => errs.map(e => ({ ...e, code: `WRAPPED.${e.code}` })),
+    const r = await Result.mapErrorAsync(Result.failure<number>(validationError), async (errs) =>
+      errs.map((e) => ({ ...e, code: `WRAPPED.${e.code}` })),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.code).toBe('WRAPPED.Test.Invalid');
   });
 
   it('mapErrorAsync passes through success', async () => {
-    const r = await Result.mapErrorAsync(Result.success(42), async errs => errs);
+    const r = await Result.mapErrorAsync(Result.success(42), async (errs) => errs);
     expect(r.ok).toBe(true);
   });
 });
@@ -524,61 +547,85 @@ describe('Result new pipeline methods', () => {
   // ─── bindIf ───────────────────────────────────────────────────────────────
 
   it('bindIf chains fn when condition is true', () => {
-    const r = Result.bindIf(Result.success(5), true, n => Result.success(n * 2));
+    const r = Result.bindIf(Result.success(5), true, (n) => Result.success(n * 2));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(10);
   });
 
   it('bindIf skips fn when condition is false', () => {
     const called: boolean[] = [];
-    const r = Result.bindIf(Result.success(5), false, n => { called.push(true); return Result.success(n * 2); });
+    const r = Result.bindIf(Result.success(5), false, (n) => {
+      called.push(true);
+      return Result.success(n * 2);
+    });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(5);
     expect(called).toHaveLength(0);
   });
 
   it('bindIf chains fn when predicate returns true', () => {
-    const r = Result.bindIf(Result.success(10), n => n > 5, n => Result.success(n + 1));
+    const r = Result.bindIf(
+      Result.success(10),
+      (n) => n > 5,
+      (n) => Result.success(n + 1),
+    );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(11);
   });
 
   it('bindIf skips fn when predicate returns false', () => {
-    const r = Result.bindIf(Result.success(3), n => n > 5, n => Result.success(n + 1));
+    const r = Result.bindIf(
+      Result.success(3),
+      (n) => n > 5,
+      (n) => Result.success(n + 1),
+    );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(3);
   });
 
   it('bindIf short-circuits on failure', () => {
     const called: boolean[] = [];
-    const r = Result.bindIf(Result.failure<number>(validationError), true, n => { called.push(true); return Result.success(n); });
+    const r = Result.bindIf(Result.failure<number>(validationError), true, (n) => {
+      called.push(true);
+      return Result.success(n);
+    });
     expect(r.ok).toBe(false);
     expect(called).toHaveLength(0);
   });
 
   it('bindIfAsync chains fn when condition is true', async () => {
-    const r = await Result.bindIfAsync(Result.success(5), true, async n => Result.success(n * 2));
+    const r = await Result.bindIfAsync(Result.success(5), true, async (n) => Result.success(n * 2));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(10);
   });
 
   it('bindIfAsync skips fn when condition is false', async () => {
     const called: boolean[] = [];
-    const r = await Result.bindIfAsync(Result.success(5), false, async n => { called.push(true); return Result.success(n * 2); });
+    const r = await Result.bindIfAsync(Result.success(5), false, async (n) => {
+      called.push(true);
+      return Result.success(n * 2);
+    });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(5);
     expect(called).toHaveLength(0);
   });
 
   it('bindIfAsync chains fn when predicate returns true', async () => {
-    const r = await Result.bindIfAsync(Result.success(10), n => n > 5, async n => Result.success(n + 1));
+    const r = await Result.bindIfAsync(
+      Result.success(10),
+      (n) => n > 5,
+      async (n) => Result.success(n + 1),
+    );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(11);
   });
 
   it('bindIfAsync short-circuits on failure', async () => {
     const called: boolean[] = [];
-    const r = await Result.bindIfAsync(Result.failure<number>(validationError), true, async n => { called.push(true); return Result.success(n); });
+    const r = await Result.bindIfAsync(Result.failure<number>(validationError), true, async (n) => {
+      called.push(true);
+      return Result.success(n);
+    });
     expect(r.ok).toBe(false);
     expect(called).toHaveLength(0);
   });
@@ -587,32 +634,40 @@ describe('Result new pipeline methods', () => {
 
   it('tapIf runs fn when condition is true', () => {
     const seen: number[] = [];
-    const r = Result.tapIf(Result.success(42), true, n => seen.push(n));
+    const r = Result.tapIf(Result.success(42), true, (n) => seen.push(n));
     expect(r.ok).toBe(true);
     expect(seen).toEqual([42]);
   });
 
   it('tapIf skips fn when condition is false', () => {
     const seen: number[] = [];
-    Result.tapIf(Result.success(42), false, n => seen.push(n));
+    Result.tapIf(Result.success(42), false, (n) => seen.push(n));
     expect(seen).toHaveLength(0);
   });
 
   it('tapIf runs fn when predicate returns true', () => {
     const seen: number[] = [];
-    Result.tapIf(Result.success(42), n => n > 10, n => seen.push(n));
+    Result.tapIf(
+      Result.success(42),
+      (n) => n > 10,
+      (n) => seen.push(n),
+    );
     expect(seen).toEqual([42]);
   });
 
   it('tapIf skips fn when predicate returns false', () => {
     const seen: number[] = [];
-    Result.tapIf(Result.success(42), n => n > 100, n => seen.push(n));
+    Result.tapIf(
+      Result.success(42),
+      (n) => n > 100,
+      (n) => seen.push(n),
+    );
     expect(seen).toHaveLength(0);
   });
 
   it('tapIf skips fn on failure', () => {
     const seen: number[] = [];
-    Result.tapIf(Result.failure<number>(validationError), true, n => seen.push(n));
+    Result.tapIf(Result.failure<number>(validationError), true, (n) => seen.push(n));
     expect(seen).toHaveLength(0);
   });
 
@@ -620,31 +675,39 @@ describe('Result new pipeline methods', () => {
 
   it('tapErrorIf runs fn on failure when condition is true', () => {
     const seen: string[] = [];
-    Result.tapErrorIf(Result.failure(validationError), true, errs => seen.push(errs[0]!.code));
+    Result.tapErrorIf(Result.failure(validationError), true, (errs) => seen.push(errs[0]!.code));
     expect(seen).toEqual(['Test.Invalid']);
   });
 
   it('tapErrorIf skips fn on failure when condition is false', () => {
     const seen: string[] = [];
-    Result.tapErrorIf(Result.failure(validationError), false, errs => seen.push(errs[0]!.code));
+    Result.tapErrorIf(Result.failure(validationError), false, (errs) => seen.push(errs[0]!.code));
     expect(seen).toHaveLength(0);
   });
 
   it('tapErrorIf runs fn on failure when predicate returns true', () => {
     const seen: number[] = [];
-    Result.tapErrorIf(Result.failure(validationError), errs => errs.length > 0, errs => seen.push(errs.length));
+    Result.tapErrorIf(
+      Result.failure(validationError),
+      (errs) => errs.length > 0,
+      (errs) => seen.push(errs.length),
+    );
     expect(seen).toEqual([1]);
   });
 
   it('tapErrorIf skips fn on failure when predicate returns false', () => {
     const seen: number[] = [];
-    Result.tapErrorIf(Result.failure(validationError), errs => errs.length > 5, errs => seen.push(errs.length));
+    Result.tapErrorIf(
+      Result.failure(validationError),
+      (errs) => errs.length > 5,
+      (errs) => seen.push(errs.length),
+    );
     expect(seen).toHaveLength(0);
   });
 
   it('tapErrorIf skips fn on success', () => {
     const seen: string[] = [];
-    Result.tapErrorIf(Result.success(1), true, errs => seen.push(errs[0]!.code));
+    Result.tapErrorIf(Result.success(1), true, (errs) => seen.push(errs[0]!.code));
     expect(seen).toHaveLength(0);
   });
 
@@ -653,7 +716,7 @@ describe('Result new pipeline methods', () => {
   it('compensateFirst recovers using first error', () => {
     const r = Result.compensateFirst(
       Result.failureFrom([validationError, notFoundError]),
-      firstErr => Result.success(firstErr.code),
+      (firstErr) => Result.success(firstErr.code),
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe('Test.Invalid');
@@ -661,7 +724,10 @@ describe('Result new pipeline methods', () => {
 
   it('compensateFirst passes through success', () => {
     const called: boolean[] = [];
-    const r = Result.compensateFirst(Result.success(99), err => { called.push(true); return Result.success(err.code); });
+    const r = Result.compensateFirst(Result.success(99), (err) => {
+      called.push(true);
+      return Result.success(err.code);
+    });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(99);
     expect(called).toHaveLength(0);
@@ -670,7 +736,7 @@ describe('Result new pipeline methods', () => {
   it('compensateFirstAsync recovers using first error', async () => {
     const r = await Result.compensateFirstAsync(
       Result.failureFrom([validationError, notFoundError]),
-      async firstErr => Result.success(firstErr.code),
+      async (firstErr) => Result.success(firstErr.code),
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe('Test.Invalid');
@@ -678,7 +744,10 @@ describe('Result new pipeline methods', () => {
 
   it('compensateFirstAsync passes through success', async () => {
     const called: boolean[] = [];
-    const r = await Result.compensateFirstAsync(Result.success(99), async err => { called.push(true); return Result.success(err.code); });
+    const r = await Result.compensateFirstAsync(Result.success(99), async (err) => {
+      called.push(true);
+      return Result.success(err.code);
+    });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(99);
     expect(called).toHaveLength(0);
@@ -689,7 +758,7 @@ describe('Result new pipeline methods', () => {
   it('recover recovers when predicate matches first error', () => {
     const r = Result.recover(
       Result.failure(validationError),
-      err => err.code === 'Test.Invalid',
+      (err) => err.code === 'Test.Invalid',
       () => Result.success('recovered'),
     );
     expect(r.ok).toBe(true);
@@ -699,7 +768,7 @@ describe('Result new pipeline methods', () => {
   it('recover passes through when predicate does not match', () => {
     const r = Result.recover(
       Result.failure(notFoundError),
-      err => err.code === 'Test.Invalid',
+      (err) => err.code === 'Test.Invalid',
       () => Result.success('recovered'),
     );
     expect(r.ok).toBe(false);
@@ -709,7 +778,10 @@ describe('Result new pipeline methods', () => {
     const called: boolean[] = [];
     const r = Result.recover(
       Result.success('original'),
-      () => { called.push(true); return true; },
+      () => {
+        called.push(true);
+        return true;
+      },
       () => Result.success('recovered'),
     );
     expect(r.ok).toBe(true);
@@ -720,7 +792,7 @@ describe('Result new pipeline methods', () => {
   it('recoverAsync recovers when predicate matches', async () => {
     const r = await Result.recoverAsync(
       Result.failure(validationError),
-      err => err.code === 'Test.Invalid',
+      (err) => err.code === 'Test.Invalid',
       async () => Result.success('recovered'),
     );
     expect(r.ok).toBe(true);
@@ -730,7 +802,7 @@ describe('Result new pipeline methods', () => {
   it('recoverAsync passes through when predicate does not match', async () => {
     const r = await Result.recoverAsync(
       Result.failure(notFoundError),
-      err => err.code === 'Test.Invalid',
+      (err) => err.code === 'Test.Invalid',
       async () => Result.success('recovered'),
     );
     expect(r.ok).toBe(false);
@@ -740,7 +812,10 @@ describe('Result new pipeline methods', () => {
     const called: boolean[] = [];
     const r = await Result.recoverAsync(
       Result.success('original'),
-      async () => { called.push(true); return true; },
+      async () => {
+        called.push(true);
+        return true;
+      },
       async () => Result.success('recovered'),
     );
     expect(r.ok).toBe(true);
@@ -752,28 +827,40 @@ describe('Result new pipeline methods', () => {
 
   it('always calls fn with success result and returns fn result', () => {
     const seen: boolean[] = [];
-    const out = Result.always(Result.success(42), r => { seen.push(r.ok); return 'done'; });
+    const out = Result.always(Result.success(42), (r) => {
+      seen.push(r.ok);
+      return 'done';
+    });
     expect(seen).toEqual([true]);
     expect(out).toBe('done');
   });
 
   it('always calls fn with failure result', () => {
     const seen: boolean[] = [];
-    const out = Result.always(Result.failure(validationError), r => { seen.push(r.ok); return 'cleaned'; });
+    const out = Result.always(Result.failure(validationError), (r) => {
+      seen.push(r.ok);
+      return 'cleaned';
+    });
     expect(seen).toEqual([false]);
     expect(out).toBe('cleaned');
   });
 
   it('alwaysAsync calls fn with success result', async () => {
     const seen: boolean[] = [];
-    const out = await Result.alwaysAsync(Result.success(42), async r => { seen.push(r.ok); return 'done'; });
+    const out = await Result.alwaysAsync(Result.success(42), async (r) => {
+      seen.push(r.ok);
+      return 'done';
+    });
     expect(seen).toEqual([true]);
     expect(out).toBe('done');
   });
 
   it('alwaysAsync calls fn with failure result', async () => {
     const seen: boolean[] = [];
-    const out = await Result.alwaysAsync(Result.failure(validationError), async r => { seen.push(r.ok); return 'cleaned'; });
+    const out = await Result.alwaysAsync(Result.failure(validationError), async (r) => {
+      seen.push(r.ok);
+      return 'cleaned';
+    });
     expect(seen).toEqual([false]);
     expect(out).toBe('cleaned');
   });

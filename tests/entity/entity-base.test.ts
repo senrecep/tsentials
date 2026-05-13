@@ -1,6 +1,6 @@
+import type { DomainEvent } from '../../src/entity/domain-event.js';
 import { createEntityBase } from '../../src/entity/entity-base.js';
 import { createSoftDeletable } from '../../src/entity/soft-deletable.js';
-import type { DomainEvent } from '../../src/entity/domain-event.js';
 
 interface UserCreatedEvent extends DomainEvent {
   readonly userId: string;

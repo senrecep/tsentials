@@ -1,5 +1,5 @@
-import { fetchResult } from '../../src/http/fetch-result.js';
 import { ErrorType } from '../../src/errors/error-type.js';
+import { fetchResult } from '../../src/http/fetch-result.js';
 
 function createMockResponse(init: {
   ok: boolean;
@@ -186,14 +186,19 @@ describe('fetchResult.get', () => {
   });
 
   it('returns failure on network error (TypeError)', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('fetch failed'))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('fetch failed'))),
+    );
     const result = await fetchResult.get<unknown>('https://api.example.com/offline');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors[0]!.code).toBe('TypeError');
   });
 
   it('passes RequestInit options through', async () => {
-    const fetchSpy = vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })));
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })),
+    );
     vi.stubGlobal('fetch', fetchSpy);
     await fetchResult.get('https://api.example.com/user', { headers: { 'X-Custom': '1' } });
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -203,7 +208,9 @@ describe('fetchResult.get', () => {
   });
 
   it('accepts URL object', async () => {
-    const fetchSpy = vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })));
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })),
+    );
     vi.stubGlobal('fetch', fetchSpy);
     await fetchResult.get(new URL('https://api.example.com/user'));
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -223,7 +230,8 @@ describe('fetchResult.get', () => {
     );
     const result = await fetchResult.get<unknown>('https://api.example.com/missing');
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]!.description).toBe('HTTP request failed with status 404.');
+    if (!result.ok)
+      expect(result.errors[0]!.description).toBe('HTTP request failed with status 404.');
   });
 
   it('catches JSON parse error in success response', async () => {
@@ -253,13 +261,17 @@ describe('fetchResult.post', () => {
       'fetch',
       vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 201, json: { id: 2 } }))),
     );
-    const result = await fetchResult.post<{ id: number }>('https://api.example.com/user', { name: 'Alice' });
+    const result = await fetchResult.post<{ id: number }>('https://api.example.com/user', {
+      name: 'Alice',
+    });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ id: 2 });
   });
 
   it('sends JSON body with correct content-type', async () => {
-    const fetchSpy = vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })));
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })),
+    );
     vi.stubGlobal('fetch', fetchSpy);
     await fetchResult.post('https://api.example.com/user', { name: 'Alice' });
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -273,9 +285,15 @@ describe('fetchResult.post', () => {
   });
 
   it('merges custom headers', async () => {
-    const fetchSpy = vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })));
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })),
+    );
     vi.stubGlobal('fetch', fetchSpy);
-    await fetchResult.post('https://api.example.com/user', {}, { headers: { 'X-Api-Key': 'secret' } });
+    await fetchResult.post(
+      'https://api.example.com/user',
+      {},
+      { headers: { 'X-Api-Key': 'secret' } },
+    );
     expect(fetchSpy).toHaveBeenCalledWith(
       'https://api.example.com/user',
       expect.objectContaining({
@@ -294,13 +312,18 @@ describe('fetchResult.post', () => {
   });
 
   it('returns failure on network error', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('Network down'))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('Network down'))),
+    );
     const result = await fetchResult.post<unknown>('https://api.example.com/user', {});
     expect(result.ok).toBe(false);
   });
 
   it('handles null body', async () => {
-    const fetchSpy = vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })));
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })),
+    );
     vi.stubGlobal('fetch', fetchSpy);
     await fetchResult.post('https://api.example.com/user', null);
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -320,17 +343,26 @@ describe('fetchResult.put', () => {
   it('returns success on 200', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 200, json: { updated: true } }))),
+      vi.fn(() =>
+        Promise.resolve(createMockResponse({ ok: true, status: 200, json: { updated: true } })),
+      ),
     );
-    const result = await fetchResult.put<{ updated: boolean }>('https://api.example.com/user/1', { name: 'Bob' });
+    const result = await fetchResult.put<{ updated: boolean }>('https://api.example.com/user/1', {
+      name: 'Bob',
+    });
     expect(result.ok).toBe(true);
   });
 
   it('sends PUT method', async () => {
-    const fetchSpy = vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })));
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })),
+    );
     vi.stubGlobal('fetch', fetchSpy);
     await fetchResult.put('https://api.example.com/user/1', {});
-    expect(fetchSpy).toHaveBeenCalledWith('https://api.example.com/user/1', expect.objectContaining({ method: 'PUT' }));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.example.com/user/1',
+      expect.objectContaining({ method: 'PUT' }),
+    );
   });
 
   it('returns failure on 409', async () => {
@@ -351,17 +383,26 @@ describe('fetchResult.patch', () => {
   it('returns success on 200', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 200, json: { patched: true } }))),
+      vi.fn(() =>
+        Promise.resolve(createMockResponse({ ok: true, status: 200, json: { patched: true } })),
+      ),
     );
-    const result = await fetchResult.patch<{ patched: boolean }>('https://api.example.com/user/1', { name: 'Charlie' });
+    const result = await fetchResult.patch<{ patched: boolean }>('https://api.example.com/user/1', {
+      name: 'Charlie',
+    });
     expect(result.ok).toBe(true);
   });
 
   it('sends PATCH method', async () => {
-    const fetchSpy = vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })));
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })),
+    );
     vi.stubGlobal('fetch', fetchSpy);
     await fetchResult.patch('https://api.example.com/user/1', {});
-    expect(fetchSpy).toHaveBeenCalledWith('https://api.example.com/user/1', expect.objectContaining({ method: 'PATCH' }));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.example.com/user/1',
+      expect.objectContaining({ method: 'PATCH' }),
+    );
   });
 
   it('returns failure on 422', async () => {
@@ -401,7 +442,10 @@ describe('fetchResult.delete', () => {
     const fetchSpy = vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 204 })));
     vi.stubGlobal('fetch', fetchSpy);
     await fetchResult.delete('https://api.example.com/user/1');
-    expect(fetchSpy).toHaveBeenCalledWith('https://api.example.com/user/1', expect.objectContaining({ method: 'DELETE' }));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.example.com/user/1',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
   });
 
   it('returns failure on 404', async () => {
@@ -425,7 +469,10 @@ describe('fetchResult.delete', () => {
   });
 
   it('returns failure on network error', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('net::ERR_CONNECTION_REFUSED'))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('net::ERR_CONNECTION_REFUSED'))),
+    );
     const result = await fetchResult.delete('https://api.example.com/user/1');
     expect(result.ok).toBe(false);
   });

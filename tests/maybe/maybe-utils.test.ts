@@ -1,5 +1,5 @@
-import { tryFirst, tryLast, tryFind, choose, asMaybe } from '../../src/maybe/maybe-utils.js';
 import { Maybe } from '../../src/maybe/maybe.js';
+import { asMaybe, choose, tryFind, tryFirst, tryLast } from '../../src/maybe/maybe-utils.js';
 
 describe('tryFirst', () => {
   it('returns Some for non-empty array', () => {
@@ -59,13 +59,13 @@ describe('tryLast', () => {
 
 describe('tryFind', () => {
   it('returns Some when predicate matches', () => {
-    const m = tryFind([1, 2, 3, 4], n => n > 2);
+    const m = tryFind([1, 2, 3, 4], (n) => n > 2);
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(3);
   });
 
   it('returns None when no match', () => {
-    const m = tryFind([1, 2, 3], n => n > 10);
+    const m = tryFind([1, 2, 3], (n) => n > 10);
     expect(m.hasValue).toBe(false);
   });
 
@@ -75,25 +75,25 @@ describe('tryFind', () => {
   });
 
   it('returns first match when multiple match', () => {
-    const m = tryFind([1, 2, 3, 4, 5], n => n > 2);
+    const m = tryFind([1, 2, 3, 4, 5], (n) => n > 2);
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(3);
   });
 
   it('returns match for first element', () => {
-    const m = tryFind([10, 20, 30], n => n > 5);
+    const m = tryFind([10, 20, 30], (n) => n > 5);
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(10);
   });
 
   it('returns match for last element', () => {
-    const m = tryFind([1, 2, 3], n => n > 2);
+    const m = tryFind([1, 2, 3], (n) => n > 2);
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(3);
   });
 
   it('returns None when predicate never matches', () => {
-    const m = tryFind(['a', 'b', 'c'], s => s === 'z');
+    const m = tryFind(['a', 'b', 'c'], (s) => s === 'z');
     expect(m.hasValue).toBe(false);
   });
 });

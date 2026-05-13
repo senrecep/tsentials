@@ -1,6 +1,6 @@
 import { Err } from '../../src/errors/app-error.js';
-import { ErrorType } from '../../src/errors/error-type.js';
 import { ErrorMetadata } from '../../src/errors/error-metadata.js';
+import { ErrorType } from '../../src/errors/error-type.js';
 
 describe('Err factory', () => {
   it('creates failure error with defaults', () => {

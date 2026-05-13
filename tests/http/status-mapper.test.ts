@@ -1,5 +1,5 @@
-import { httpStatusToError, extractErrorDescription } from '../../src/http/status-mapper.js';
 import { ErrorType } from '../../src/errors/error-type.js';
+import { extractErrorDescription, httpStatusToError } from '../../src/http/status-mapper.js';
 
 describe('httpStatusToError', () => {
   it('maps 400 to Validation', () => {
