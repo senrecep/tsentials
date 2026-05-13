@@ -37,58 +37,125 @@ src/
 Discriminated union: `{ ok: true; value: T } | { ok: false; errors: AppError[] }`
 
 ```typescript
-// Sync pipeline
-import { Result, ResultChain } from 'tsentials/result';
+import { Result, chain, fromAsync } from 'tsentials/result';
 import { Err } from 'tsentials/errors';
 
+// Factories
 Result.success(value)
 Result.failure(Err.validation('Code', 'message'))
-Result.bind(r, fn)   // monadic bind → Result<U>
-Result.map(r, fn)    // transform value → Result<U>
-Result.ensure(r, pred, err)  // guard
-Result.tap(r, fn)    // side effect
-Result.match(r, onOk, onErr) // exit pipeline
+Result.ok()                                    // void success
+Result.successIf(cond, value, err)             // conditional
+Result.failIf(cond, value, err)
+Result.try(() => JSON.parse(raw), e => Err.validation('JSON.Invalid', 'Bad'))
 
-// Fluent chain
-ResultChain.of(result).bind(fn).map(fn).ensure(pred, err).match(ok, err)
+// Type guards
+Result.isSuccess(r) / Result.isFailure(r)
+Result.firstError(r) / Result.lastError(r)
 
-// Async pipeline (no intermediate awaits)
+// Pipeline (sync)
+Result.then(r, fn)              // monadic bind → Result<U>  ← NOT .bind()
+Result.map(r, fn)               // transform value
+Result.ensure(r, pred, err)     // guard — err can be a factory (value) => AppError
+Result.tap(r, fn)               // side effect on success
+Result.tapError(r, fn)          // side effect on failure
+Result.match(r, onOk, onErr)    // exhaustive exit
+
+// Conditional pipeline
+Result.bindIf(r, cond, fn)      // cond: boolean | (value) => boolean
+Result.tapIf(r, cond, fn)
+Result.tapErrorIf(r, cond, fn)
+
+// Error recovery
+Result.compensate(r, fn)                     // recover from any failure
+Result.compensateFirst(r, fn)                // recover using first error
+Result.recover(r, pred, fn)                  // recover only if predicate matches
+Result.mapError(r, fn)                       // transform error array
+Result.else(r, fallback)                     // fallback value
+
+// Extraction
+Result.unwrap(r)                             // throws ResultUnwrapError if failure
+Result.unwrapOr(r, default)
+Result.unwrapOrElse(r, errs => ...)
+Result.deconstruct(r)                        // [ok, value, errors] tuple
+
+// Combination
+Result.and([r1, r2])                         // all succeed → Result<T[]>, collects ALL errors
+Result.or([r1, r2])                          // first success, else all errors
+Result.combine(r1, r2, r3)                   // heterogeneous → Result<[T1, T2, T3]>
+Result.flatten(Result.success(r))            // Result<Result<T>> → Result<T>
+Result.always(r, fn)                         // unconditional — returns fn result
+
+// Fluent chain — bind() NOT then()
+chain(Result.success(5)).bind(fn).map(fn).ensure(pred, err).match(ok, err)
+
+// Async pipeline — one await at the end, andThen() NOT then()
 await fromAsync(promise)
-  .andThen(fn)   // monadic bind (NOT .then — thenable collision)
+  .andThen(fn)    // monadic bind
   .map(fn)
   .ensure(pred, err)
   .tap(fn)
   .match(ok, err)
+
+// Async variants on Result namespace
+await Result.thenAsync(r, async fn)
+await Result.mapAsync(r, async fn)
+await Result.bindIfAsync(r, cond, async fn)
+await Result.recoverAsync(r, pred, async fn)
+await Result.compensateAsync(r, async fn)
+await Result.alwaysAsync(r, async fn)
 ```
 
 ### Critical naming rules
 - `ResultAsync.andThen()` — NOT `.then()` (would break PromiseLike protocol)
 - `ResultChain.bind()` — NOT `.then()` (same reason: await treats `.then` as thenable)
-- `Result.tryAsync()` wraps throwing async fns → `ResultAsync<T>`
-- `ResultAsync.fromThrowable()` creates reusable safe wrappers
+- `Result.then()` — sync monadic bind on the static namespace (intentionally named `then`, not `bind`)
+- `error.description` — NOT `.message` (AppError uses `description`)
 
 ### Maybe<T>
 Functional namespace — all static methods, no class instantiation.
 
 ```typescript
-import { Maybe } from 'tsentials/maybe';
+import { Maybe, tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
 
+// Factory
 Maybe.some(value)
 Maybe.none<T>()
-Maybe.from(nullableValue)       // null/undefined → none
-Maybe.fromTry(() => expr)       // throws → none
+Maybe.from(nullableValue)              // null/undefined → None
+Maybe.fromTry(() => expr)              // thrown → None
+
+// Type guards
+Maybe.isSome(m) / Maybe.isNone(m)
+
+// Pipeline
 Maybe.map(m, fn)
-Maybe.bind(m, fn)               // fn returns Maybe<U>
-Maybe.match(m, onSome, onNone)
+Maybe.bind(m, fn)                      // fn returns Maybe<U>
 Maybe.filter(m, predicate)
-Maybe.getOrDefault(m, fallback)
-Maybe.getOrElse(m, factory)
-Maybe.or(m, fallback)           // Maybe fallback
-Maybe.orElse(m, fn)             // lazy Maybe factory
-Maybe.tapNone(m, fn)
+Maybe.match(m, onSome, onNone)
+Maybe.tap(m, fn)
+Maybe.tapNone(m, fn)                   // side effect when None
+
+// Conditional
 Maybe.mapIf(m, cond, fn)
 Maybe.bindIf(m, cond, fn)
-// All have async variants: mapAsync, bindAsync, tapAsync, matchAsync, filterAsync, orAsync
+
+// Extraction
+Maybe.getOrDefault(m, fallback)
+Maybe.getOrElse(m, factory)
+Maybe.getOrUndefined(m)                // T | undefined
+Maybe.getOrThrow(m, message)
+Maybe.deconstruct(m)                   // [true, T] | [false, undefined]
+
+// Fallback chain
+Maybe.or(m, fallbackMaybe)
+Maybe.orElse(m, () => fallbackMaybe)   // lazy
+
+// Async variants
+Maybe.mapAsync / bindAsync / filterAsync / tapAsync / matchAsync / orAsync
+
+// Collection utilities
+tryFirst(items) / tryLast(items) / tryFind(items, pred)  // Maybe<T>
+choose([Maybe.some(1), Maybe.none(), Maybe.some(3)])     // [1, 3]
+asMaybe(nullableValue)                                   // Maybe<T>
 ```
 
 ### Rule<T>
@@ -98,13 +165,30 @@ Maybe.bindIf(m, cond, fn)
 import { RuleEngine } from 'tsentials/rules';
 import type { Rule } from 'tsentials/rules';
 
-const rule: Rule<User> = ctx =>
+// Define inline
+const isActive: Rule<User> = ctx =>
   ctx.isActive ? Result.ok() : Result.failure(Err.validation('User.Inactive', 'Not active'));
 
-RuleEngine.and(rule1, rule2)     // all must pass
-RuleEngine.or(rule1, rule2)      // at least one must pass
-RuleEngine.if(cond, thenRule)    // conditional
-RuleEngine.evaluate(rule, ctx)   // returns Promise<VoidResult>
+// From predicate — static or dynamic error
+const isAdult = RuleEngine.fromPredicate<User>(u => u.age >= 18, Err.validation('Age.Invalid', 'Must be 18+'));
+const hasBalance = RuleEngine.fromPredicate<Account>(
+  a => a.balance > 0,
+  a => Err.validation('Account.Insufficient', `Balance ${a.balance} too low`),
+);
+
+// Combinators
+RuleEngine.and(rule1, rule2)       // ALL must pass — collects ALL errors
+RuleEngine.linear(rule1, rule2)    // ALL must pass — stops at first failure
+RuleEngine.or(rule1, rule2)        // at least one must pass
+RuleEngine.if(cond, then, else?)   // conditional branching
+
+// Async
+RuleEngine.fromPredicateAsync<T>(async pred, err)
+RuleEngine.andAsync / linearAsync / orAsync / ifAsync
+
+// Evaluation
+RuleEngine.evaluate(rule, ctx)            // Promise<VoidResult>
+RuleEngine.evaluateAsync(asyncRule, ctx)  // Promise<VoidResult>
 ```
 
 ### Entity (DDD)
@@ -112,15 +196,61 @@ Mixin factory pattern — no deep inheritance.
 
 ```typescript
 import { createEntityBase, createSoftDeletable } from 'tsentials/entity';
+import type { DomainEvent } from 'tsentials/entity';
 
-const Base = createEntityBase<string>();
-const SoftBase = createSoftDeletable(Base);
+class Order {
+  private readonly _base = createEntityBase();
+  private readonly _soft = createSoftDeletable();
 
-class Order extends SoftBase {
-  constructor(id: string, public total: number) {
-    super({ id });
-  }
+  get domainEvents() { return this._base.domainEvents; }
+  get createdAt()    { return this._base.createdAt; }
+  get updatedAt()    { return this._base.updatedAt; }
+  get isDeleted()    { return this._soft.isDeleted; }
+
+  raise(event: DomainEvent)            { this._base.raise(event); }
+  clearDomainEvents()                  { return this._base.clearDomainEvents(); }
+  setCreatedInfo(at: Date, by: string) { this._base.setCreatedInfo(at, by); }
+  setUpdatedInfo(at: Date, by: string) { this._base.setUpdatedInfo(at, by); }
+  markAsDeleted(at: Date, by: string)  { this._soft.markAsDeleted(at, by); }
+  restore()                            { this._soft.restore(); }
 }
+```
+
+### HTTP
+
+```typescript
+import { fetchResult, RequestBuilder } from 'tsentials/http';
+
+// Never throws — Result<T> on all outcomes
+await fetchResult.get<User>('/users/42')
+await fetchResult.post('/users', body)
+await fetchResult.put('/users/1', body)
+await fetchResult.patch('/users/1', partial)
+await fetchResult.delete('/users/1')
+
+// Fluent builder
+await RequestBuilder.get('/users')
+  .header('Authorization', `Bearer ${token}`)
+  .query('page', '1')
+  .send<User[]>();
+
+await RequestBuilder.post('/users').json({ name: 'Alice' }).send<User>();
+
+// Status → ErrorType: 400/422→Validation, 401→Unauthorized, 403→Forbidden,
+//   404/410→NotFound, 409/429→Conflict, ≥500→Unexpected
+```
+
+### Union\<T\>
+
+```typescript
+import { Union } from 'tsentials/union';
+
+type Shape = Union<{ circle: { radius: number }; rect: { w: number; h: number } }>;
+
+const s: Shape = { tag: 'circle', value: { radius: 5 } };
+Union.match(s, { circle: ({ radius }) => radius * 2, rect: ({ w, h }) => w * h });
+Union.is(s, 'circle')    // type guard
+Union.get(s, 'circle')   // value or throws
 ```
 
 ### Json
