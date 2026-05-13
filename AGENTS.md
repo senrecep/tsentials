@@ -22,6 +22,14 @@ import { deepClone, cloneArray } from 'tsentials/clone';
 import { Union } from 'tsentials/union';
 import { safeJsonParse, safeJsonStringify, parseAndValidate, isJsonObject, isJson } from 'tsentials/json';
 import type { Json, JsonObject } from 'tsentials/json';
+import { pipe, flow } from 'tsentials/function';
+import { Eq } from 'tsentials/eq';
+import { Ord, sortBy } from 'tsentials/ord';
+import { Predicate } from 'tsentials/predicate';
+import { NonEmptyArray, head, asNonEmptyArray } from 'tsentials/array';
+import { These } from 'tsentials/these';
+import { Tree } from 'tsentials/tree';
+import { Record } from 'tsentials/record';
 ```
 
 ---
@@ -80,6 +88,9 @@ Result.or([r1, r2])               // first success wins — collects all errors 
 Result.combine(r1, r2, r3)        // heterogeneous tuple Result<[T1, T2, T3]>
 Result.flatten(r)                 // Result<Result<T>> → Result<T>
 Result.always(r, fn)              // unconditional cleanup — returns fn result
+Result.ap(fab, fa)                // applicative apply
+Result.partition(results)         // split into { ok: T[], err: AppError[] }
+Result.sequence(promises)         // await Promise<Result<T>>[] → Result<T[]>
 ```
 
 ### Async Pipeline — fromAsync / ResultAsync\<T\>
@@ -379,7 +390,7 @@ Result.then(safeJsonParse(raw), data => validatePayload(data));
 
 ```bash
 npm run build      # tsc compile
-npm test           # vitest run (652 tests)
+npm test           # vitest run (762 tests)
 npm run check      # biome lint + format check
 npm run lint:fix   # auto-fix lint
 ```

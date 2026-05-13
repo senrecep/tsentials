@@ -49,6 +49,38 @@
     "./json": {
       "import": "./dist/json/index.js",
       "types": "./dist/json/index.d.ts"
+    },
+    "./function": {
+      "import": "./dist/function/index.js",
+      "types": "./dist/function/index.d.ts"
+    },
+    "./eq": {
+      "import": "./dist/eq/index.js",
+      "types": "./dist/eq/index.d.ts"
+    },
+    "./predicate": {
+      "import": "./dist/predicate/index.js",
+      "types": "./dist/predicate/index.d.ts"
+    },
+    "./array": {
+      "import": "./dist/array/index.js",
+      "types": "./dist/array/index.d.ts"
+    },
+    "./ord": {
+      "import": "./dist/ord/index.js",
+      "types": "./dist/ord/index.d.ts"
+    },
+    "./these": {
+      "import": "./dist/these/index.js",
+      "types": "./dist/these/index.d.ts"
+    },
+    "./tree": {
+      "import": "./dist/tree/index.js",
+      "types": "./dist/tree/index.d.ts"
+    },
+    "./record": {
+      "import": "./dist/record/index.js",
+      "types": "./dist/record/index.d.ts"
     }
   },
   "sideEffects": false,

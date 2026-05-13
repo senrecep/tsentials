@@ -336,6 +336,29 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   toResult(): Promise<Result<T>> {
     return this._promise;
   }
+
+  // ─── STATIC UTILITIES ─────────────────────────────────────────────────────
+
+  /**
+   * Awaits an array of ResultAsync<T> and collects them into a single ResultAsync<T[]>.
+   * Succeeds only if ALL succeed; collects ALL errors from failures.
+   */
+  static sequence<T>(results: ReadonlyArray<ResultAsync<T>>): ResultAsync<T[]> {
+    return new ResultAsync(
+      Promise.all(results.map((r) => r._promise)).then((resolved) => Result.and(resolved)),
+    );
+  }
+
+  /**
+   * Partitions an array of ResultAsync into successes and failures.
+   * Processes all items regardless of individual outcomes.
+   */
+  static async partition<T>(
+    results: ReadonlyArray<ResultAsync<T>>,
+  ): Promise<{ ok: Array<T>; err: Array<AppError> }> {
+    const resolved = await Promise.all(results.map((r) => r._promise));
+    return Result.partition(resolved);
+  }
 }
 
 /**

@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/tsentials?style=flat-square&color=blue)](https://www.npmjs.com/package/tsentials)
 [![npm downloads](https://img.shields.io/npm/dm/tsentials?style=flat-square)](https://www.npmjs.com/package/tsentials)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/tsentials?style=flat-square&label=gzip)](https://bundlephobia.com/package/tsentials)
-[![tests](https://img.shields.io/badge/tests-652%20passing-brightgreen?style=flat-square)](./tests)
+[![tests](https://img.shields.io/badge/tests-762%20passing-brightgreen?style=flat-square)](./tests)
 [![CI](https://img.shields.io/github/actions/workflow/status/senrecep/tsentials/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/senrecep/tsentials/actions)
 [![license](https://img.shields.io/github/license/senrecep/tsentials?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
@@ -64,6 +64,14 @@ npm install tsentials
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
 | `tsentials/union` | `Union<T>` |
 | `tsentials/json` | `Json`, `JsonObject`, `JsonArray`, `JsonPrimitive`, `safeJsonParse`, `safeJsonStringify`, `parseAndValidate`, type guards |
+| `tsentials/function` | `pipe`, `flow`, `identity`, `constant`, `flip` |
+| `tsentials/array` | `NonEmptyArray<T>`, `head`, `tail`, `last`, `asNonEmptyArray` |
+| `tsentials/eq` | `Eq<T>`, `contramap`, `struct`, `getArrayEq` |
+| `tsentials/ord` | `Ord<T>`, `sortBy`, `min`, `max`, `clamp`, `between` |
+| `tsentials/predicate` | `Predicate<T>`, `Refinement<A, B>`, `and`, `or`, `not`, `all`, `any` |
+| `tsentials/these` | `These<E, A>`, `toResult`, `fromResult`, `partition` |
+| `tsentials/tree` | `Tree<T>`, `map`, `filter`, `fold`, `drawTree` |
+| `tsentials/record` | `Record` utilities — `map`, `filter`, `pick`, `omit`, `reduce` |
 
 ---
 
@@ -671,6 +679,123 @@ const processed = Result.then(
 ```
 
 ---
+
+## pipe & flow
+
+```typescript
+import { pipe, flow } from 'tsentials/function';
+
+const result = pipe(
+  5,
+  n => n * 2,
+  n => n + 1,
+  n => String(n),
+); // "11"
+
+const doubleAndStringify = flow(
+  (n: number) => n * 2,
+  n => String(n),
+);
+doubleAndStringify(5); // "10"
+```
+
+## NonEmptyArray\<T\>
+
+Type-safe arrays guaranteed to have at least one element. No null checks needed for `head()` or `last()`.
+
+```typescript
+import { NonEmptyArray, asNonEmptyArray } from 'tsentials/array';
+
+const items: NonEmptyArray<string> = ['a', 'b', 'c'];
+NonEmptyArray.head(items); // 'a' — safe, no Maybe
+NonEmptyArray.last(items);  // 'c'
+
+// Safe conversion from plain array
+const maybe = asNonEmptyArray([]);        // None
+const sure  = asNonEmptyArray([1, 2]);    // Some([1, 2])
+```
+
+## Eq\<T\> & Ord\<T\>
+
+Composable, type-safe equality and ordering.
+
+```typescript
+import { Eq, Ord } from 'tsentials/eq';
+import { sortBy, min, max, clamp } from 'tsentials/ord';
+
+interface User { readonly id: number; readonly name: string; }
+
+const eqUser = Eq.struct<User>({ id: Eq.number, name: Eq.string });
+
+const byAge = Ord.contramap(Ord.number, (u: User) => u.age);
+const sorted = sortBy(users, byAge);
+
+min(byAge, userA, userB);
+clamp(Ord.number, 0, 100, 150); // 100
+```
+
+## Predicate\<T\>
+
+Composable boolean predicates for validation and filtering.
+
+```typescript
+import { Predicate } from 'tsentials/predicate';
+
+const isAdult = Predicate.from((u: User) => u.age >= 18);
+const isActive = Predicate.from((u: User) => u.isActive);
+
+const isValid = Predicate.and(isAdult, isActive);
+const isAnyOf = Predicate.any(isAdult, isGuest, isAdmin);
+```
+
+## These\<E, A\>
+
+Partial success — a value together with errors/warnings. Unlike `Result<T>` which is either-or, `These` allows both.
+
+```typescript
+import { These } from 'tsentials/these';
+
+const parseAge = (raw: string): These<AppError, number> => {
+  const age = Number(raw);
+  if (Number.isNaN(age)) return These.left(Err.validation('Age.NaN', 'Not a number'));
+  if (age < 0) return These.both(Err.validation('Age.Negative', 'Negative age'), 0);
+  return These.right(age);
+};
+
+These.toResult(parseAge('-5')); // failure (Both converts to failure)
+```
+
+## Tree\<T\>
+
+Recursive tree data structure for hierarchies.
+
+```typescript
+import { Tree } from 'tsentials/tree';
+
+const tree = Tree.of('root', [
+  Tree.of('a', [Tree.leaf('a1')]),
+  Tree.leaf('b'),
+]);
+
+Tree.toArray(tree);           // ['root', 'a', 'a1', 'b']
+Tree.find(tree, v => v === 'a1');
+Tree.drawTree(tree);
+```
+
+## Record Utilities
+
+Functional operations on plain objects.
+
+```typescript
+import { Record as R } from 'tsentials/record';
+
+const users = { a: { name: 'Alice' }, b: { name: 'Bob' } };
+
+R.map(users, u => u.name);            // { a: 'Alice', b: 'Bob' }
+R.filter(users, u => u.name !== 'Bob');
+R.pick(users, 'a');                   // { a: { name: 'Alice' } }
+R.omit(users, 'b');                   // { a: { name: 'Alice' } }
+```
 
 ## Design Notes
 

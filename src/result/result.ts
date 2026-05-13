@@ -519,6 +519,68 @@ export const Result = {
     if (errors.length > 0) return Result.failureFrom(errors);
     return Result.success(values as { [K in keyof T]: T[K] extends Result<infer V> ? V : never });
   },
+
+  /**
+   * Applicative apply — applies a function inside a Result to a value inside a Result.
+   * If both are success, returns success with the applied value.
+   * If either is failure, collects all errors.
+   *
+   * @example
+   * const fn = Result.success((n: number) => n * 2);
+   * const val = Result.success(5);
+   * Result.ap(fn, val); // Result.success(10)
+   */
+  ap<A, B>(fab: Result<(a: A) => B>, fa: Result<A>): Result<B> {
+    if (fab.ok && fa.ok) return Result.success(fab.value(fa.value));
+    const errors: AppError[] = [];
+    if (!fab.ok) errors.push(...fab.errors);
+    if (!fa.ok) errors.push(...fa.errors);
+    return Result.failureFrom(errors);
+  },
+
+  // ─── PARTITION ─────────────────────────────────────────────────────────────
+
+  /**
+   * Partitions an array of Results into successes and failures.
+   * Unlike `and` or `or`, this does NOT short-circuit — it processes all items.
+   *
+   * @example
+   * const { ok, err } = Result.partition([
+   *   Result.success(1),
+   *   Result.failure(Err.validation('X', 'bad')),
+   *   Result.success(3),
+   * ]);
+   * // ok = [1, 3], err = [AppError]
+   */
+  partition<T>(results: ReadonlyArray<Result<T>>): {
+    ok: Array<T>;
+    err: Array<AppError>;
+  } {
+    const ok: Array<T> = [];
+    const err: Array<AppError> = [];
+    for (const r of results) {
+      if (r.ok) ok.push(r.value);
+      else err.push(...r.errors);
+    }
+    return { ok, err };
+  },
+
+  // ─── ASYNC SEQUENCE ────────────────────────────────────────────────────────
+
+  /**
+   * Awaits an array of Promise<Result<T>> and collects them into a single Result<T[]>.
+   * Succeeds only if ALL succeed; collects ALL errors from failures.
+   *
+   * @example
+   * const results = await Result.sequence([
+   *   fetchUser(1),
+   *   fetchUser(2),
+   * ]);
+   */
+  async sequence<T>(promises: ReadonlyArray<Promise<Result<T>>>): Promise<Result<T[]>> {
+    const results = await Promise.all(promises);
+    return Result.and(results);
+  },
 } as const;
 
 /**

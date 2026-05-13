@@ -51,8 +51,48 @@
       "files": ["SKILL.md"]
     },
     {
+      "name": "tsentials-function",
+      "description": "Use when building pipelines or composing functions — pipe for value-threaded pipelines, flow for reusable function composition, identity, constant, and flip utilities.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-array",
+      "description": "Use when working with arrays guaranteed to have at least one element — NonEmptyArray<T> type, safe extraction with head/last/tail/init, and conversions with asNonEmptyArray.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-eq",
+      "description": "Use when you need composable type-safe equality — Eq<T> type class with primitive instances, struct for object fields, contramap for projection-based equality, and getArrayEq for element-wise array comparison.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-ord",
+      "description": "Use when you need type-safe ordering — Ord<T> with compare, sortBy for array sorting, min/max for comparisons, clamp/between for range checks, and contramap for field-based ordering.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-predicate",
+      "description": "Use when composing boolean conditions — Predicate<T> with and/or/not/all/any combinators, refinement for type guards, and conversion to Rule-compatible functions.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-these",
+      "description": "Use when a computation can produce both a value and errors — These<E, A> for partial success, map/flatMap pipeline, conversion to/from Result, and partition for collection processing.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-tree",
+      "description": "Use when modelling recursive hierarchies — Tree<T> with map/filter/fold operations, find/findAll for searching, toArray for flattening, and drawTree for pretty printing.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-record",
+      "description": "Use when transforming plain objects functionally — Record utilities for map/filter/pick/omit/reduce, plus partition and filterMap for advanced object manipulation.",
+      "files": ["SKILL.md"]
+    },
+    {
       "name": "tsentials-meta",
-      "description": "Use when deciding which tsentials module to use — overview of all 10 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.",
+      "description": "Use when deciding which tsentials module to use — overview of all 18 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.",
       "files": ["SKILL.md"]
     }
   ]
