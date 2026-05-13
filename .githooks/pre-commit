@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# pre-commit: Runs biome check + tests, then auto-fixes README.md test badge.
+# pre-commit: Runs biome check + tests, then auto-fixes test badges in README.md and docs/index.html.
 # Setup: git config core.hooksPath .githooks
 
 set -euo pipefail
 
 README="README.md"
+PAGE="docs/index.html"
 MISMATCH=0
 
 # ── Run checks ────────────────────────────────────────────────────────────────
@@ -29,6 +30,10 @@ elif [ "$ACTUAL_TESTS" != "$BADGE_TESTS" ]; then
     echo "🔧 Auto-fixing tests badge: $BADGE_TESTS → $ACTUAL_TESTS"
     sed -i '' "s/tests-[0-9]*%20passing/tests-${ACTUAL_TESTS}%20passing/" "$README"
     git add "$README"
+    if [ -f "$PAGE" ]; then
+        sed -i '' "s/tests-[0-9]*%20passing/tests-${ACTUAL_TESTS}%20passing/" "$PAGE"
+        git add "$PAGE"
+    fi
 fi
 
 # ── Result ─────────────────────────────────────────────────────────────────────
