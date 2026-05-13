@@ -46,8 +46,13 @@
       "files": ["SKILL.md"]
     },
     {
+      "name": "tsentials-json",
+      "description": "Use when parsing or stringifying JSON safely without exceptions — safeJsonParse/safeJsonStringify return Result<T> instead of throwing, parseAndValidate combines parsing with a custom type guard, and Json/JsonObject/JsonArray/JsonPrimitive types plus isJson/isJsonObject guards enforce structural validity at compile and runtime.",
+      "files": ["SKILL.md"]
+    },
+    {
       "name": "tsentials-meta",
-      "description": "Use when deciding which tsentials module to use — overview of all 9 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.",
+      "description": "Use when deciding which tsentials module to use — overview of all 10 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.",
       "files": ["SKILL.md"]
     }
   ]

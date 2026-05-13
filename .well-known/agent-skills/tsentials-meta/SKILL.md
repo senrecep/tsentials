@@ -1,6 +1,6 @@
 ---
 name: tsentials-meta
-description: Use when deciding which tsentials module to use — overview of all 9 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.
+description: Use when deciding which tsentials module to use — overview of all 10 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.
 ---
 
 # tsentials — Module Index
@@ -50,6 +50,7 @@ npm install tsentials
 |--------|----------|-------|
 | `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider` | `tsentials-time` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` | `tsentials-clone` |
+| `tsentials/json` | `Json`, `JsonObject`, `JsonArray`, `JsonPrimitive`, `safeJsonParse`, `safeJsonStringify`, `parseAndValidate`, type guards | `tsentials-json` |
 
 ---
 
@@ -67,6 +68,8 @@ npm install tsentials
 | HTTP calls that return Result<T> | `tsentials/http` |
 | Testable time / freeze clock in tests | `tsentials/time` |
 | Deep-copy domain objects | `tsentials/clone` |
+| Parse JSON without try/catch | `tsentials/json` (`safeJsonParse`) |
+| Parse JSON and validate against a type | `tsentials/json` (`parseAndValidate`) |
 
 ---
 
@@ -86,6 +89,9 @@ import { SystemDateTimeProvider, createFakeDateTimeProvider } from 'tsentials/ti
 import type { DateTimeProvider }                        from 'tsentials/time';
 import { deepClone, cloneArray }                        from 'tsentials/clone';
 import type { Cloneable }                               from 'tsentials/clone';
+import { safeJsonParse, safeJsonStringify, parseAndValidate } from 'tsentials/json';
+import { isJson, isJsonObject }                         from 'tsentials/json';
+import type { Json, JsonObject }                        from 'tsentials/json';
 ```
 
 ---
