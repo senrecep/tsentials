@@ -24,9 +24,42 @@ describe('Maybe factories', () => {
     expect(Maybe.from(undefined).hasValue).toBe(false);
   });
 
+  it('from returns none for NaN (NaN != null)', () => {
+    expect(Maybe.from(Number.NaN).hasValue).toBe(true); // NaN != null, so it becomes Some
+  });
+
   it('fromTry catches thrown errors as None', () => {
     const m = Maybe.fromTry(() => { throw new Error(); });
     expect(m.hasValue).toBe(false);
+  });
+
+  it('fromTry returns Some for successful factory', () => {
+    const m = Maybe.fromTry(() => 'value');
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe('value');
+  });
+
+  it('fromTry returns None when factory returns null', () => {
+    const m = Maybe.fromTry(() => null);
+    expect(m.hasValue).toBe(false);
+  });
+});
+
+describe('Maybe type guards', () => {
+  it('isSome returns true for Some', () => {
+    expect(Maybe.isSome(Maybe.some(1))).toBe(true);
+  });
+
+  it('isSome returns false for None', () => {
+    expect(Maybe.isSome(Maybe.none<number>())).toBe(false);
+  });
+
+  it('isNone returns true for None', () => {
+    expect(Maybe.isNone(Maybe.none<number>())).toBe(true);
+  });
+
+  it('isNone returns false for Some', () => {
+    expect(Maybe.isNone(Maybe.some(1))).toBe(false);
   });
 });
 
@@ -52,6 +85,19 @@ describe('Maybe pipeline', () => {
     expect(m.hasValue).toBe(false);
   });
 
+  it('tap runs side effect on Some', () => {
+    const seen: number[] = [];
+    const m = Maybe.tap(Maybe.some(7), n => seen.push(n));
+    expect(seen).toEqual([7]);
+    expect(m.hasValue).toBe(true);
+  });
+
+  it('tap skips on None', () => {
+    const seen: number[] = [];
+    Maybe.tap(Maybe.none<number>(), n => seen.push(n));
+    expect(seen).toHaveLength(0);
+  });
+
   it('match handles some', () => {
     const result = Maybe.match(Maybe.some(10), v => `value:${v}`, () => 'none');
     expect(result).toBe('value:10');
@@ -74,6 +120,22 @@ describe('Maybe pipeline', () => {
     expect(() => Maybe.getOrThrow(Maybe.none<number>())).toThrow();
   });
 
+  it('getOrThrow returns value when some', () => {
+    expect(Maybe.getOrThrow(Maybe.some(42))).toBe(42);
+  });
+
+  it('getOrThrow uses custom message', () => {
+    expect(() => Maybe.getOrThrow(Maybe.none<number>(), 'Custom message')).toThrow('Custom message');
+  });
+
+  it('getOrUndefined returns value when some', () => {
+    expect(Maybe.getOrUndefined(Maybe.some(42))).toBe(42);
+  });
+
+  it('getOrUndefined returns undefined when none', () => {
+    expect(Maybe.getOrUndefined(Maybe.none<number>())).toBeUndefined();
+  });
+
   it('filter keeps value when predicate passes', () => {
     const m = Maybe.filter(Maybe.some(10), n => n > 5);
     expect(m.hasValue).toBe(true);
@@ -82,6 +144,13 @@ describe('Maybe pipeline', () => {
   it('filter returns none when predicate fails', () => {
     const m = Maybe.filter(Maybe.some(3), n => n > 5);
     expect(m.hasValue).toBe(false);
+  });
+
+  it('filter passes through none', () => {
+    const called: boolean[] = [];
+    const m = Maybe.filter(Maybe.none<number>(), n => { called.push(true); return n > 5; });
+    expect(m.hasValue).toBe(false);
+    expect(called).toHaveLength(0);
   });
 
   it('getOrElse returns value when some', () => {
@@ -93,6 +162,18 @@ describe('Maybe pipeline', () => {
     const v = Maybe.getOrElse(Maybe.none<number>(), () => { called.push(true); return 99; });
     expect(v).toBe(99);
     expect(called).toHaveLength(1);
+  });
+
+  it('deconstruct returns [true, value] for Some', () => {
+    const [hasValue, value] = Maybe.deconstruct(Maybe.some(42));
+    expect(hasValue).toBe(true);
+    expect(value).toBe(42);
+  });
+
+  it('deconstruct returns [false, undefined] for None', () => {
+    const [hasValue, value] = Maybe.deconstruct(Maybe.none<number>());
+    expect(hasValue).toBe(false);
+    expect(value).toBeUndefined();
   });
 });
 
@@ -200,6 +281,11 @@ describe('Maybe new methods', () => {
     if (m.hasValue) expect(m.value).toBe(99);
   });
 
+  it('or returns None when both are None', () => {
+    const m = Maybe.or(Maybe.none<number>(), Maybe.none<number>());
+    expect(m.hasValue).toBe(false);
+  });
+
   // orElse
   it('orElse returns self when Some', () => {
     const m = Maybe.orElse(Maybe.some(1), () => Maybe.some(99));
@@ -219,6 +305,11 @@ describe('Maybe new methods', () => {
     expect(called).toHaveLength(0);
   });
 
+  it('orElse returns None when factory returns None', () => {
+    const m = Maybe.orElse(Maybe.none<number>(), () => Maybe.none<number>());
+    expect(m.hasValue).toBe(false);
+  });
+
   // orAsync
   it('orAsync returns self when Some', async () => {
     const m = await Maybe.orAsync(Maybe.some(1), async () => Maybe.some(99));
@@ -230,6 +321,12 @@ describe('Maybe new methods', () => {
     const m = await Maybe.orAsync(Maybe.none<number>(), async () => Maybe.some(99));
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(99);
+  });
+
+  it('orAsync factory is NOT called when Some (lazy)', async () => {
+    const called: boolean[] = [];
+    await Maybe.orAsync(Maybe.some(1), async () => { called.push(true); return Maybe.some(99); });
+    expect(called).toHaveLength(0);
   });
 
   // tapNone
@@ -270,6 +367,12 @@ describe('Maybe new methods', () => {
     if (m.hasValue) expect(m.value).toBe(10);
   });
 
+  it('mapIf skips transformation when predicate returns false', () => {
+    const m = Maybe.mapIf(Maybe.some(5), n => n > 10, n => n * 2);
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(5);
+  });
+
   it('mapIf passes through None', () => {
     const m = Maybe.mapIf(Maybe.none<number>(), true, n => n * 2);
     expect(m.hasValue).toBe(false);
@@ -297,5 +400,11 @@ describe('Maybe new methods', () => {
   it('bindIf passes through None', () => {
     const m = Maybe.bindIf(Maybe.none<number>(), true, n => Maybe.some(n * 2));
     expect(m.hasValue).toBe(false);
+  });
+
+  it('bindIf binds when predicate returns true', () => {
+    const m = Maybe.bindIf(Maybe.some(15), n => n > 10, n => Maybe.some(n * 2));
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(30);
   });
 });

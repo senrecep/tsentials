@@ -57,6 +57,7 @@ export function createSoftDeletable(): SoftDeletable {
       _deletedAt = undefined;
       _deletedBy = undefined;
       _isDeleted = false;
+      _isHardDeleted = false;
     },
   };
 }

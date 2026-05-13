@@ -38,6 +38,11 @@ describe('ResultAsync factories', () => {
     if (r.ok) expect(r.value).toBe(99);
   });
 
+  it('fromResult lifts sync failure Result', async () => {
+    const r = await ResultAsync.fromResult(Result.failure<number>(err));
+    expect(r.ok).toBe(false);
+  });
+
   it('try wraps async throwing function', async () => {
     const r = await ResultAsync.try(async () => JSON.parse('{"x":1}') as unknown);
     expect(r.ok).toBe(true);
@@ -45,6 +50,16 @@ describe('ResultAsync factories', () => {
 
   it('try catches async throws', async () => {
     const r = await ResultAsync.try(async () => { throw new Error('boom'); });
+    expect(r.ok).toBe(false);
+  });
+
+  it('try catches non-Error throws', async () => {
+    const r = await ResultAsync.try(async () => { throw 'string error'; });
+    expect(r.ok).toBe(false);
+  });
+
+  it('try catches null throws', async () => {
+    const r = await ResultAsync.try(async () => { throw null; });
     expect(r.ok).toBe(false);
   });
 
@@ -58,6 +73,16 @@ describe('ResultAsync factories', () => {
     expect(ok.ok).toBe(true);
     if (ok.ok) expect(ok.value).toBe(10);
     expect(fail.ok).toBe(false);
+  });
+
+  it('fromThrowable passes multiple arguments', async () => {
+    const safeAdd = ResultAsync.fromThrowable(async (a: number, b: number) => {
+      if (a < 0 || b < 0) throw new Error('negative');
+      return a + b;
+    });
+    const ok = await safeAdd(3, 4);
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.value).toBe(7);
   });
 });
 
@@ -110,6 +135,13 @@ describe('ResultAsync.andThen', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.code).toBe('Test.NotFound');
   });
+
+  it('propagates failure from chained ResultAsync', async () => {
+    const r = await fromAsync(okAsync(5))
+      .andThen(() => ResultAsync.failure<number>(notFound));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Test.NotFound');
+  });
 });
 
 describe('ResultAsync.map', () => {
@@ -158,6 +190,15 @@ describe('ResultAsync.ensure', () => {
       .ensure(n => { called.push(true); return n > 0; }, err);
     expect(r.ok).toBe(false);
     expect(called).toHaveLength(0);
+  });
+
+  it('supports function error factory', async () => {
+    const r = await fromAsync(okAsync(3)).ensure(
+      n => n > 5,
+      n => Err.validation('Value', `Bad ${n}`),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.description).toBe('Bad 3');
   });
 });
 
@@ -318,5 +359,21 @@ describe('ResultAsync pipeline chaining', () => {
       .map(n => n * 2)
       .match(() => 'ok', errs => errs[0]!.code);
     expect(result).toBe('Test.Invalid');
+  });
+
+  it('chains multiple maps', async () => {
+    const r = await fromAsync(okAsync(2))
+      .map(n => n + 1)
+      .map(n => n * 2);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(6);
+  });
+
+  it('chains multiple andThens', async () => {
+    const r = await fromAsync(okAsync(2))
+      .andThen(n => Result.success(n + 1))
+      .andThen(n => ResultAsync.success(n * 2));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(6);
   });
 });

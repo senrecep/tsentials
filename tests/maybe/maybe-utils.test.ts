@@ -12,6 +12,24 @@ describe('tryFirst', () => {
     const m = tryFirst([]);
     expect(m.hasValue).toBe(false);
   });
+
+  it('returns first element for single-element array', () => {
+    const m = tryFirst([42]);
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(42);
+  });
+
+  it('returns first element for large array', () => {
+    const m = tryFirst(Array.from({ length: 1000 }, (_, i) => i));
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(0);
+  });
+
+  it('returns Some for array with null/undefined elements', () => {
+    const m = tryFirst([null, undefined, 1]);
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBeNull();
+  });
 });
 
 describe('tryLast', () => {
@@ -31,6 +49,12 @@ describe('tryLast', () => {
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe(42);
   });
+
+  it('returns last element for large array', () => {
+    const m = tryLast(Array.from({ length: 1000 }, (_, i) => i));
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(999);
+  });
 });
 
 describe('tryFind', () => {
@@ -47,6 +71,29 @@ describe('tryFind', () => {
 
   it('returns None for empty array', () => {
     const m = tryFind([], (_n: number) => true);
+    expect(m.hasValue).toBe(false);
+  });
+
+  it('returns first match when multiple match', () => {
+    const m = tryFind([1, 2, 3, 4, 5], n => n > 2);
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(3);
+  });
+
+  it('returns match for first element', () => {
+    const m = tryFind([10, 20, 30], n => n > 5);
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(10);
+  });
+
+  it('returns match for last element', () => {
+    const m = tryFind([1, 2, 3], n => n > 2);
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(3);
+  });
+
+  it('returns None when predicate never matches', () => {
+    const m = tryFind(['a', 'b', 'c'], s => s === 'z');
     expect(m.hasValue).toBe(false);
   });
 });
@@ -71,6 +118,22 @@ describe('choose', () => {
     const result = choose([]);
     expect(result).toEqual([]);
   });
+
+  it('preserves order', () => {
+    const result = choose([
+      Maybe.some(1),
+      Maybe.none<number>(),
+      Maybe.some(2),
+      Maybe.none<number>(),
+      Maybe.some(3),
+    ]);
+    expect(result).toEqual([1, 2, 3]);
+  });
+
+  it('handles mixed types (when typed)', () => {
+    const result = choose([Maybe.some('hello'), Maybe.none<string>(), Maybe.some('world')]);
+    expect(result).toEqual(['hello', 'world']);
+  });
 });
 
 describe('asMaybe', () => {
@@ -94,5 +157,29 @@ describe('asMaybe', () => {
     const m = asMaybe('hello');
     expect(m.hasValue).toBe(true);
     if (m.hasValue) expect(m.value).toBe('hello');
+  });
+
+  it('wraps zero value', () => {
+    const m = asMaybe(0);
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(0);
+  });
+
+  it('wraps false value', () => {
+    const m = asMaybe(false);
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(false);
+  });
+
+  it('wraps empty string', () => {
+    const m = asMaybe('');
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe('');
+  });
+
+  it('returns None for empty array (empty array is truthy)', () => {
+    const m = asMaybe([]);
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toEqual([]);
   });
 });
