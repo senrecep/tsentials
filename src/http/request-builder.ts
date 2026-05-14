@@ -89,6 +89,8 @@ export class RequestBuilder {
         return fetchResult.put<T>(this.#url, JSON.parse((this.#body as string) ?? 'null'), init);
       case 'PATCH':
         return fetchResult.patch<T>(this.#url, JSON.parse((this.#body as string) ?? 'null'), init);
+      case 'DELETE':
+        return fetchResult.delete<T>(this.#url, init);
       default:
         return fetchResult.get<T>(this.#url, init);
     }

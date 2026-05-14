@@ -113,23 +113,16 @@ export const fetchResult = {
   },
 
   /**
-   * DELETE — returns Result<void>.
+   * DELETE — returns Result<T>.
+   * Accepts a generic type parameter for APIs that return a body on DELETE.
    */
-  async delete(url: string | URL, init?: RequestInit): Promise<Result<void>> {
+  async delete<T = void>(url: string | URL, init?: RequestInit): Promise<Result<T>> {
     return R.tryAsync(
       async () => {
         const response = await fetch(url, { ...init, method: 'DELETE' });
-        if (!response.ok) {
-          const description = await extractErrorDescription(response);
-          throw { __resultError: httpStatusToError(response.status, description) };
-        }
+        return responseToResult<T>(response);
       },
-      (e) => {
-        if (e !== null && typeof e === 'object' && '__resultError' in e) {
-          return (e as { __resultError: ReturnType<typeof httpStatusToError> }).__resultError;
-        }
-        return Err.fromException(e);
-      },
-    );
+      (e) => Err.fromException(e),
+    ).then((r) => (r.ok ? r.value : r)) as Promise<Result<T>>;
   },
 } as const;

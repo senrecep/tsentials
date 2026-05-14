@@ -10,8 +10,8 @@ export { cloneArray, deepClone } from './clone/cloneable.js';
 export type { CreationAudit, FullAudit, ModificationAudit } from './entity/audit.js';
 // Entity / DDD base classes
 export type { DomainEvent, DomainEventTiming } from './entity/domain-event.js';
-export type { EntityBase } from './entity/entity-base.js';
-export { createEntityBase } from './entity/entity-base.js';
+export type { EntityBase, EntityBaseWithId } from './entity/entity-base.js';
+export { createEntityBase, createEntityBaseWithId } from './entity/entity-base.js';
 export type { SoftDeletable } from './entity/soft-deletable.js';
 export { createSoftDeletable } from './entity/soft-deletable.js';
 export { Eq, type Eq as EqType } from './eq/index.js';
@@ -44,6 +44,7 @@ export { maybeToResult, resultToMaybe } from './result/maybe-bridge.js';
 export type { VoidResult } from './result/result.js';
 // Result pattern (railway-oriented programming)
 export { Result, ResultUnwrapError } from './result/result.js';
+export { fromAsync, ResultAsync } from './result/result-async.js';
 export { chain, ResultChain } from './result/result-chain.js';
 // Rule engine
 export type { AsyncRule, Rule, TypedAsyncRule, TypedRule } from './rules/rule.js';

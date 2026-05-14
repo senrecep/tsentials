@@ -1,6 +1,7 @@
 import type { AppError } from '../errors/app-error.js';
+import { Err } from '../errors/app-error.js';
 import { Result } from '../result/result.js';
-import type { AsyncRule, Rule } from './rule.js';
+import type { AsyncRule, Rule, TypedAsyncRule, TypedRule } from './rule.js';
 
 /**
  * Composable rule engine for evaluating business rules.
@@ -109,6 +110,120 @@ export const RuleEngine = {
         errors.push(...result.errors);
       }
       return Result.failureFrom(errors);
+    };
+  },
+
+  // ─── TYPED RULE COMBINATORS ───────────────────────────────────────────────
+
+  /**
+   * Sequential chain for typed rules — stops on first failure.
+   */
+  linearTyped<TContext, TResult>(
+    ...rules: TypedRule<TContext, TResult>[]
+  ): TypedRule<TContext, TResult> {
+    return (context: TContext) => {
+      for (const rule of rules) {
+        const result = rule(context);
+        if (!result.ok) return result;
+      }
+      return Result.failure(Err.unexpected('RuleEngine.Empty', 'No rules provided in linearTyped'));
+    };
+  },
+
+  /**
+   * Async sequential chain for typed rules — stops on first failure.
+   */
+  linearTypedAsync<TContext, TResult>(
+    ...rules: TypedAsyncRule<TContext, TResult>[]
+  ): TypedAsyncRule<TContext, TResult> {
+    return async (context: TContext) => {
+      for (const rule of rules) {
+        const result = await rule(context);
+        if (!result.ok) return result;
+      }
+      return Result.failure(
+        Err.unexpected('RuleEngine.Empty', 'No rules provided in linearTypedAsync'),
+      );
+    };
+  },
+
+  /**
+   * All typed rules must pass — collects ALL errors (does not short-circuit).
+   */
+  andTyped<TContext, TResult>(
+    ...rules: TypedRule<TContext, TResult>[]
+  ): TypedRule<TContext, TResult> {
+    return (context: TContext) => {
+      const errors: AppError[] = [];
+      let lastValue: TResult | undefined;
+      for (const rule of rules) {
+        const result = rule(context);
+        if (result.ok) {
+          lastValue = result.value;
+        } else {
+          errors.push(...result.errors);
+        }
+      }
+      return errors.length > 0
+        ? Result.failureFrom<TResult>(errors)
+        : Result.success(lastValue as TResult);
+    };
+  },
+
+  /**
+   * Async version of andTyped.
+   */
+  andTypedAsync<TContext, TResult>(
+    ...rules: TypedAsyncRule<TContext, TResult>[]
+  ): TypedAsyncRule<TContext, TResult> {
+    return async (context: TContext) => {
+      const errors: AppError[] = [];
+      let lastValue: TResult | undefined;
+      for (const rule of rules) {
+        const result = await rule(context);
+        if (result.ok) {
+          lastValue = result.value;
+        } else {
+          errors.push(...result.errors);
+        }
+      }
+      return errors.length > 0
+        ? Result.failureFrom<TResult>(errors)
+        : Result.success(lastValue as TResult);
+    };
+  },
+
+  /**
+   * At least one typed rule must pass — collects all errors if all fail.
+   */
+  orTyped<TContext, TResult>(
+    ...rules: TypedRule<TContext, TResult>[]
+  ): TypedRule<TContext, TResult> {
+    return (context: TContext) => {
+      const errors: AppError[] = [];
+      for (const rule of rules) {
+        const result = rule(context);
+        if (result.ok) return result;
+        errors.push(...result.errors);
+      }
+      return Result.failureFrom<TResult>(errors);
+    };
+  },
+
+  /**
+   * Async version of orTyped.
+   */
+  orTypedAsync<TContext, TResult>(
+    ...rules: TypedAsyncRule<TContext, TResult>[]
+  ): TypedAsyncRule<TContext, TResult> {
+    return async (context: TContext) => {
+      const errors: AppError[] = [];
+      for (const rule of rules) {
+        const result = await rule(context);
+        if (result.ok) return result;
+        errors.push(...result.errors);
+      }
+      return Result.failureFrom<TResult>(errors);
     };
   },
 

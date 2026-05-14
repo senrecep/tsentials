@@ -17,6 +17,15 @@ export interface EntityBase extends FullAudit {
 }
 
 /**
+ * EntityBase with a strongly-typed identifier.
+ * Mirrors C# Essential's EntityBase<TId> design.
+ */
+export interface EntityBaseWithId<TId> extends EntityBase {
+  readonly id: TId;
+  setId(id: TId): void;
+}
+
+/**
  * Mixin factory that adds domain event tracking and audit capabilities
  * to any object.
  *
@@ -68,6 +77,35 @@ export function createEntityBase(): EntityBase {
     setUpdatedInfo(updatedAt: Date, updatedBy: string): void {
       _updatedAt = updatedAt;
       _updatedBy = updatedBy;
+    },
+  };
+}
+
+/**
+ * Mixin factory that adds domain event tracking, audit capabilities,
+ * and a strongly-typed identifier.
+ *
+ * @example
+ * class User implements EntityBaseWithId<string> {
+ *   private readonly _base = createEntityBaseWithId<string>();
+ *   get id() { return this._base.id; }
+ *   // ...delegate other methods
+ * }
+ */
+export function createEntityBaseWithId<TId>(id?: TId): EntityBaseWithId<TId> {
+  const base = createEntityBase();
+  let _id: TId | undefined = id;
+
+  return {
+    ...base,
+    get id(): TId {
+      if (_id === undefined) {
+        throw new Error('Entity ID has not been set.');
+      }
+      return _id;
+    },
+    setId(idValue: TId): void {
+      _id = idValue;
     },
   };
 }

@@ -303,6 +303,201 @@ export const Result = {
   },
 
   /**
+   * Atomically extracts value and errors from a Result.
+   * Returns a tuple with success flag, optional value, and optional errors.
+   *
+   * @example
+   * const [ok, value, errors] = Result.tryGet(result);
+   * if (ok) console.log(value);
+   * else console.error(errors[0].description);
+   */
+  tryGet<T>(
+    result: Result<T>,
+  ):
+    | [ok: true, value: T, errors: undefined]
+    | [ok: false, value: undefined, errors: readonly AppError[]] {
+    return result.ok ? [true, result.value, undefined] : [false, undefined, result.errors];
+  },
+
+  /**
+   * Void-only pattern match — runs side effects without returning a value.
+   * Complement of `match` for cases where you only need side effects.
+   *
+   * @example
+   * Result.switch(result,
+   *   user => console.log(`Fetched ${user.name}`),
+   *   errs => console.error(errs[0].description),
+   * );
+   */
+  switch<T>(
+    result: Result<T>,
+    onSuccess: (value: T) => void,
+    onError: (errors: readonly AppError[]) => void,
+  ): void {
+    if (result.ok) onSuccess(result.value);
+    else onError(result.errors);
+  },
+
+  /**
+   * Pattern match using only the first error.
+   * Useful when you want to handle the primary failure reason.
+   */
+  matchFirst<T, U>(
+    result: Result<T>,
+    onSuccess: (value: T) => U,
+    onFirstError: (error: AppError) => U,
+  ): U {
+    return result.ok
+      ? onSuccess(result.value)
+      : onFirstError(result.errors[0] ?? Err.unexpected('Result.Empty', 'No errors found.'));
+  },
+
+  /**
+   * Pattern match using only the last error.
+   * Useful when the last error represents the most specific failure.
+   */
+  matchLast<T, U>(
+    result: Result<T>,
+    onSuccess: (value: T) => U,
+    onLastError: (error: AppError) => U,
+  ): U {
+    return result.ok
+      ? onSuccess(result.value)
+      : onLastError(
+          result.errors[result.errors.length - 1] ??
+            Err.unexpected('Result.Empty', 'No errors found.'),
+        );
+  },
+
+  /**
+   * Void-only switch using only the first error.
+   */
+  switchFirst<T>(
+    result: Result<T>,
+    onSuccess: (value: T) => void,
+    onFirstError: (error: AppError) => void,
+  ): void {
+    if (result.ok) onSuccess(result.value);
+    else onFirstError(result.errors[0] ?? Err.unexpected('Result.Empty', 'No errors found.'));
+  },
+
+  /**
+   * Void-only switch using only the last error.
+   */
+  switchLast<T>(
+    result: Result<T>,
+    onSuccess: (value: T) => void,
+    onLastError: (error: AppError) => void,
+  ): void {
+    if (result.ok) onSuccess(result.value);
+    else
+      onLastError(
+        result.errors[result.errors.length - 1] ??
+          Err.unexpected('Result.Empty', 'No errors found.'),
+      );
+  },
+
+  /**
+   * Runs a side effect on the first error only.
+   * Complement of `tapError` which receives all errors.
+   */
+  tapErrorFirst<T>(result: Result<T>, fn: (firstError: AppError) => void): Result<T> {
+    if (!result.ok && result.errors.length > 0) {
+      fn(result.errors[0] ?? Err.unexpected('Result.Empty', 'No errors found.'));
+    }
+    return result;
+  },
+
+  /**
+   * Guards the success value against null/undefined.
+   * If the value is null or undefined, returns a failure with the provided error.
+   */
+  ensureNotNull<T>(result: Result<T | null | undefined>, error: AppError): Result<T> {
+    if (!result.ok) return Result.failureFrom<T>(result.errors);
+    if (result.value == null) return Result.failure(error);
+    return Result.success(result.value);
+  },
+
+  /**
+   * Fails the result if the predicate matches the success value.
+   * Opposite of `ensure` — turns a success into a failure when the predicate is true.
+   *
+   * @example
+   * Result.failIf(result, n => n < 0, Err.validation('Value.Negative', 'Must be non-negative'));
+   */
+  failWhen<T>(
+    result: Result<T>,
+    predicate: (value: T) => boolean,
+    error: AppError | ((value: T) => AppError),
+  ): Result<T> {
+    if (!result.ok) return result;
+    const err = typeof error === 'function' ? error(result.value) : error;
+    return predicate(result.value) ? Result.failure(err) : result;
+  },
+
+  /**
+   * Wraps a function call that may throw, catching exceptions as Result.failure.
+   * Applied to an existing Result's success value.
+   *
+   * @example
+   * Result.tryCatch(result, user => JSON.parse(user.config), Err.validation('JSON.Invalid', 'Bad config'));
+   */
+  tryCatch<T, U>(
+    result: Result<T>,
+    fn: (value: T) => U,
+    error?: AppError | ((error: unknown) => AppError),
+  ): Result<U> {
+    if (!result.ok) return Result.failureFrom<U>(result.errors);
+    try {
+      return Result.success(fn(result.value));
+    } catch (e) {
+      const err = error
+        ? typeof error === 'function'
+          ? (error as (error: unknown) => AppError)(e)
+          : error
+        : Err.fromException(e);
+      return Result.failure(err);
+    }
+  },
+
+  /**
+   * Creates a Result from a plain value (success).
+   * Equivalent to C# implicit operator `Result<T>(TValue)`.
+   */
+  fromValue<T>(value: T): Result<T> {
+    return Result.success(value);
+  },
+
+  /**
+   * Async version of tryCatch.
+   */
+  async tryCatchAsync<T, U>(
+    result: Result<T>,
+    fn: (value: T) => Promise<U>,
+    error?: AppError | ((error: unknown) => AppError),
+  ): Promise<Result<U>> {
+    if (!result.ok) return Result.failureFrom<U>(result.errors);
+    try {
+      return Result.success(await fn(result.value));
+    } catch (e) {
+      const err = error
+        ? typeof error === 'function'
+          ? (error as (error: unknown) => AppError)(e)
+          : error
+        : Err.fromException(e);
+      return Result.failure(err);
+    }
+  },
+
+  /**
+   * Creates a failed Result from an error.
+   * Equivalent to C# implicit operator `Result<T>(Error)`.
+   */
+  fromError<T = never>(error: AppError): Result<T> {
+    return Result.failure(error);
+  },
+
+  /**
    * Returns the success value, or a default if failed.
    * Safer alternative to unwrap() for cases where a fallback makes sense.
    */

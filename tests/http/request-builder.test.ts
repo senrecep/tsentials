@@ -261,8 +261,7 @@ describe('RequestBuilder fluent API', () => {
     expect(init.method).toBe('PATCH');
   });
 
-  it('sends DELETE request with GET fallback in send()', async () => {
-    // RequestBuilder.send does not have DELETE case, falls through to default (GET behavior via fetchResult.get)
+  it('sends DELETE request correctly in send()', async () => {
     const fetchSpy = vi.fn(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
@@ -273,8 +272,7 @@ describe('RequestBuilder fluent API', () => {
     await RequestBuilder.delete('https://api.example.com/users/1').send<unknown>();
 
     const init = fetchSpy.mock.calls[0]![1] as RequestInit;
-    // Because it falls through to fetchResult.get, method is overridden to GET
-    expect(init.method).toBe('GET');
+    expect(init.method).toBe('DELETE');
   });
 
   it('parses JSON body before passing to fetchResult.post', async () => {

@@ -146,6 +146,62 @@ export const Maybe = {
     return maybe.hasValue ? [true, maybe.value] : [false, undefined];
   },
 
+  /**
+   * Atomically extracts the value from a Maybe.
+   * Returns a tuple with hasValue flag and optional value.
+   *
+   * @example
+   * const [hasValue, value] = Maybe.tryGet(maybe);
+   * if (hasValue) console.log(value);
+   */
+  tryGet<T>(maybe: Maybe<T>): [hasValue: true, value: T] | [hasValue: false, value: undefined] {
+    return maybe.hasValue ? [true, maybe.value] : [false, undefined];
+  },
+
+  /**
+   * Void-only pattern match — runs side effects without returning a value.
+   * Complement of `match` for cases where you only need side effects.
+   *
+   * @example
+   * Maybe.switch(maybe,
+   *   user => console.log(`Found ${user.name}`),
+   *   () => console.log('User not found'),
+   * );
+   */
+  switch<T>(maybe: Maybe<T>, onSome: (value: T) => void, onNone: () => void): void {
+    if (maybe.hasValue) onSome(maybe.value);
+    else onNone();
+  },
+
+  /**
+   * Flattens a nested Maybe<Maybe<T>> into Maybe<T>.
+   * If the outer Maybe is None, returns None.
+   * If the outer Maybe is Some, returns the inner Maybe.
+   */
+  flatten<T>(maybe: Maybe<Maybe<T>>): Maybe<T> {
+    return maybe.hasValue ? maybe.value : Maybe.none<T>();
+  },
+
+  /**
+   * Converts a Maybe into an array.
+   * Some → [value], None → []
+   */
+  toArray<T>(maybe: Maybe<T>): T[] {
+    return maybe.hasValue ? [maybe.value] : [];
+  },
+
+  /**
+   * Returns the value or throws using a custom error factory.
+   * Allows throwing domain-specific errors instead of generic Error.
+   *
+   * @example
+   * Maybe.getOrThrow(maybe, () => new DomainError('User.NotFound'));
+   */
+  getOrThrowFactory<T>(maybe: Maybe<T>, factory: () => Error): T {
+    if (!maybe.hasValue) throw factory();
+    return maybe.value;
+  },
+
   // ─── ASYNC PIPELINE ──────────────────────────────────────────────────────────
 
   /**
