@@ -6,6 +6,7 @@ Use when modelling recursive hierarchies: categories, comments, org charts.
 
 ```typescript
 import { Tree } from 'tsentials/tree';
+import type { Tree as TreeType } from 'tsentials/tree'; // interface: { value: T; forest: ReadonlyArray<Tree<T>> }
 
 // Construction
 const t = Tree.of('root', [
@@ -14,6 +15,8 @@ const t = Tree.of('root', [
 ]);
 
 // Query
+Tree.root(t);        // 'root' — get root value
+Tree.children(t);    // immediate child Tree nodes
 Tree.size(t);        // total nodes
 Tree.isLeaf(t);      // has no children?
 Tree.find(t, v => v === 'a1');
@@ -23,12 +26,14 @@ Tree.findAll(t, v => v.startsWith('a'));
 Tree.map(t, v => v.toUpperCase());
 Tree.filter(t, v => v !== 'b');
 Tree.toArray(t);     // pre-order flatten
+Tree.toArrayWithDepth(t); // [{ value: 'root', depth: 0 }, { value: 'a', depth: 1 }, ...]
 
 // Fold
 Tree.fold(t, (value, children) => value + children.reduce((a, b) => a + b, 0));
 
 // Pretty print
-Tree.drawTree(t);
+Tree.drawTree(t);                       // uses String() by default
+Tree.drawTree(t, v => v.toUpperCase()); // custom show function
 ```
 
 ## Patterns

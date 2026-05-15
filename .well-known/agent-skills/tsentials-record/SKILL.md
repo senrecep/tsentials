@@ -10,12 +10,16 @@ import { Record } from 'tsentials/record';
 const users = { a: { name: 'Alice' }, b: { name: 'Bob' } };
 
 // Query
-Record.keys(users);    // ['a', 'b']
-Record.values(users);  // [{ name: 'Alice' }, { name: 'Bob' }]
-Record.has(users, 'a'); // true
+Record.keys(users);     // ['a', 'b']
+Record.values(users);   // [{ name: 'Alice' }, { name: 'Bob' }]
+Record.entries(users);   // [['a', { name: 'Alice' }], ['b', { name: 'Bob' }]]
+Record.has(users, 'a');  // true
+Record.size(users);      // 2
+Record.isEmpty(users);   // false
 
 // Transform
 Record.map(users, u => u.name);           // { a: 'Alice', b: 'Bob' }
+Record.mapWithKey(users, (k, v) => [k.toUpperCase(), v]); // remap keys + values
 Record.filter(users, u => u.name !== 'Bob');
 Record.filterMap(users, u => u.name.length > 3 ? u.name : null);
 

@@ -10,7 +10,11 @@ import { Eq } from 'tsentials/eq';
 // Primitive instances
 Eq.number.equals(1, 1);   // true
 Eq.string.equals('a', 'b'); // false
+Eq.boolean.equals(true, true); // true
 Eq.date.equals(new Date('2024-01-01'), new Date('2024-01-01')); // true
+
+// Strict reference equality (any type)
+Eq.strict.equals(obj1, obj2); // uses ===
 
 // Derive Eq for custom types
 interface User { readonly id: number; readonly name: string; }

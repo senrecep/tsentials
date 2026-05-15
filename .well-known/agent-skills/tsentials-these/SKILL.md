@@ -17,8 +17,19 @@ These.map(these, n => n * 2);
 These.mapLeft(these, e => wrap(e));
 These.flatMap(these, n => validate(n));
 
-// Match
+// Type guards
+These.isLeft(these);       // boolean
+These.isRight(these);      // boolean
+These.isBoth(these);       // boolean
+
+// Pipeline
+These.tap(these, v => console.log(v));     // side effect on success value
+These.tapLeft(these, e => console.log(e)); // side effect on error value
+
+// Extraction
 These.match(these, onLeft, onRight, onBoth);
+These.getRight(these);     // A | undefined
+These.getLeft(these);      // E | undefined
 
 // Convert to/from Result
 These.toResult(these);       // Both → failure

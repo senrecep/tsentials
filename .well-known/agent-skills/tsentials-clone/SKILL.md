@@ -1,11 +1,11 @@
 ---
 name: tsentials-clone
-description: Use when objects need deep-copy semantics — implement Cloneable<T> on domain objects, use deepClone() for a single object, and cloneArray() to produce independent deep copies of every element in a collection.
+description: Use when objects need deep-copy semantics — implement Cloneable<T> on domain objects with custom clone logic, use deepClone() for plain data objects via structuredClone, and cloneArray() to call .clone() on every element in a Cloneable collection.
 ---
 
 # tsentials/clone
 
-Typed deep-copy contract for domain objects. `Cloneable<T>` is explicit and type-safe — unlike spread operators which only shallow-copy.
+Typed deep-copy utilities for domain objects. Two strategies: `Cloneable<T>` for custom clone logic on class-based models, and `deepClone()` for plain data via `structuredClone`.
 
 ## Installation
 
@@ -23,6 +23,8 @@ import type { Cloneable } from 'tsentials/clone';
 ---
 
 ## Implement Cloneable\<T\>
+
+For class-based domain objects that need custom clone logic (e.g., resetting mutable state, excluding fields):
 
 ```typescript
 import type { Cloneable } from 'tsentials/clone';
@@ -54,30 +56,46 @@ class Tag implements Cloneable<Tag> {
 
 ---
 
-## deepClone — single object
+## deepClone — plain data objects
+
+Uses the native `structuredClone()` API. Does **not** call `.clone()` — works on any value that `structuredClone` supports (plain objects, arrays, Date, Map, Set, ArrayBuffer, etc.).
 
 ```typescript
 import { deepClone } from 'tsentials/clone';
 
-const original = new Product('p1', 'Widget', [new Tag('sale')]);
-const copy = deepClone(original); // calls original.clone()
+const original = { user: { id: 1, name: 'Alice' }, tags: ['admin'] };
+const copy = deepClone(original); // uses structuredClone()
 
 // Mutations on copy do not affect original
+copy.tags.push('editor');
+console.log(original.tags); // ['admin']
 ```
 
 ---
 
-## cloneArray — collection deep copy
+## cloneArray — collection of Cloneable items
+
+Calls `.clone()` on each element in the array. Items must implement `Cloneable<T>`.
 
 ```typescript
 import { cloneArray } from 'tsentials/clone';
 
 const products: Product[] = await repo.findAll();
-const working = cloneArray(products); // independent deep copies of every element
+const working = cloneArray(products); // calls .clone() on every element
 
 applyDiscounts(working);             // mutations don't affect originals
 await repo.updateAll(working);
 ```
+
+---
+
+## When to Use Which
+
+| Function | Mechanism | Use Case |
+|----------|-----------|----------|
+| `deepClone(value)` | `structuredClone()` | Plain data objects, DTOs, JSON-like structures |
+| `cloneArray(items)` | `item.clone()` on each | Arrays of class instances implementing `Cloneable<T>` |
+| `obj.clone()` | Custom logic | Single class instance with `Cloneable<T>` |
 
 ---
 
@@ -86,20 +104,36 @@ await repo.updateAll(working);
 Snapshot objects before in-memory transformations, without mutating the originals:
 
 ```typescript
-const snapshot = await fetchProducts(categoryId);
+// Plain data — use deepClone
+const snapshot = deepClone(await fetchPriceList());
+applySeasonalDiscounts(snapshot);
 
-const discounted = cloneArray(snapshot);
-applySeasonalDiscounts(discounted);
+// Domain objects — use cloneArray
+const entities = await repo.findAll();
+const working = cloneArray(entities);
+applyBusinessRules(working);
 
-// snapshot remains unchanged for comparison
-const changed = discounted.filter((p, i) => p.price !== snapshot[i]?.price);
+// Compare
+const changed = working.filter((p, i) => p.price !== entities[i]?.price);
 ```
+
+---
+
+## Complete API Reference
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `Cloneable<T>` | Interface | Contract: `clone(): T` |
+| `deepClone<T>(value)` | Function | Deep-copies via `structuredClone()` |
+| `cloneArray<T extends Cloneable<T>>(items)` | Function | Calls `.clone()` on each element |
 
 ---
 
 ## Best Practices
 
+- `deepClone()` uses `structuredClone()` — it does **not** call `.clone()` on the object
+- `cloneArray()` is the one that calls `.clone()` on each item — items must implement `Cloneable<T>`
 - Always deep-copy nested collections inside `clone()` — a shallow copy defeats the purpose
 - Implement `Cloneable<T>` on mutable domain objects that are passed around by reference
-- Consider using `readonly` properties with object spread for simple value objects instead of `Cloneable<T>`
-- `Cloneable<T>` is most valuable for class-based domain models with nested mutable state
+- For simple value objects or DTOs, prefer `deepClone()` over implementing `Cloneable<T>`
+- `structuredClone` does not support functions, DOM nodes, or class prototypes — use `Cloneable<T>` for those

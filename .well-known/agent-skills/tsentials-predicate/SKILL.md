@@ -6,6 +6,7 @@ Use when you need composable, reusable boolean conditions.
 
 ```typescript
 import { Predicate } from 'tsentials/predicate';
+import type { Refinement } from 'tsentials/predicate';
 
 // Create predicates
 const isAdult = Predicate.from((u: User) => u.age >= 18);
@@ -22,6 +23,13 @@ Predicate.any(isAdmin, isModerator);
 
 // Refinement (type guard)
 const isString = Predicate.refinement((x: unknown): x is string => typeof x === 'string');
+const isNumber = Predicate.refinement((x: unknown): x is number => typeof x === 'number');
+
+// Combine refinements (narrows to intersection)
+const isStringAndNumber = Predicate.andRefinement(isString, isNumber); // Refinement<unknown, string & number>
+
+// Convert predicate to a Rule-compatible function
+Predicate.toRule(isAdult, validationError); // (value) => error | undefined
 ```
 
 ## Patterns

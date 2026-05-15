@@ -1,11 +1,11 @@
 ---
 name: tsentials-rules
-description: Use when composing business validation logic — define rules as functions returning VoidResult, combine with RuleEngine.and/or/linear/if, evaluate with RuleEngine.evaluate with full async support.
+description: Use when composing business validation logic — define rules as typed functions returning VoidResult, combine with RuleEngine.and/or/linear/if, evaluate synchronously or asynchronously with evaluateAsync.
 ---
 
 # tsentials/rules
 
-Composable rule engine for TypeScript. Define business logic as small rules and combine them freely with full async support.
+Composable rule engine for TypeScript. Define business logic as small typed functions and combine them freely. Sync and async rules are separate types.
 
 ## Installation
 
@@ -17,14 +17,32 @@ npm install tsentials
 
 ```typescript
 import { RuleEngine } from 'tsentials/rules';
-import type { Rule } from 'tsentials/rules';
+import type { Rule, AsyncRule, TypedRule, TypedAsyncRule } from 'tsentials/rules';
 ```
 
 ---
 
-## Rule\<T\>
+## Types
 
-A `Rule<T>` is just a function: `(ctx: T) => VoidResult | Promise<VoidResult>`.
+```typescript
+// Sync rule — returns VoidResult directly (NOT a Promise)
+type Rule<TContext> = (context: TContext) => VoidResult;
+
+// Async rule — returns Promise<VoidResult>
+type AsyncRule<TContext> = (context: TContext) => Promise<VoidResult>;
+
+// Typed rule — returns a value on success
+type TypedRule<TContext, TResult> = (context: TContext) => Result<TResult>;
+
+// Async typed rule
+type TypedAsyncRule<TContext, TResult> = (context: TContext) => Promise<Result<TResult>>;
+```
+
+> **Critical:** `Rule<T>` is **sync only**. Use `AsyncRule<T>` for async predicates. Do NOT type an `async` function as `Rule<T>`.
+
+---
+
+## Defining Rules
 
 ```typescript
 import { Result } from 'tsentials/result';
@@ -32,14 +50,14 @@ import { Err } from 'tsentials/errors';
 
 type User = { age: number; email: string; emailVerified: boolean };
 
-// Inline rule
+// Sync rule
 const isAdult: Rule<User> = ctx =>
   ctx.age >= 18
     ? Result.ok()
     : Result.failure(Err.validation('User.Underage', 'Must be 18 or older.'));
 
-// Async rule
-const hasVerifiedEmail: Rule<User> = async ctx => {
+// Async rule — note: AsyncRule<User>, NOT Rule<User>
+const hasVerifiedEmail: AsyncRule<User> = async ctx => {
   const verified = await checkEmailVerification(ctx.email);
   return verified
     ? Result.ok()
@@ -49,10 +67,44 @@ const hasVerifiedEmail: Rule<User> = async ctx => {
 
 ---
 
-## Evaluating a Single Rule
+## Factories
+
+### `RuleEngine.fromPredicate` — rule from a predicate (sync)
+
+The `error` argument can be a static `AppError` or a factory `(ctx: T) => AppError`.
 
 ```typescript
-const result = await RuleEngine.evaluate(isAdult, user);
+// Static error
+const isAdult = RuleEngine.fromPredicate<User>(
+  u => u.age >= 18,
+  Err.validation('User.Underage', 'Must be 18+'),
+);
+
+// Dynamic error (receives context)
+const hasBalance = RuleEngine.fromPredicate<Account>(
+  a => a.balance > 0,
+  a => Err.validation('Account.Insufficient', `Balance ${a.balance} is too low`),
+);
+```
+
+### `RuleEngine.fromPredicateAsync` — rule from an async predicate
+
+```typescript
+const isEmailUnique = RuleEngine.fromPredicateAsync<User>(
+  async u => !(await emailExistsInDb(u.email)),
+  Err.validation('User.EmailTaken', 'Email already in use'),
+);
+```
+
+---
+
+## Evaluation
+
+### `evaluate` — synchronous, returns `VoidResult` directly
+
+```typescript
+// evaluate() is SYNC — no await needed
+const result = RuleEngine.evaluate(isAdult, user);
 
 if (result.ok) {
   console.log('Passed');
@@ -61,17 +113,38 @@ if (result.ok) {
 }
 ```
 
----
-
-## Combining Rules
-
-### `RuleEngine.and` — all must pass (collects all failures)
+### `evaluateAsync` — asynchronous, returns `Promise<VoidResult>`
 
 ```typescript
-const canRegister = RuleEngine.and(isAdult, hasVerifiedEmail);
+// evaluateAsync() is for AsyncRule<T>
+const result = await RuleEngine.evaluateAsync(hasVerifiedEmail, user);
 
-const result = await RuleEngine.evaluate(canRegister, user);
-// If both fail, result.errors contains errors from both rules
+if (!result.ok) {
+  console.log(result.errors[0]?.description);
+}
+```
+
+---
+
+## Sync Combinators
+
+All sync combinators accept `Rule<TContext>` and return `Rule<TContext>`.
+
+### `RuleEngine.and` — all must pass, collects ALL failures
+
+```typescript
+const canRegister = RuleEngine.and(isAdult, hasEmail, isAllowedRegion);
+
+const result = RuleEngine.evaluate(canRegister, user);
+// If multiple rules fail, result.errors contains errors from all failing rules
+```
+
+### `RuleEngine.linear` — all must pass, stops at first failure
+
+```typescript
+const pipeline = RuleEngine.linear(isAdult, hasEmail, hasCompletedProfile);
+// Stops at the first failing rule — subsequent rules are not evaluated
+// Use when later rules depend on earlier ones passing
 ```
 
 ### `RuleEngine.or` — at least one must pass
@@ -80,22 +153,56 @@ const result = await RuleEngine.evaluate(canRegister, user);
 const canAccess = RuleEngine.or(isAdmin, isPremiumUser);
 ```
 
-### `RuleEngine.linear` — stop on first failure
+### `RuleEngine.if` — conditional branching, returns `Rule<TContext>`
+
+`RuleEngine.if` returns a **new `Rule<TContext>`** — it does NOT take a context argument. Evaluate the returned rule separately.
 
 ```typescript
-const pipeline = RuleEngine.linear(isAdult, hasVerifiedEmail, hasCompletedProfile);
-// Stops at the first failing rule — subsequent rules are not evaluated
+// Build a conditional rule
+const accessRule = RuleEngine.if(
+  isAdult,      // condition rule
+  grantAccess,  // onTrue branch
+  denyAccess,   // onFalse branch (optional)
+);
+
+// Evaluate the composed rule
+const result = RuleEngine.evaluate(accessRule, user);
 ```
 
-### `RuleEngine.if` — conditional branching
+---
+
+## Async Combinators
+
+All async combinators accept `AsyncRule<TContext>` and return `AsyncRule<TContext>`.
 
 ```typescript
-const result = await RuleEngine.if(
-  isAdult,        // condition rule
-  grantAccess,    // success branch
-  denyAccess,     // failure branch
-  user,
-);
+RuleEngine.andAsync(...rules)       // all must pass, collects ALL failures
+RuleEngine.linearAsync(...rules)    // stops on first failure
+RuleEngine.orAsync(...rules)        // at least one must pass
+RuleEngine.ifAsync(cond, onTrue, onFalse?)  // conditional, returns AsyncRule<TContext>
+```
+
+```typescript
+const asyncRule = RuleEngine.andAsync(isEmailUnique, hasVerifiedEmail);
+const result = await RuleEngine.evaluateAsync(asyncRule, user);
+```
+
+---
+
+## Typed Combinators
+
+Typed rules carry a result value on success (`Result<TResult>` instead of `VoidResult`).
+
+```typescript
+// Sync typed combinators
+RuleEngine.linearTyped<TContext, TResult>(...rules: TypedRule<TContext, TResult>[])
+RuleEngine.andTyped<TContext, TResult>(...rules: TypedRule<TContext, TResult>[])
+RuleEngine.orTyped<TContext, TResult>(...rules: TypedRule<TContext, TResult>[])
+
+// Async typed combinators
+RuleEngine.linearTypedAsync<TContext, TResult>(...rules: TypedAsyncRule<TContext, TResult>[])
+RuleEngine.andTypedAsync<TContext, TResult>(...rules: TypedAsyncRule<TContext, TResult>[])
+RuleEngine.orTypedAsync<TContext, TResult>(...rules: TypedAsyncRule<TContext, TResult>[])
 ```
 
 ---
@@ -121,7 +228,7 @@ const isAllowedRegion: Rule<ApplicantContext> = ctx =>
 // Compose — collects all failures
 const canRegister = RuleEngine.and(isAdult, hasEmail, isAllowedRegion);
 
-const result = await RuleEngine.evaluate(canRegister, applicant);
+const result = RuleEngine.evaluate(canRegister, applicant);
 
 if (!result.ok) {
   result.errors.forEach(e => console.log(`[${e.type}] ${e.code}: ${e.description}`));
@@ -135,7 +242,7 @@ if (!result.ok) {
 ```typescript
 import { fromAsync } from 'tsentials/result';
 
-// Use rule evaluation inside a ResultAsync pipeline
+// evaluate() is sync — use Result.then to chain into a pipeline
 const response = await fromAsync(fetchUser(userId))
   .andThen(user => RuleEngine.evaluate(canRegister, user))
   .match(
@@ -148,8 +255,12 @@ const response = await fromAsync(fetchUser(userId))
 
 ## Best Practices
 
-- `Rule<T>` is just a function — no class, no interface hierarchy required
+- `Rule<T>` is sync only — never annotate an `async` function as `Rule<T>`, use `AsyncRule<T>`
 - `RuleEngine.and()` collects **all** failures; `RuleEngine.linear()` stops at the **first** failure
 - Prefer `RuleEngine.linear()` for sequential guards where later checks depend on earlier ones passing
-- Group domain errors in const objects — rules read like domain language
-- Test each rule in isolation: `await RuleEngine.evaluate(rule, context)` → assert result
+- `RuleEngine.if()` returns a `Rule<TContext>` — evaluate it with `RuleEngine.evaluate(rule, ctx)`
+- `RuleEngine.evaluate()` is sync and returns `VoidResult` directly — no `await` needed
+- `RuleEngine.evaluateAsync()` is for `AsyncRule<T>` — always `await` it
+- Use `RuleEngine.fromPredicate()` with a factory error `(ctx) => AppError` for context-aware error messages
+- Group domain errors in `const` objects — rules read like domain language
+- Test each rule in isolation: `RuleEngine.evaluate(rule, context)` → assert result

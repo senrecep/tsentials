@@ -1,11 +1,11 @@
 ---
 name: tsentials-entity
-description: Use when building DDD domain models — createEntityBase() mixin factory for aggregate roots with audit fields and domain events, createSoftDeletable() for soft deletion lifecycle, and DomainEvent for event-driven design.
+description: Use when building DDD domain models — createEntityBase() mixin factory for aggregate roots with audit fields and domain events, createSoftDeletable() for soft deletion lifecycle, and DomainEvent marker interface for event-driven design. Uses composition (private field delegation), not class inheritance.
 ---
 
 # tsentials/entity
 
-DDD base classes for aggregate roots. Built-in audit tracking, soft deletion, and domain event support via the mixin factory pattern.
+DDD building blocks for aggregate roots. Built-in audit tracking, soft deletion, and domain event support via the **composition / mixin factory** pattern — no base class inheritance.
 
 ## Installation
 
@@ -17,99 +17,157 @@ npm install tsentials
 
 ```typescript
 import { createEntityBase, createSoftDeletable } from 'tsentials/entity';
-import type { DomainEvent } from 'tsentials/entity';
+import type { EntityBase, SoftDeletable, DomainEvent, DomainEventTiming } from 'tsentials/entity';
+import type { CreationAudit, ModificationAudit, FullAudit } from 'tsentials/entity';
 ```
 
 ---
 
-## createEntityBase\<TId\>
+## createEntityBase()
 
-Creates a base class with `id`, `createdAt`, `updatedAt`, and domain event support.
+Factory function that returns an `EntityBase` object with domain event tracking and audit fields. **No generics, no constructor params.** Use via composition — store as a private field and delegate.
 
 ```typescript
-const EntityBase = createEntityBase<string>();
+class Order {
+  private readonly _base = createEntityBase();
 
-class Order extends EntityBase {
-  public readonly total: number;
+  // Delegate EntityBase members
+  get domainEvents()  { return this._base.domainEvents; }
+  get createdAt()     { return this._base.createdAt; }
+  get createdBy()     { return this._base.createdBy; }
+  get updatedAt()     { return this._base.updatedAt; }
+  get updatedBy()     { return this._base.updatedBy; }
 
-  constructor(total: number) {
-    super({ id: crypto.randomUUID() });
-    this.total = total;
-    this.addDomainEvent({ type: 'OrderCreated', orderId: this.id, total });
-  }
+  raise(event: DomainEvent)                  { this._base.raise(event); }
+  clearDomainEvents()                        { return this._base.clearDomainEvents(); }
+  setCreatedInfo(at: Date, by: string)       { this._base.setCreatedInfo(at, by); }
+  setUpdatedInfo(at: Date, by: string)       { this._base.setUpdatedInfo(at, by); }
+}
+```
+
+### EntityBase Interface
+
+```typescript
+interface EntityBase extends FullAudit {
+  readonly domainEvents: readonly DomainEvent[];
+  raise(event: DomainEvent): void;
+  clearDomainEvents(): DomainEvent[];
+  setCreatedInfo(createdAt: Date, createdBy: string): void;
+  setUpdatedInfo(updatedAt: Date, updatedBy: string): void;
+}
+```
+
+### Audit Interfaces
+
+```typescript
+interface CreationAudit {
+  readonly createdAt: Date;
+  readonly createdBy: string;
 }
 
-const order = new Order(99.99);
+interface ModificationAudit {
+  readonly updatedAt?: Date | undefined;
+  readonly updatedBy?: string | undefined;
+}
 
-// Provided members:
-// order.id              — TId
-// order.createdAt       — Date
-// order.updatedAt       — Date | undefined
-// order.domainEvents    — readonly DomainEvent[]
-// order.clearDomainEvents() — clears the event list
+interface FullAudit extends CreationAudit, ModificationAudit {}
 ```
 
 ---
 
-## createSoftDeletable — soft deletion lifecycle
+## createSoftDeletable()
 
-Wraps any `EntityBase` with soft-delete support:
+Factory function that returns a `SoftDeletable` object. **Takes no parameters.** Use via composition alongside `createEntityBase()`.
 
 ```typescript
-const EntityBase = createEntityBase<string>();
-const SoftDeletableBase = createSoftDeletable(EntityBase);
+class Product {
+  private readonly _base = createEntityBase();
+  private readonly _soft = createSoftDeletable();
 
-class Product extends SoftDeletableBase {
-  public readonly name: string;
+  // EntityBase delegation
+  get domainEvents()  { return this._base.domainEvents; }
+  get createdAt()     { return this._base.createdAt; }
+  raise(event: DomainEvent) { this._base.raise(event); }
+  clearDomainEvents()       { return this._base.clearDomainEvents(); }
+  setCreatedInfo(at: Date, by: string) { this._base.setCreatedInfo(at, by); }
+  setUpdatedInfo(at: Date, by: string) { this._base.setUpdatedInfo(at, by); }
 
-  constructor(name: string) {
-    super({ id: crypto.randomUUID() });
-    this.name = name;
-  }
+  // SoftDeletable delegation
+  get isDeleted()     { return this._soft.isDeleted; }
+  get isHardDeleted() { return this._soft.isHardDeleted; }
+  get deletedAt()     { return this._soft.deletedAt; }
+  get deletedBy()     { return this._soft.deletedBy; }
+
+  markAsDeleted(at: Date, by: string) { this._soft.markAsDeleted(at, by); }
+  markAsHardDeleted()                 { this._soft.markAsHardDeleted(); }
+  restore()                           { this._soft.restore(); }
 }
 
-const product = new Product('Widget');
+const product = new Product();
 
-// Soft delete
-product.softDelete();
-console.log(product.isDeleted);   // true
-console.log(product.deletedAt);   // Date
+// Soft delete — requires date and user
+product.markAsDeleted(new Date(), 'admin@example.com');
+console.log(product.isDeleted);     // true
+console.log(product.deletedAt);     // Date
+console.log(product.deletedBy);     // 'admin@example.com'
+
+// Hard delete
+product.markAsHardDeleted();
+console.log(product.isHardDeleted); // true
 
 // Restore
 product.restore();
-console.log(product.isDeleted);   // false
+console.log(product.isDeleted);     // false
+console.log(product.isHardDeleted); // false
+```
 
-// Additional members:
-// product.isDeleted     — boolean
-// product.deletedAt     — Date | undefined
+### SoftDeletable Interface
+
+```typescript
+interface SoftDeletable {
+  readonly deletedAt?: Date | undefined;
+  readonly deletedBy?: string | undefined;
+  readonly isDeleted: boolean;
+  readonly isHardDeleted: boolean;
+  markAsDeleted(deletedAt: Date, deletedBy: string): void;
+  markAsHardDeleted(): void;
+  restore(): void;
+}
 ```
 
 ---
 
 ## DomainEvent
 
-Define domain events as plain objects (no base class required):
+Marker interface — only requires `occurredOn: Date`. Add domain-specific fields in your own event types.
 
 ```typescript
-import type { DomainEvent } from 'tsentials/entity';
+interface DomainEvent {
+  readonly occurredOn: Date;
+}
 
-// Simple event
-const event: DomainEvent = {
-  type: 'OrderCreated',
-  orderId: order.id,
-  total: order.total,
-};
+type DomainEventTiming = 'pre-save' | 'post-save';
+```
 
-// Raise inside entity constructor or methods
-class Invoice extends EntityBase {
-  constructor(public readonly amount: number) {
-    super({ id: crypto.randomUUID() });
-    this.addDomainEvent({ type: 'InvoiceCreated', invoiceId: this.id, amount });
+Define domain events by extending the marker interface:
+
+```typescript
+interface OrderCreated extends DomainEvent {
+  readonly orderId: string;
+  readonly total: number;
+}
+
+// Raise inside entity methods
+class Order {
+  private readonly _base = createEntityBase();
+
+  constructor(public readonly id: string, public readonly total: number) {
+    this._base.raise({ occurredOn: new Date(), orderId: this.id, total } as DomainEvent);
   }
 
-  void() {
-    this.addDomainEvent({ type: 'InvoiceVoided', invoiceId: this.id });
-  }
+  get domainEvents() { return this._base.domainEvents; }
+  raise(event: DomainEvent) { this._base.raise(event); }
+  clearDomainEvents() { return this._base.clearDomainEvents(); }
 }
 ```
 
@@ -118,7 +176,7 @@ class Invoice extends EntityBase {
 ## Collecting and Dispatching Events
 
 ```typescript
-const order = new Order(99.99);
+const order = new Order('ord-1', 99.99);
 
 // Read events (e.g., before saving to DB)
 const events = order.domainEvents;
@@ -127,32 +185,48 @@ const events = order.domainEvents;
 for (const event of events) {
   await eventBus.publish(event);
 }
-order.clearDomainEvents();
+order.clearDomainEvents(); // returns the cleared events array
 ```
 
 ---
 
-## Mixin Factory Pattern
+## Complete API Reference
 
-`createEntityBase()` uses the mixin pattern — this means you can compose base classes without deep inheritance chains:
+| Factory | Returns | Parameters |
+|---------|---------|------------|
+| `createEntityBase()` | `EntityBase` | None |
+| `createSoftDeletable()` | `SoftDeletable` | None |
 
-```typescript
-// Numeric ID
-const EntityBase = createEntityBase<number>();
+| EntityBase Method | Signature |
+|-------------------|-----------|
+| `domainEvents` | `readonly DomainEvent[]` (getter) |
+| `createdAt` | `Date` (getter) |
+| `createdBy` | `string` (getter) |
+| `updatedAt` | `Date \| undefined` (getter) |
+| `updatedBy` | `string \| undefined` (getter) |
+| `raise` | `(event: DomainEvent) => void` |
+| `clearDomainEvents` | `() => DomainEvent[]` |
+| `setCreatedInfo` | `(createdAt: Date, createdBy: string) => void` |
+| `setUpdatedInfo` | `(updatedAt: Date, updatedBy: string) => void` |
 
-// UUID string ID
-const EntityBase = createEntityBase<string>();
-
-// Stack mixins
-const SoftDeletableBase = createSoftDeletable(createEntityBase<string>());
-```
+| SoftDeletable Method | Signature |
+|----------------------|-----------|
+| `isDeleted` | `boolean` (getter) |
+| `isHardDeleted` | `boolean` (getter) |
+| `deletedAt` | `Date \| undefined` (getter) |
+| `deletedBy` | `string \| undefined` (getter) |
+| `markAsDeleted` | `(deletedAt: Date, deletedBy: string) => void` |
+| `markAsHardDeleted` | `() => void` |
+| `restore` | `() => void` |
 
 ---
 
 ## Best Practices
 
-- Call `addDomainEvent()` only inside entity methods — keep events encapsulated in the aggregate
-- `domainEvents` is a **property**, not a method — do not call `getDomainEvents()`
+- Use **composition**, not inheritance: `private readonly _base = createEntityBase()`
+- Call `raise(event)` only inside entity methods — keep events encapsulated in the aggregate
+- `domainEvents` is a **getter property**, not a method — do not call `getDomainEvents()`
 - Always call `clearDomainEvents()` after dispatching events
-- Use `createSoftDeletable()` mixin instead of adding `isDeleted` manually to every entity
-- Prefer `crypto.randomUUID()` (Node ≥ 18) for string IDs
+- `DomainEvent` requires `occurredOn: Date` — there is no `type` property on the base interface
+- `createSoftDeletable()` takes **no parameters** — it is independent of `createEntityBase()`
+- `markAsDeleted(at, by)` requires both a date and a user string — it is not a zero-arg call

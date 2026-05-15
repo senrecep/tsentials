@@ -54,13 +54,13 @@ npm install tsentials
 
 | Import | Contents | Skill |
 |--------|----------|-------|
-| `tsentials/entity` | `createEntityBase`, `createSoftDeletable`, `DomainEvent` | `tsentials-entity` |
+| `tsentials/entity` | `createEntityBase`, `createSoftDeletable`, `DomainEvent`, `DomainEventTiming`, `EntityBase`, `EntityBaseWithId<TId>`, `CreationAudit`, `ModificationAudit`, `FullAudit`, `SoftDeletable` | `tsentials-entity` |
 
 ### Web / Infrastructure
 
 | Import | Contents | Skill |
 |--------|----------|-------|
-| `tsentials/http` | `fetchResult`, `RequestBuilder` | `tsentials-http` |
+| `tsentials/http` | `fetchResult`, `RequestBuilder`, `httpStatusToError`, `extractErrorDescription` | `tsentials-http` |
 
 ### Utilities
 
@@ -117,8 +117,10 @@ import { Record }                                       from 'tsentials/record';
 import { RuleEngine }                                   from 'tsentials/rules';
 import type { Rule }                                    from 'tsentials/rules';
 import { createEntityBase, createSoftDeletable }       from 'tsentials/entity';
-import type { DomainEvent }                             from 'tsentials/entity';
-import { fetchResult, RequestBuilder }                  from 'tsentials/http';
+import type { DomainEvent, DomainEventTiming }          from 'tsentials/entity';
+import type { EntityBase, EntityBaseWithId }             from 'tsentials/entity';
+import type { CreationAudit, ModificationAudit, FullAudit, SoftDeletable } from 'tsentials/entity';
+import { fetchResult, RequestBuilder, httpStatusToError, extractErrorDescription } from 'tsentials/http';
 import { SystemDateTimeProvider, createFakeDateTimeProvider } from 'tsentials/time';
 import type { DateTimeProvider }                        from 'tsentials/time';
 import { deepClone, cloneArray }                        from 'tsentials/clone';
