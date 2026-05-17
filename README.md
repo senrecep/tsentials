@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo-256.png" alt="tsentials logo" width="256" height="256" />
+</p>
+
 # tsentials
 
 [![npm version](https://img.shields.io/npm/v/tsentials?style=flat-square&color=blue)](https://www.npmjs.com/package/tsentials)
