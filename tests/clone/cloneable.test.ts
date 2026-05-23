@@ -132,4 +132,291 @@ describe('deepClone', () => {
   it('deep clones a boolean', () => {
     expect(deepClone(true)).toBe(true);
   });
+
+  it('deep clones circular references in objects', () => {
+    const obj: { a: number; self?: unknown } = { a: 1 };
+    obj.self = obj;
+    const copy = deepClone(obj);
+    expect(copy).not.toBe(obj);
+    expect(copy.a).toBe(1);
+    expect(copy.self).toBe(copy);
+  });
+
+  it('deep clones circular references in arrays', () => {
+    const arr: unknown[] = [1, 2];
+    arr.push(arr);
+    const copy = deepClone(arr);
+    expect(copy).not.toBe(arr);
+    expect(copy[0]).toBe(1);
+    expect(copy[1]).toBe(2);
+    expect(copy[2]).toBe(copy);
+  });
+
+  it('deep clones RegExp values', () => {
+    const obj = { pattern: /test/gi };
+    const copy = deepClone(obj);
+    expect(copy.pattern.source).toBe('test');
+    expect(copy.pattern.flags).toBe('gi');
+    expect(copy.pattern).not.toBe(obj.pattern);
+  });
+
+  it('deep clones BigInt values', () => {
+    const obj = { value: BigInt(42) };
+    const copy = deepClone(obj);
+    expect(copy.value).toBe(BigInt(42));
+  });
+
+  it('deep clones ArrayBuffer values', () => {
+    const buffer = new ArrayBuffer(4);
+    const view = new Uint8Array(buffer);
+    view.set([1, 2, 3, 4]);
+    const copy = deepClone(buffer);
+    expect(copy).not.toBe(buffer);
+    expect(new Uint8Array(copy)).toEqual(new Uint8Array(buffer));
+  });
+
+  it('deep clones Uint8Array values', () => {
+    const arr = new Uint8Array([1, 2, 3]);
+    const obj = { data: arr };
+    const copy = deepClone(obj);
+    expect(copy.data).not.toBe(arr);
+    expect(copy.data).toEqual(arr);
+    expect(copy.data.buffer).not.toBe(arr.buffer);
+  });
+
+  it('deep clones Float64Array values', () => {
+    const arr = new Float64Array([1.1, 2.2, 3.3]);
+    const copy = deepClone(arr);
+    expect(copy).not.toBe(arr);
+    expect(copy).toEqual(arr);
+  });
+
+  it('deep clones BigInt64Array values', () => {
+    const arr = new BigInt64Array([BigInt(1), BigInt(2)]);
+    const copy = deepClone(arr);
+    expect(copy).not.toBe(arr);
+    expect(copy).toEqual(arr);
+  });
+
+  it('deep clones DataView values', () => {
+    const buffer = new ArrayBuffer(8);
+    const view = new DataView(buffer);
+    view.setInt32(0, 42);
+    const copy = deepClone(view);
+    expect(copy).not.toBe(view);
+    expect(copy.getInt32(0)).toBe(42);
+    expect(copy.buffer).not.toBe(buffer);
+  });
+
+  it('deep clones Error values preserving name and message', () => {
+    const error = new TypeError('Something went wrong');
+    const copy = deepClone(error);
+    expect(copy).not.toBe(error);
+    expect(copy.name).toBe('TypeError');
+    expect(copy.message).toBe('Something went wrong');
+  });
+
+  it('deep clones Error with cause', () => {
+    const cause = new Error('root cause');
+    const error = new Error('wrapper', { cause });
+    const copy = deepClone(error);
+    expect(copy.message).toBe('wrapper');
+    expect((copy as Error & { cause?: unknown }).cause).toStrictEqual(cause);
+  });
+
+  it('deep clones Boolean wrapper objects', () => {
+    const obj = { value: Object(true) };
+    const copy = deepClone(obj);
+    expect(copy.value).not.toBe(obj.value);
+    expect(copy.value.valueOf()).toBe(true);
+  });
+
+  it('deep clones Number wrapper objects', () => {
+    const obj = { value: Object(42) };
+    const copy = deepClone(obj);
+    expect(copy.value).not.toBe(obj.value);
+    expect(copy.value.valueOf()).toBe(42);
+  });
+
+  it('deep clones String wrapper objects', () => {
+    const obj = { value: Object('hello') };
+    const copy = deepClone(obj);
+    expect(copy.value).not.toBe(obj.value);
+    expect(copy.value.valueOf()).toBe('hello');
+  });
+
+  it('preserves function references by identity', () => {
+    const fn = () => 42;
+    const obj = { fn };
+    const copy = deepClone(obj);
+    expect(copy.fn).toBe(fn);
+  });
+
+  it('replaces symbol values with undefined', () => {
+    const obj = { sym: Symbol('x'), other: 'ok' };
+    const copy = deepClone(obj);
+    expect(copy.sym).toBeUndefined();
+    expect(copy.other).toBe('ok');
+  });
+
+  it('returns empty WeakMap instance', () => {
+    const wm = new WeakMap();
+    const copy = deepClone(wm);
+    expect(copy).toBeInstanceOf(WeakMap);
+    expect(copy).not.toBe(wm);
+  });
+
+  it('returns empty WeakSet instance', () => {
+    const ws = new WeakSet();
+    const copy = deepClone(ws);
+    expect(copy).toBeInstanceOf(WeakSet);
+    expect(copy).not.toBe(ws);
+  });
+
+  it('deep clones Error with circular cause (error.cause === error)', () => {
+    const error = new Error('circular');
+    (error as Error & { cause?: unknown }).cause = error;
+    const copy = deepClone(error);
+    expect(copy).not.toBe(error);
+    expect(copy.message).toBe('circular');
+    expect((copy as Error & { cause?: unknown }).cause).toBe(copy);
+  });
+
+  it('deep clones Error with custom cause (nested error)', () => {
+    const cause = new TypeError('cause error');
+    const error = new Error('main error', { cause });
+    const copy = deepClone(error);
+    expect(copy).not.toBe(error);
+    expect(copy.message).toBe('main error');
+    expect((copy as Error & { cause?: unknown }).cause).not.toBe(cause);
+    expect(((copy as Error & { cause?: unknown }).cause as Error).message).toBe('cause error');
+  });
+
+  it('does not pollute prototype via __proto__ key', () => {
+    const malicious = JSON.parse('{"__proto__": {"polluted": true}, "safe": 1}') as Record<
+      string,
+      unknown
+    >;
+    const copy = deepClone(malicious);
+    expect(copy.safe).toBe(1);
+    expect((copy as Record<string, unknown>).polluted).toBeUndefined();
+    // Object.prototype must not be polluted
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('preserves sparse array holes', () => {
+    // biome-ignore lint/suspicious/noSparseArray: intentionally testing sparse array behavior
+    const sparse = [1, , 3] as unknown[];
+    const copy = deepClone(sparse);
+    expect(copy).toHaveLength(3);
+    expect(0 in copy).toBe(true);
+    expect(1 in copy).toBe(false); // hole preserved
+    expect(2 in copy).toBe(true);
+    expect(copy[0]).toBe(1);
+    expect(copy[2]).toBe(3);
+  });
+});
+
+describe('deepClone fallback (without native structuredClone)', () => {
+  const originalStructuredClone = globalThis.structuredClone;
+
+  beforeEach(() => {
+    // @ts-expect-error — intentionally removing structuredClone for fallback testing
+    globalThis.structuredClone = undefined;
+  });
+
+  afterEach(() => {
+    globalThis.structuredClone = originalStructuredClone;
+  });
+
+  it('falls back to recursive clone for plain objects', () => {
+    const obj = { a: 1, nested: { b: 2 } };
+    const copy = deepClone(obj);
+    expect(copy).toEqual(obj);
+    expect(copy).not.toBe(obj);
+    expect(copy.nested).not.toBe(obj.nested);
+  });
+
+  it('falls back to recursive clone for circular references', () => {
+    const obj: { a: number; self?: unknown } = { a: 1 };
+    obj.self = obj;
+    const copy = deepClone(obj);
+    expect(copy.self).toBe(copy);
+  });
+
+  it('falls back to recursive clone for Date', () => {
+    const obj = { d: new Date('2024-06-01') };
+    const copy = deepClone(obj);
+    expect(copy.d).toEqual(obj.d);
+    expect(copy.d).not.toBe(obj.d);
+  });
+
+  it('falls back to recursive clone for Map', () => {
+    const obj = { m: new Map([['k', 'v']]) };
+    const copy = deepClone(obj);
+    expect(copy.m.get('k')).toBe('v');
+  });
+
+  it('falls back to recursive clone for Set', () => {
+    const obj = { s: new Set([1, 2]) };
+    const copy = deepClone(obj);
+    expect(copy.s.has(2)).toBe(true);
+  });
+
+  it('falls back to recursive clone for ArrayBuffer', () => {
+    const buffer = new ArrayBuffer(2);
+    new Uint8Array(buffer).set([5, 10]);
+    const copy = deepClone(buffer);
+    expect(copy).not.toBe(buffer);
+    expect(new Uint8Array(copy)).toEqual(new Uint8Array(buffer));
+  });
+
+  it('falls back to recursive clone for Uint8Array', () => {
+    const arr = new Uint8Array([1, 2, 3]);
+    const copy = deepClone(arr);
+    expect(copy).toEqual(arr);
+    expect(copy.buffer).not.toBe(arr.buffer);
+  });
+
+  it('falls back to recursive clone for Error', () => {
+    const err = new Error('fail');
+    const copy = deepClone(err);
+    expect(copy.message).toBe('fail');
+    expect(copy.name).toBe('Error');
+  });
+
+  it('falls back and preserves function reference', () => {
+    const fn = () => 42;
+    const copy = deepClone(fn);
+    expect(copy).toBe(fn);
+  });
+
+  it('fallback: replaces symbol values with undefined', () => {
+    const sym = Symbol('test');
+    const obj = { sym, other: 'ok' };
+    const copy = deepClone(obj);
+    expect(copy.sym).toBeUndefined();
+    expect(copy.other).toBe('ok');
+  });
+
+  it('fallback: returns empty WeakMap instance', () => {
+    const wm = new WeakMap();
+    const copy = deepClone(wm);
+    expect(copy).toBeInstanceOf(WeakMap);
+    expect(copy).not.toBe(wm);
+  });
+
+  it('fallback: returns empty WeakSet instance', () => {
+    const ws = new WeakSet();
+    const copy = deepClone(ws);
+    expect(copy).toBeInstanceOf(WeakSet);
+    expect(copy).not.toBe(ws);
+  });
+
+  it('fallback: deep clones BigInt wrapper', () => {
+    const obj = { value: Object(BigInt(99)) };
+    const copy = deepClone(obj);
+    expect(copy.value.valueOf()).toBe(BigInt(99));
+    expect(copy.value).not.toBe(obj.value);
+  });
 });

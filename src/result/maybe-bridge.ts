@@ -1,5 +1,5 @@
 import type { AppError } from '../errors/app-error.js';
-import type { Maybe } from '../maybe/maybe.js';
+import { Maybe } from '../maybe/maybe.js';
 import { Result } from './result.js';
 
 /**
@@ -22,7 +22,7 @@ export function maybeToResult<T>(maybe: Maybe<T>, noneError: AppError): Result<T
  */
 export function resultToMaybe<T>(result: Result<T>): Maybe<T> {
   if (result.ok) {
-    return { hasValue: true, value: result.value };
+    return Maybe.some(result.value);
   }
-  return { hasValue: false };
+  return Maybe.none<T>();
 }

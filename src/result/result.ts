@@ -188,6 +188,15 @@ export const Result = {
   },
 
   /**
+   * Returns a fallback value on failure using an explicit factory function.
+   * Use instead of `else` when `T` is a function type, to avoid ambiguity.
+   */
+  elseWith<T>(result: Result<T>, factory: (errors: readonly AppError[]) => T): T {
+    if (result.ok) return result.value;
+    return factory(result.errors);
+  },
+
+  /**
    * Recovers from failure by returning a new Result.
    */
   compensate<T>(result: Result<T>, fn: (errors: readonly AppError[]) => Result<T>): Result<T> {
@@ -274,6 +283,11 @@ export const Result = {
    * Collects ALL errors if all fail.
    */
   or<T>(results: ReadonlyArray<Result<T>>): Result<T> {
+    if (results.length === 0) {
+      return Result.failure(
+        Err.validation('Result.Or.Empty', 'Result.or requires at least one result'),
+      );
+    }
     const errors: AppError[] = [];
     for (const r of results) {
       if (r.ok) return r;

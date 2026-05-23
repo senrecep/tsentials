@@ -20,8 +20,9 @@ export function tryLast<T>(arr: readonly T[]): Maybe<T> {
  * Returns the first element matching the predicate as Maybe<T>, or None.
  */
 export function tryFind<T>(arr: readonly T[], predicate: (value: T) => boolean): Maybe<T> {
-  const found = arr.find(predicate);
-  return found !== undefined ? Maybe.some(found) : Maybe.none<T>();
+  const idx = arr.findIndex(predicate);
+  // biome-ignore lint/style/noNonNullAssertion: arr[idx] is defined because idx >= 0 is checked
+  return idx >= 0 ? Maybe.some(arr[idx]!) : Maybe.none<T>();
 }
 
 /**

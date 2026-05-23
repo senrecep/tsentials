@@ -273,7 +273,7 @@ safeJsonStringify({ id: 1, tags: ['a'] })            // Result<string> — 'Json
 function isUser(v: unknown): v is User {
   return isJsonObject(v) && typeof v.name === 'string' && typeof v.age === 'number';
 }
-parseAndValidate<User>(raw, isUser)                  // Result<User>
+parseAndValidate<User>(raw, isUser)                  // Result<User> — 'Json.TypeValidationError' on guard failure
 
 // Type guards
 isJsonPrimitive('hello')   // true  — string | number | boolean | null

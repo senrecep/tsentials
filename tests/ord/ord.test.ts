@@ -6,6 +6,19 @@ describe('Ord.number', () => {
     expect(Ord.number.compare(2, 1)).toBe(1);
     expect(Ord.number.compare(1, 1)).toBe(0);
   });
+
+  it('number compare: NaN equals NaN', () => {
+    expect(Ord.number.compare(NaN, NaN)).toBe(0);
+  });
+
+  it('number compare: NaN sorts after valid numbers', () => {
+    expect(Ord.number.compare(NaN, 5)).toBe(1);
+    expect(Ord.number.compare(5, NaN)).toBe(-1);
+  });
+
+  it('number equals: NaN equals NaN', () => {
+    expect(Ord.number.equals(NaN, NaN)).toBe(true);
+  });
 });
 
 describe('Ord.string', () => {
@@ -91,6 +104,12 @@ describe('Ord.clamp', () => {
     expect(Ord.clamp(Ord.number, 0, 10, -5)).toBe(0);
     expect(Ord.clamp(Ord.number, 0, 10, 15)).toBe(10);
     expect(Ord.clamp(Ord.number, 0, 10, 5)).toBe(5);
+  });
+
+  it('clamp throws when lower > upper', () => {
+    expect(() => Ord.clamp(Ord.number, 10, 0, 5)).toThrow(
+      'clamp: lower must be less than or equal to upper',
+    );
   });
 });
 

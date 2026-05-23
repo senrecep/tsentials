@@ -7,7 +7,7 @@
 [![npm version](https://img.shields.io/npm/v/tsentials?style=flat-square&color=blue)](https://www.npmjs.com/package/tsentials)
 [![npm downloads](https://img.shields.io/npm/dm/tsentials?style=flat-square)](https://www.npmjs.com/package/tsentials)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/tsentials?style=flat-square&label=gzip)](https://bundlephobia.com/package/tsentials)
-[![tests](https://img.shields.io/badge/tests-762%20passing-brightgreen?style=flat-square)](./tests)
+[![tests](https://img.shields.io/badge/tests-818%20passing-brightgreen?style=flat-square)](./tests)
 [![CI](https://img.shields.io/github/actions/workflow/status/senrecep/tsentials/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/senrecep/tsentials/actions)
 [![license](https://img.shields.io/github/license/senrecep/tsentials?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
@@ -607,14 +607,35 @@ fake.utcNowDate();       // midnight of current fake date
 
 ```typescript
 import { deepClone, cloneArray } from 'tsentials/clone';
+import type { Cloneable } from 'tsentials/clone';
+```
 
-// Deep clone any serializable value (uses structuredClone)
+`deepClone` uses the native `structuredClone` API when available, falling back to a robust
+recursive implementation. Never throws — works in React Native (Hermes) and all JS runtimes.
+
+```typescript
+// Plain objects, nested structures
 const copy = deepClone({ user: { id: 1, tags: ['a', 'b'] } });
 copy.user.tags.push('c'); // original unaffected
 
-// Deep clone Dates, Maps, Sets
-const withDate = deepClone({ createdAt: new Date() });
-const withMap = deepClone({ lookup: new Map([['key', 'value']]) });
+// Date, Map, Set, TypedArrays — all supported
+deepClone({ createdAt: new Date(), lookup: new Map([['key', 'value']]) });
+deepClone(new Uint8Array([1, 2, 3])); // buffer cloned too
+
+// Circular references
+const obj: { self?: unknown } = {};
+obj.self = obj;
+const cloned = deepClone(obj);
+cloned.self === cloned; // true
+
+// Error with custom properties
+const err = Object.assign(new TypeError('fail'), { code: 'ERR_X' });
+deepClone(err).code; // 'ERR_X'
+
+// Graceful degradation — never throws
+deepClone({ fn: () => 42 });      // { fn: () => 42 }  — function reference preserved
+deepClone({ sym: Symbol('x') });  // { sym: undefined } — symbols degrade to undefined
+deepClone(new WeakMap());          // WeakMap {}         — empty instance (non-iterable)
 
 // Clone array of Cloneable items
 class Product implements Cloneable<Product> {

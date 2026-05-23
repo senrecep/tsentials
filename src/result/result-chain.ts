@@ -60,6 +60,15 @@ export class ResultChain<T> {
     return new ResultChain(Result.else(this._result, fallback));
   }
 
+  /**
+   * Returns a fallback value on failure using an explicit factory function.
+   * Use instead of `else` when `T` is a function type, to avoid ambiguity.
+   */
+  elseWith(factory: (errors: readonly AppError[]) => T): T {
+    const r = this._result;
+    return r.ok ? r.value : factory(r.errors);
+  }
+
   compensate(fn: (errors: readonly AppError[]) => Result<T>): ResultChain<T> {
     return new ResultChain(Result.compensate(this._result, fn));
   }

@@ -1,5 +1,6 @@
 import { isJson, isJsonArray, isJsonObject, isJsonPrimitive } from '../../src/json/json-guards.js';
 import { parseAndValidate, safeJsonParse, safeJsonStringify } from '../../src/json/json-utils.js';
+import { Result } from '../../src/result/result.js';
 
 // ─── Type Guards ──────────────────────────────────────────────────────────────
 
@@ -131,15 +132,26 @@ describe('parseAndValidate', () => {
     if (!result.ok) expect(result.errors[0]?.code).toBe('Json.SyntaxError');
   });
 
-  it('fails with ValidationError when guard returns false', () => {
+  it('fails with TypeValidationError when guard returns false', () => {
     const result = parseAndValidate<User>('{"name":"Alice"}', isUser);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]?.code).toBe('Json.ValidationError');
+    if (!result.ok) expect(result.errors[0]?.code).toBe('Json.TypeValidationError');
   });
 
-  it('fails with ValidationError for wrong types', () => {
+  it('fails with TypeValidationError for wrong types', () => {
     const result = parseAndValidate<User>('{"name":123,"age":"old"}', isUser);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]?.code).toBe('Json.ValidationError');
+    if (!result.ok) expect(result.errors[0]?.code).toBe('Json.TypeValidationError');
+  });
+
+  it('parseAndValidate failure uses TypeValidationError code distinct from parse error', () => {
+    const isNumber = (v: unknown): v is number => typeof v === 'number';
+    const parseError = safeJsonParse('invalid json');
+    const validateError = parseAndValidate<number>('"not-a-number"', isNumber);
+
+    expect(Result.isFailure(parseError)).toBe(true);
+    expect(Result.isFailure(validateError)).toBe(true);
+    expect(Result.firstError(parseError)?.code).toBe('Json.SyntaxError');
+    expect(Result.firstError(validateError)?.code).toBe('Json.TypeValidationError');
   });
 });

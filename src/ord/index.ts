@@ -35,8 +35,13 @@ export interface Ord<A> extends Eq<A> {
 
 /** Number ordering (ascending). */
 export const number: Ord<number> = {
-  equals: strict.equals,
-  compare: (first, second) => (first < second ? -1 : first > second ? 1 : 0),
+  equals: (a, b) => a === b || (Number.isNaN(a) && Number.isNaN(b)),
+  compare: (first, second): Ordering => {
+    if (Number.isNaN(first) && Number.isNaN(second)) return 0;
+    if (Number.isNaN(first)) return 1; // NaN sorts last
+    if (Number.isNaN(second)) return -1;
+    return first < second ? -1 : first > second ? 1 : 0;
+  },
 };
 
 /** String ordering (lexicographic). */
@@ -151,6 +156,9 @@ export function max<A>(ord: Ord<A>, first: A, second: A): A {
  * Clamps a value between a minimum and maximum.
  */
 export function clamp<A>(ord: Ord<A>, lower: A, upper: A, value: A): A {
+  if (ord.compare(lower, upper) > 0) {
+    throw new Error('clamp: lower must be less than or equal to upper');
+  }
   return ord.compare(value, lower) < 0 ? lower : ord.compare(value, upper) > 0 ? upper : value;
 }
 

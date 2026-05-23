@@ -46,7 +46,7 @@ export function createEntityBase(): EntityBase {
 
   return {
     get domainEvents(): readonly DomainEvent[] {
-      return Object.freeze([..._domainEvents]);
+      return [..._domainEvents];
     },
     get createdAt(): Date {
       return _createdAt;

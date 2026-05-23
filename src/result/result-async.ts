@@ -228,6 +228,14 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     );
   }
 
+  /**
+   * Returns a fallback value on failure using an explicit factory function.
+   * Use instead of `else` when `T` is a function type, to avoid ambiguity.
+   */
+  elseWith(factory: (errors: readonly AppError[]) => T | Promise<T>): Promise<T> {
+    return this._promise.then((r) => (r.ok ? r.value : factory(r.errors)));
+  }
+
   bindIf(
     condition: boolean | ((value: T) => boolean),
     fn: (value: T) => Result<T> | ResultAsync<T> | Promise<Result<T>>,

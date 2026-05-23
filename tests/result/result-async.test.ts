@@ -307,6 +307,29 @@ describe('ResultAsync.else', () => {
   });
 });
 
+describe('ResultAsync.elseWith', () => {
+  it('returns value when async result is success', async () => {
+    const val = await fromAsync(Promise.resolve(Result.success(42))).elseWith(() => 0);
+    expect(val).toBe(42);
+  });
+
+  it('calls factory with errors when async result is failure', async () => {
+    const err2 = Err.validation('Code', 'msg');
+    const val = await fromAsync(Promise.resolve(Result.failure<number>(err2))).elseWith(
+      (errs) => errs.length * 10,
+    );
+    expect(val).toBe(10);
+  });
+
+  it('works when T is a function type', async () => {
+    const fn = () => 99;
+    const val = await fromAsync(
+      Promise.resolve(Result.failure<() => number>(Err.validation('Code', 'msg'))),
+    ).elseWith(() => fn);
+    expect(val).toBe(fn);
+  });
+});
+
 describe('ResultAsync terminal operations', () => {
   it('match extracts success value', async () => {
     const msg = await fromAsync(okAsync(10)).match(

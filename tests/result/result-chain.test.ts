@@ -333,7 +333,30 @@ describe('ResultChain async API', () => {
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(5);
   });
+});
 
+describe('ResultChain.elseWith', () => {
+  it('returns value when chain is success', () => {
+    const val = chain(Result.success(42)).elseWith(() => 0);
+    expect(val).toBe(42);
+  });
+
+  it('calls factory with errors when chain is failure', () => {
+    const err2 = Err.validation('Code', 'msg');
+    const val = chain(Result.failure<number>(err2)).elseWith((errs) => errs.length * 10);
+    expect(val).toBe(10);
+  });
+
+  it('works when T is a function type', () => {
+    const fn = () => 99;
+    const val = chain(Result.failure<() => number>(Err.validation('Code', 'msg'))).elseWith(
+      () => fn,
+    );
+    expect(val).toBe(fn);
+  });
+});
+
+describe('ResultChain async API continued', () => {
   it('matchAsync handles success', async () => {
     const v = await chain(Result.success(42)).matchAsync(
       async (n) => `v:${n}`,

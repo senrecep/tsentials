@@ -350,8 +350,9 @@ describe('Result combination', () => {
     if (!r.ok) expect(r.errors).toHaveLength(2);
   });
 
-  it('or throws for empty input (no errors to collect)', () => {
-    expect(() => Result.or([])).toThrow('Result.failureFrom requires at least one error');
+  it('or returns failure for empty input (no errors to collect)', () => {
+    const r = Result.or([]);
+    expect(Result.isFailure(r)).toBe(true);
   });
 });
 
@@ -899,5 +900,33 @@ describe('Result new pipeline methods', () => {
     const r = Result.combine();
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toEqual([]);
+  });
+});
+
+describe('Result.elseWith', () => {
+  it('returns value when success', () => {
+    const r = Result.success(42);
+    const val = Result.elseWith(r, () => 0);
+    expect(val).toBe(42);
+  });
+
+  it('calls factory with errors when failure', () => {
+    const err = Err.validation('Code', 'msg');
+    const r = Result.failure<number>(err);
+    const val = Result.elseWith(r, (errs) => errs.length);
+    expect(val).toBe(1);
+  });
+
+  it('works correctly when T is a function type', () => {
+    const fn = () => 42;
+    const r = Result.failure<() => number>(Err.validation('Code', 'msg'));
+    const val = Result.elseWith(r, () => fn);
+    expect(val).toBe(fn);
+  });
+
+  it('Result.or([]) returns failure instead of throwing', () => {
+    const r = Result.or([]);
+    expect(Result.isFailure(r)).toBe(true);
+    expect(Result.firstError(r)?.code).toBe('Result.Or.Empty');
   });
 });

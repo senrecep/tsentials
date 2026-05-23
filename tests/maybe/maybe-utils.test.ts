@@ -96,6 +96,19 @@ describe('tryFind', () => {
     const m = tryFind(['a', 'b', 'c'], (s) => s === 'z');
     expect(m.hasValue).toBe(false);
   });
+
+  it('returns Some when predicate matches an undefined element', () => {
+    const arr = [undefined, 1, 2] as Array<number | undefined>;
+    const result = tryFind(arr, (v) => v === undefined);
+    expect(Maybe.isSome(result)).toBe(true);
+    expect(Maybe.getOrDefault(result, 'fallback' as unknown)).toBeUndefined();
+  });
+
+  it('returns None when predicate does not match', () => {
+    const arr = [1, 2, 3];
+    const result = tryFind(arr, (v) => v === 99);
+    expect(Maybe.isNone(result)).toBe(true);
+  });
 });
 
 describe('choose', () => {

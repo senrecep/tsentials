@@ -308,6 +308,14 @@ export const RuleEngine = {
    * Evaluates an async rule against a context.
    */
   evaluateAsync<TContext>(rule: AsyncRule<TContext>, context: TContext) {
-    return rule(context);
+    return (async () => {
+      try {
+        return await rule(context);
+      } catch (e) {
+        return Result.failure(
+          Err.unexpected('Rule.EvaluationFailed', e instanceof Error ? e.message : String(e)),
+        );
+      }
+    })();
   },
 } as const;

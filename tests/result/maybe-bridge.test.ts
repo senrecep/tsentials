@@ -148,4 +148,16 @@ describe('resultToMaybe', () => {
     const restored = resultToMaybe(result);
     expect(restored.hasValue).toBe(false);
   });
+
+  it('resultToMaybe success returns a frozen Maybe', () => {
+    const r = Result.success(42);
+    const m = resultToMaybe(r);
+    expect(Object.isFrozen(m)).toBe(true);
+  });
+
+  it('resultToMaybe failure returns a frozen None', () => {
+    const r = Result.failure<number>(Err.validation('Code', 'msg'));
+    const m = resultToMaybe(r);
+    expect(Object.isFrozen(m)).toBe(true);
+  });
 });

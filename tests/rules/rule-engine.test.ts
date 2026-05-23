@@ -1,4 +1,6 @@
 import { Err } from '../../src/errors/app-error.js';
+import type { VoidResult } from '../../src/result/result.js';
+import { Result } from '../../src/result/result.js';
 import { RuleEngine } from '../../src/rules/rule-engine.js';
 
 interface UserContext {
@@ -252,5 +254,14 @@ describe('RuleEngine.evaluate', () => {
     const asyncAdult = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
     const result = await RuleEngine.evaluateAsync(asyncAdult, validUser);
     expect(result.ok).toBe(true);
+  });
+
+  it('evaluateAsync returns failure when rule throws (exception guard)', async () => {
+    const throwingRule = async (_ctx: unknown): Promise<VoidResult> => {
+      throw new Error('unexpected failure');
+    };
+    const result = await RuleEngine.evaluateAsync(throwingRule, {});
+    expect(Result.isFailure(result)).toBe(true);
+    expect(Result.firstError(result)?.code).toBe('Rule.EvaluationFailed');
   });
 });

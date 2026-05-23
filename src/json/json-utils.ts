@@ -81,6 +81,9 @@ export function parseAndValidate<T>(
   }
 
   return R.failure(
-    Err.validation('Json.ValidationError', 'Parsed object failed custom type guard validation.'),
+    Err.validation(
+      'Json.TypeValidationError',
+      'Parsed object failed custom type guard validation.',
+    ),
   );
 }

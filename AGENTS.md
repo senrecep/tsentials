@@ -333,6 +333,34 @@ Union.is(r, 'success')         // type guard
 Union.get(r, 'success')        // value or throws
 ```
 
+### Clone — deepClone & cloneArray
+
+```typescript
+import { deepClone, cloneArray } from 'tsentials/clone';
+import type { Cloneable } from 'tsentials/clone';
+
+// Hybrid: native structuredClone + recursive fallback, never throws, Hermes compatible
+const copy = deepClone({ user: { id: 1, tags: ['a', 'b'] } });
+deepClone({ createdAt: new Date(), lookup: new Map([['key', 'value']]) });
+deepClone(new Uint8Array([1, 2, 3]));  // TypedArrays supported
+
+// Handles circular references, symbols (degrade to undefined), functions (preserve reference)
+const obj: { self?: unknown } = {};
+obj.self = obj;
+deepClone(obj).self === deepClone(obj); // true
+
+// Graceful degradation — no exceptions
+deepClone({ fn: () => 42 });      // function reference preserved
+deepClone({ sym: Symbol('x') });  // symbol → undefined
+deepClone(new WeakMap());          // WeakMap {} (empty instance)
+
+// Clone array of Cloneable items
+class Product implements Cloneable<Product> {
+  clone() { return new Product(this.id); }
+}
+const cloned = cloneArray([new Product(1), new Product(2)]);
+```
+
 ### Time
 
 ```typescript

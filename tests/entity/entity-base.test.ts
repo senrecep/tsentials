@@ -100,10 +100,12 @@ describe('createEntityBase', () => {
     expect(entity.updatedBy).toBe('second');
   });
 
-  it('domain events list is immutable (frozen)', () => {
+  it('domain events list is immutable (defensive copy)', () => {
     const entity = createEntityBase();
     const events = entity.domainEvents;
-    expect(Object.isFrozen(events)).toBe(true);
+    entity.raise({ occurredOn: new Date() });
+    expect(events).toHaveLength(0);
+    expect(entity.domainEvents).toHaveLength(1);
   });
 
   it('domainEvents snapshot does not reflect future raises', () => {
@@ -112,6 +114,14 @@ describe('createEntityBase', () => {
     entity.raise({ occurredOn: new Date() });
     expect(snapshot).toHaveLength(0);
     expect(entity.domainEvents).toHaveLength(1);
+  });
+
+  it('domainEvents getter returns a defensive copy (mutations do not affect internal state)', () => {
+    const base = createEntityBase();
+    base.raise({ occurredOn: new Date() });
+    const events = base.domainEvents as DomainEvent[];
+    events.push({ occurredOn: new Date() }); // mutate the copy
+    expect(base.domainEvents).toHaveLength(1); // internal state unchanged
   });
 });
 
