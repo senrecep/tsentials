@@ -15,6 +15,13 @@
 
 Railway-oriented programming for TypeScript — `Result<T>`, `Maybe<T>`, Rule Engine, and DDD base classes with full async pipeline support.
 
+---
+
+> **[Your Function Signature Is Lying →](https://www.senrecep.com/en/blog/your-function-signature-is-lying)**  
+> A deep dive into why `try/catch` falls short in TypeScript, the philosophy behind Railway Oriented Programming, and the design decisions that shaped `tsentials`.
+
+---
+
 ## Table of Contents
 
 - [Install](#install)
