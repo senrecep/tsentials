@@ -338,4 +338,64 @@ describe('RequestBuilder fluent API', () => {
       expect(result.value.name).toBe('Alice');
     }
   });
+
+  it('sends POST without body (null body fallback)', async () => {
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await RequestBuilder.post('https://api.example.com/users').send<unknown>();
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    expect(init.method).toBe('POST');
+  });
+
+  it('sends PUT without body (null body fallback)', async () => {
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await RequestBuilder.put('https://api.example.com/users/1').send<unknown>();
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    expect(init.method).toBe('PUT');
+  });
+
+  it('sends PATCH without body (null body fallback)', async () => {
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await RequestBuilder.patch('https://api.example.com/users/1').send<unknown>();
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    expect(init.method).toBe('PATCH');
+  });
+
+  it('falls back to GET for unknown HTTP method (default branch)', async () => {
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    // Bypass private constructor to trigger the default case in send()
+    const builder = Reflect.construct(RequestBuilder, [
+      'OPTIONS',
+      'https://api.example.com/test',
+    ]) as RequestBuilder;
+    await builder.send<unknown>();
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
 });
