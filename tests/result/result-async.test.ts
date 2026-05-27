@@ -418,3 +418,301 @@ describe('ResultAsync pipeline chaining', () => {
     if (r.ok) expect(r.value).toBe(6);
   });
 });
+
+describe('ResultAsync.compensate with Promise<Result<T>>', () => {
+  it('recovers with Promise<Result<T>>', async () => {
+    const r = await fromAsync(failAsync<number>()).compensate(() =>
+      Promise.resolve(Result.success(77)),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(77);
+  });
+});
+
+describe('ResultAsync.bindIf', () => {
+  it('applies fn when boolean condition is true', async () => {
+    const r = await fromAsync(okAsync(5)).bindIf(true, (n) => Result.success(n * 2));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(10);
+  });
+
+  it('skips fn when boolean condition is false', async () => {
+    const r = await fromAsync(okAsync(5)).bindIf(false, (n) => Result.success(n * 2));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(5);
+  });
+
+  it('applies fn when function condition returns true', async () => {
+    const r = await fromAsync(okAsync(10)).bindIf(
+      (n) => n > 5,
+      (n) => Result.success(n + 1),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(11);
+  });
+
+  it('skips fn when function condition returns false', async () => {
+    const r = await fromAsync(okAsync(3)).bindIf(
+      (n) => n > 5,
+      (n) => Result.success(n + 1),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(3);
+  });
+
+  it('short-circuits on failure', async () => {
+    const called: boolean[] = [];
+    const r = await fromAsync(failAsync<number>()).bindIf(true, (n) => {
+      called.push(true);
+      return Result.success(n);
+    });
+    expect(r.ok).toBe(false);
+    expect(called).toHaveLength(0);
+  });
+
+  it('works with ResultAsync return', async () => {
+    const r = await fromAsync(okAsync(5)).bindIf(true, (n) => ResultAsync.success(n * 3));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(15);
+  });
+
+  it('works with Promise<Result> return', async () => {
+    const r = await fromAsync(okAsync(5)).bindIf(true, (n) =>
+      Promise.resolve(Result.success(n * 4)),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(20);
+  });
+
+  it('propagates failure from fn', async () => {
+    const r = await fromAsync(okAsync(5)).bindIf(true, () => Result.failure<number>(err));
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe('ResultAsync.tapIf', () => {
+  it('runs effect when boolean condition is true', async () => {
+    const seen: number[] = [];
+    const r = await fromAsync(okAsync(7)).tapIf(true, (n) => {
+      seen.push(n);
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(7);
+    expect(seen).toEqual([7]);
+  });
+
+  it('skips effect when boolean condition is false', async () => {
+    const seen: number[] = [];
+    await fromAsync(okAsync(7)).tapIf(false, (n) => {
+      seen.push(n);
+    });
+    expect(seen).toHaveLength(0);
+  });
+
+  it('runs effect when function condition returns true', async () => {
+    const seen: number[] = [];
+    await fromAsync(okAsync(10)).tapIf(
+      (n) => n > 5,
+      (n) => {
+        seen.push(n);
+      },
+    );
+    expect(seen).toEqual([10]);
+  });
+
+  it('skips effect when function condition returns false', async () => {
+    const seen: number[] = [];
+    await fromAsync(okAsync(3)).tapIf(
+      (n) => n > 5,
+      (n) => {
+        seen.push(n);
+      },
+    );
+    expect(seen).toHaveLength(0);
+  });
+
+  it('short-circuits on failure', async () => {
+    const seen: number[] = [];
+    const r = await fromAsync(failAsync<number>()).tapIf(true, (n) => {
+      seen.push(n);
+    });
+    expect(r.ok).toBe(false);
+    expect(seen).toHaveLength(0);
+  });
+
+  it('supports async effect', async () => {
+    const seen: number[] = [];
+    await fromAsync(okAsync(9)).tapIf(true, async (n) => {
+      seen.push(n);
+    });
+    expect(seen).toEqual([9]);
+  });
+});
+
+describe('ResultAsync.compensateFirst', () => {
+  it('recovers using first error with Result<T>', async () => {
+    const r = await fromAsync(failAsync<number>()).compensateFirst((firstErr) =>
+      Result.success(firstErr.code.length),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe('Test.Invalid'.length);
+  });
+
+  it('recovers using first error with ResultAsync<T>', async () => {
+    const r = await fromAsync(failAsync<number>()).compensateFirst(() => ResultAsync.success(42));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(42);
+  });
+
+  it('recovers using first error with Promise<Result<T>>', async () => {
+    const r = await fromAsync(failAsync<number>()).compensateFirst(() =>
+      Promise.resolve(Result.success(55)),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(55);
+  });
+
+  it('passes through success', async () => {
+    const r = await fromAsync(okAsync(10)).compensateFirst(() => Result.success(99));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(10);
+  });
+
+  it('can return failure from recovery fn', async () => {
+    const r = await fromAsync(failAsync<number>()).compensateFirst(() =>
+      Result.failure<number>(notFound),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Test.NotFound');
+  });
+});
+
+describe('ResultAsync.recover', () => {
+  it('recovers when predicate matches', async () => {
+    const r = await fromAsync(failAsync<number>()).recover(
+      (e) => e.code === 'Test.Invalid',
+      () => Result.success(100),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(100);
+  });
+
+  it('does not recover when predicate does not match', async () => {
+    const r = await fromAsync(failAsync<number>()).recover(
+      (e) => e.code === 'Other.Code',
+      () => Result.success(100),
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('passes through success', async () => {
+    const r = await fromAsync(okAsync(5)).recover(
+      () => true,
+      () => Result.success(99),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(5);
+  });
+
+  it('recovers with ResultAsync<T>', async () => {
+    const r = await fromAsync(failAsync<number>()).recover(
+      (e) => e.code === 'Test.Invalid',
+      () => ResultAsync.success(77),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(77);
+  });
+
+  it('recovers with Promise<Result<T>>', async () => {
+    const r = await fromAsync(failAsync<number>()).recover(
+      (e) => e.code === 'Test.Invalid',
+      () => Promise.resolve(Result.success(66)),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(66);
+  });
+});
+
+describe('ResultAsync.always', () => {
+  it('receives success result', async () => {
+    const val = await fromAsync(okAsync(10)).always((r) => (r.ok ? r.value * 2 : -1));
+    expect(val).toBe(20);
+  });
+
+  it('receives failure result', async () => {
+    const val = await fromAsync(failAsync<number>()).always((r) =>
+      r.ok ? r.value : r.errors[0]!.code,
+    );
+    expect(val).toBe('Test.Invalid');
+  });
+
+  it('supports async fn', async () => {
+    const val = await fromAsync(okAsync(3)).always(async (r) => (r.ok ? r.value + 1 : 0));
+    expect(val).toBe(4);
+  });
+});
+
+describe('ResultAsync.sequence', () => {
+  it('collects all successes', async () => {
+    const r = await ResultAsync.sequence([
+      ResultAsync.success(1),
+      ResultAsync.success(2),
+      ResultAsync.success(3),
+    ]);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([1, 2, 3]);
+  });
+
+  it('collects all errors on failure', async () => {
+    const r = await ResultAsync.sequence([
+      ResultAsync.success(1),
+      ResultAsync.failure(err),
+      ResultAsync.failure(notFound),
+    ]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors).toHaveLength(2);
+  });
+
+  it('returns empty array for empty input', async () => {
+    const r = await ResultAsync.sequence([]);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+});
+
+describe('ResultAsync.partition', () => {
+  it('separates successes and failures', async () => {
+    const { ok, err: errs } = await ResultAsync.partition([
+      ResultAsync.success(1),
+      ResultAsync.failure(err),
+      ResultAsync.success(3),
+      ResultAsync.failure(notFound),
+    ]);
+    expect(ok).toEqual([1, 3]);
+    expect(errs).toHaveLength(2);
+  });
+
+  it('returns all successes when no failures', async () => {
+    const { ok, err: errs } = await ResultAsync.partition([
+      ResultAsync.success(10),
+      ResultAsync.success(20),
+    ]);
+    expect(ok).toEqual([10, 20]);
+    expect(errs).toHaveLength(0);
+  });
+
+  it('returns all failures when no successes', async () => {
+    const { ok, err: errs } = await ResultAsync.partition([
+      ResultAsync.failure<number>(err),
+      ResultAsync.failure<number>(notFound),
+    ]);
+    expect(ok).toHaveLength(0);
+    expect(errs).toHaveLength(2);
+  });
+
+  it('handles empty input', async () => {
+    const { ok, err: errs } = await ResultAsync.partition([]);
+    expect(ok).toEqual([]);
+    expect(errs).toEqual([]);
+  });
+});

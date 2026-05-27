@@ -1,5 +1,5 @@
 import type { DomainEvent } from '../../src/entity/domain-event.js';
-import { createEntityBase } from '../../src/entity/entity-base.js';
+import { createEntityBase, createEntityBaseWithId } from '../../src/entity/entity-base.js';
 import { createSoftDeletable } from '../../src/entity/soft-deletable.js';
 
 interface UserCreatedEvent extends DomainEvent {
@@ -122,6 +122,50 @@ describe('createEntityBase', () => {
     const events = base.domainEvents as DomainEvent[];
     events.push({ occurredOn: new Date() }); // mutate the copy
     expect(base.domainEvents).toHaveLength(1); // internal state unchanged
+  });
+});
+
+describe('createEntityBaseWithId', () => {
+  it('initializes with a provided id', () => {
+    const entity = createEntityBaseWithId<string>('abc-123');
+    expect(entity.id).toBe('abc-123');
+  });
+
+  it('initializes with a numeric id', () => {
+    const entity = createEntityBaseWithId<number>(42);
+    expect(entity.id).toBe(42);
+  });
+
+  it('throws when id is not set and accessed', () => {
+    const entity = createEntityBaseWithId<string>();
+    expect(() => entity.id).toThrow('Entity ID has not been set.');
+  });
+
+  it('sets id via setId', () => {
+    const entity = createEntityBaseWithId<string>();
+    entity.setId('new-id');
+    expect(entity.id).toBe('new-id');
+  });
+
+  it('overwrites id via setId', () => {
+    const entity = createEntityBaseWithId<string>('original');
+    entity.setId('updated');
+    expect(entity.id).toBe('updated');
+  });
+
+  it('initializes createdAt to epoch via base', () => {
+    const entity = createEntityBaseWithId<string>('init');
+    expect(entity.createdAt).toEqual(new Date(0));
+  });
+
+  it('initializes updatedAt to undefined via base', () => {
+    const entity = createEntityBaseWithId<string>('init');
+    expect(entity.updatedAt).toBeUndefined();
+  });
+
+  it('initializes domainEvents to empty via base', () => {
+    const entity = createEntityBaseWithId<string>('init');
+    expect(entity.domainEvents).toHaveLength(0);
   });
 });
 

@@ -244,6 +244,175 @@ describe('RuleEngine async', () => {
   });
 });
 
+describe('RuleEngine.linearTyped', () => {
+  const toAge = (ctx: UserContext): Result<number> => Result.success(ctx.age);
+  const failTyped = (_ctx: UserContext): Result<number> =>
+    Result.failure(Err.validation('Typed.Fail', 'typed fail'));
+
+  it('stops on first failure', () => {
+    const rule = RuleEngine.linearTyped(failTyped, toAge);
+    const result = rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]!.code).toBe('Typed.Fail');
+  });
+
+  it('returns RuleEngine.Empty fallback when all rules pass', () => {
+    const rule = RuleEngine.linearTyped(toAge, toAge);
+    const result = rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]!.code).toBe('RuleEngine.Empty');
+  });
+
+  it('returns RuleEngine.Empty for empty rules', () => {
+    const rule = RuleEngine.linearTyped<UserContext, number>();
+    const result = rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]!.code).toBe('RuleEngine.Empty');
+  });
+});
+
+describe('RuleEngine.linearTypedAsync', () => {
+  const toAgeAsync = async (ctx: UserContext): Promise<Result<number>> => Result.success(ctx.age);
+  const failTypedAsync = async (_ctx: UserContext): Promise<Result<number>> =>
+    Result.failure(Err.validation('Typed.Fail', 'typed fail'));
+
+  it('stops on first failure', async () => {
+    const rule = RuleEngine.linearTypedAsync(failTypedAsync, toAgeAsync);
+    const result = await rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]!.code).toBe('Typed.Fail');
+  });
+
+  it('returns RuleEngine.Empty fallback when all rules pass', async () => {
+    const rule = RuleEngine.linearTypedAsync(toAgeAsync);
+    const result = await rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]!.code).toBe('RuleEngine.Empty');
+  });
+
+  it('returns RuleEngine.Empty for empty rules', async () => {
+    const rule = RuleEngine.linearTypedAsync<UserContext, number>();
+    const result = await rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]!.code).toBe('RuleEngine.Empty');
+  });
+});
+
+describe('RuleEngine.andTyped', () => {
+  const toAge = (ctx: UserContext): Result<number> => Result.success(ctx.age);
+  const failA = (_ctx: UserContext): Result<number> =>
+    Result.failure(Err.validation('A.Fail', 'a'));
+  const failB = (_ctx: UserContext): Result<number> =>
+    Result.failure(Err.validation('B.Fail', 'b'));
+
+  it('returns last value when all pass', () => {
+    const rule = RuleEngine.andTyped(toAge, toAge);
+    const result = rule(validUser);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(25);
+  });
+
+  it('collects ALL errors (no short-circuit)', () => {
+    const rule = RuleEngine.andTyped(failA, failB);
+    const result = rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toHaveLength(2);
+  });
+
+  it('collects errors while tracking last success value', () => {
+    const rule = RuleEngine.andTyped(toAge, failA);
+    const result = rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toHaveLength(1);
+  });
+});
+
+describe('RuleEngine.andTypedAsync', () => {
+  const toAgeAsync = async (ctx: UserContext): Promise<Result<number>> => Result.success(ctx.age);
+  const failAAsync = async (_ctx: UserContext): Promise<Result<number>> =>
+    Result.failure(Err.validation('A.Fail', 'a'));
+  const failBAsync = async (_ctx: UserContext): Promise<Result<number>> =>
+    Result.failure(Err.validation('B.Fail', 'b'));
+
+  it('returns last value when all pass', async () => {
+    const rule = RuleEngine.andTypedAsync(toAgeAsync);
+    const result = await rule(validUser);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(25);
+  });
+
+  it('collects ALL errors', async () => {
+    const rule = RuleEngine.andTypedAsync(failAAsync, failBAsync);
+    const result = await rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toHaveLength(2);
+  });
+
+  it('collects errors while tracking last success value', async () => {
+    const rule = RuleEngine.andTypedAsync(toAgeAsync, failAAsync);
+    const result = await rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toHaveLength(1);
+  });
+});
+
+describe('RuleEngine.orTyped', () => {
+  const toAge = (ctx: UserContext): Result<number> => Result.success(ctx.age);
+  const failA = (_ctx: UserContext): Result<number> =>
+    Result.failure(Err.validation('A.Fail', 'a'));
+  const failB = (_ctx: UserContext): Result<number> =>
+    Result.failure(Err.validation('B.Fail', 'b'));
+
+  it('returns first success', () => {
+    const rule = RuleEngine.orTyped(failA, toAge);
+    const result = rule(validUser);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(25);
+  });
+
+  it('collects all errors when all fail', () => {
+    const rule = RuleEngine.orTyped(failA, failB);
+    const result = rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toHaveLength(2);
+  });
+});
+
+describe('RuleEngine.orTypedAsync', () => {
+  const toAgeAsync = async (ctx: UserContext): Promise<Result<number>> => Result.success(ctx.age);
+  const failAAsync = async (_ctx: UserContext): Promise<Result<number>> =>
+    Result.failure(Err.validation('A.Fail', 'a'));
+  const failBAsync = async (_ctx: UserContext): Promise<Result<number>> =>
+    Result.failure(Err.validation('B.Fail', 'b'));
+
+  it('returns first success', async () => {
+    const rule = RuleEngine.orTypedAsync(failAAsync, toAgeAsync);
+    const result = await rule(validUser);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(25);
+  });
+
+  it('collects all errors when all fail', async () => {
+    const rule = RuleEngine.orTypedAsync(failAAsync, failBAsync);
+    const result = await rule(validUser);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toHaveLength(2);
+  });
+});
+
+describe('RuleEngine.ifAsync (no onFalse)', () => {
+  it('returns ok when condition fails and no onFalse provided', async () => {
+    const asyncAdult = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
+    const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(
+      async (u) => u.email.includes('@'),
+      emailErr,
+    );
+    const rule = RuleEngine.ifAsync(asyncAdult, asyncEmail);
+    const result = await rule(minorUser);
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe('RuleEngine.evaluate', () => {
   it('delegates to rule function', () => {
     const result = RuleEngine.evaluate(isAdult, validUser);
@@ -263,5 +432,15 @@ describe('RuleEngine.evaluate', () => {
     const result = await RuleEngine.evaluateAsync(throwingRule, {});
     expect(Result.isFailure(result)).toBe(true);
     expect(Result.firstError(result)?.code).toBe('Rule.EvaluationFailed');
+  });
+
+  it('evaluateAsync handles non-Error thrown values', async () => {
+    const throwingRule = async (_ctx: unknown): Promise<VoidResult> => {
+      throw 'string error';
+    };
+    const result = await RuleEngine.evaluateAsync(throwingRule, {});
+    expect(Result.isFailure(result)).toBe(true);
+    expect(Result.firstError(result)?.code).toBe('Rule.EvaluationFailed');
+    expect(Result.firstError(result)?.description).toBe('string error');
   });
 });
