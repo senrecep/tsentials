@@ -13,7 +13,6 @@ jobs:
 
     permissions:
       contents: read
-      code-quality: write
 
     strategy:
       matrix:
@@ -45,13 +44,13 @@ jobs:
         if: matrix.node-version == '20.x'
         run: npm run test:coverage
 
-      - name: Upload code coverage
+      - name: Upload coverage to Codecov
         if: matrix.node-version == '20.x'
-        uses: actions/upload-code-coverage@v1
+        uses: codecov/codecov-action@v5
         with:
-          file: coverage/cobertura-coverage.xml
-          language: TypeScript
-          label: code-coverage/vitest
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/cobertura-coverage.xml
+          fail_ci_if_error: true
 
       - name: Lint (Biome)
         run: npm run check
