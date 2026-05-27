@@ -11,6 +11,9 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     strategy:
       matrix:
         node-version: [18.x, 20.x, 22.x]
@@ -34,7 +37,20 @@ jobs:
         run: npm run build
 
       - name: Test
+        if: matrix.node-version != '20.x'
         run: npm test
+
+      - name: Test with coverage
+        if: matrix.node-version == '20.x'
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        if: matrix.node-version == '20.x'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/cobertura-coverage.xml
+          fail_ci_if_error: true
 
       - name: Lint (Biome)
         run: npm run check
