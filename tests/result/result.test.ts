@@ -930,3 +930,400 @@ describe('Result.elseWith', () => {
     expect(Result.firstError(r)?.code).toBe('Result.Or.Empty');
   });
 });
+
+// ─── Coverage: uncovered functions and branches ──────────────────────────────
+
+describe('Result.tryGet', () => {
+  it('returns [true, value, undefined] on success', () => {
+    const [ok, value, errors] = Result.tryGet(Result.success(42));
+    expect(ok).toBe(true);
+    expect(value).toBe(42);
+    expect(errors).toBeUndefined();
+  });
+
+  it('returns [false, undefined, errors] on failure', () => {
+    const [ok, value, errors] = Result.tryGet(Result.failure(validationError));
+    expect(ok).toBe(false);
+    expect(value).toBeUndefined();
+    expect(errors).toHaveLength(1);
+  });
+});
+
+describe('Result.switch', () => {
+  it('calls onSuccess for success result', () => {
+    const seen: number[] = [];
+    Result.switch(
+      Result.success(42),
+      (v) => seen.push(v),
+      () => seen.push(-1),
+    );
+    expect(seen).toEqual([42]);
+  });
+
+  it('calls onError for failure result', () => {
+    const seen: string[] = [];
+    Result.switch(
+      Result.failure(validationError),
+      () => seen.push('ok'),
+      (errs) => seen.push(errs[0]!.code),
+    );
+    expect(seen).toEqual(['Test.Invalid']);
+  });
+});
+
+describe('Result.matchFirst', () => {
+  it('returns success branch value', () => {
+    const msg = Result.matchFirst(
+      Result.success(42),
+      (v) => `Got ${v}`,
+      (err) => err.code,
+    );
+    expect(msg).toBe('Got 42');
+  });
+
+  it('returns first error branch value', () => {
+    const msg = Result.matchFirst(
+      Result.failureFrom([validationError, notFoundError]),
+      () => 'OK',
+      (err) => err.code,
+    );
+    expect(msg).toBe('Test.Invalid');
+  });
+
+  it('returns fallback for empty errors (edge)', () => {
+    const fakeFailure = { ok: false as const, errors: [] as const };
+    const msg = Result.matchFirst(
+      fakeFailure,
+      () => 'OK',
+      (err) => err.code,
+    );
+    expect(msg).toBe('Result.Empty');
+  });
+});
+
+describe('Result.matchLast', () => {
+  it('returns success branch value', () => {
+    const msg = Result.matchLast(
+      Result.success(42),
+      (v) => `Got ${v}`,
+      (err) => err.code,
+    );
+    expect(msg).toBe('Got 42');
+  });
+
+  it('returns last error branch value', () => {
+    const msg = Result.matchLast(
+      Result.failureFrom([validationError, notFoundError]),
+      () => 'OK',
+      (err) => err.code,
+    );
+    expect(msg).toBe('Test.NotFound');
+  });
+
+  it('returns fallback for empty errors (edge)', () => {
+    const fakeFailure = { ok: false as const, errors: [] as const };
+    const msg = Result.matchLast(
+      fakeFailure,
+      () => 'OK',
+      (err) => err.code,
+    );
+    expect(msg).toBe('Result.Empty');
+  });
+});
+
+describe('Result.switchFirst', () => {
+  it('calls onSuccess for success result', () => {
+    const seen: number[] = [];
+    Result.switchFirst(
+      Result.success(42),
+      (v) => seen.push(v),
+      () => seen.push(-1),
+    );
+    expect(seen).toEqual([42]);
+  });
+
+  it('calls onFirstError for failure result', () => {
+    const seen: string[] = [];
+    Result.switchFirst(
+      Result.failureFrom([validationError, notFoundError]),
+      () => seen.push('ok'),
+      (err) => seen.push(err.code),
+    );
+    expect(seen).toEqual(['Test.Invalid']);
+  });
+
+  it('calls onFirstError with fallback for empty errors (edge)', () => {
+    const fakeFailure = { ok: false as const, errors: [] as const };
+    const seen: string[] = [];
+    Result.switchFirst(
+      fakeFailure,
+      () => seen.push('ok'),
+      (err) => seen.push(err.code),
+    );
+    expect(seen).toEqual(['Result.Empty']);
+  });
+});
+
+describe('Result.switchLast', () => {
+  it('calls onSuccess for success result', () => {
+    const seen: number[] = [];
+    Result.switchLast(
+      Result.success(42),
+      (v) => seen.push(v),
+      () => seen.push(-1),
+    );
+    expect(seen).toEqual([42]);
+  });
+
+  it('calls onLastError for failure result', () => {
+    const seen: string[] = [];
+    Result.switchLast(
+      Result.failureFrom([validationError, notFoundError]),
+      () => seen.push('ok'),
+      (err) => seen.push(err.code),
+    );
+    expect(seen).toEqual(['Test.NotFound']);
+  });
+
+  it('calls onLastError with fallback for empty errors (edge)', () => {
+    const fakeFailure = { ok: false as const, errors: [] as const };
+    const seen: string[] = [];
+    Result.switchLast(
+      fakeFailure,
+      () => seen.push('ok'),
+      (err) => seen.push(err.code),
+    );
+    expect(seen).toEqual(['Result.Empty']);
+  });
+});
+
+describe('Result.tapErrorFirst', () => {
+  it('runs fn with first error on failure', () => {
+    const seen: string[] = [];
+    const r = Result.tapErrorFirst(Result.failureFrom([validationError, notFoundError]), (err) =>
+      seen.push(err.code),
+    );
+    expect(r.ok).toBe(false);
+    expect(seen).toEqual(['Test.Invalid']);
+  });
+
+  it('skips fn on success', () => {
+    const seen: string[] = [];
+    const r = Result.tapErrorFirst(Result.success(42), (err) => seen.push(err.code));
+    expect(r.ok).toBe(true);
+    expect(seen).toHaveLength(0);
+  });
+
+  it('skips fn on failure with empty errors (edge)', () => {
+    const fakeFailure = { ok: false as const, errors: [] as const };
+    const seen: string[] = [];
+    const r = Result.tapErrorFirst(fakeFailure, (err) => seen.push(err.code));
+    expect(r.ok).toBe(false);
+    expect(seen).toHaveLength(0);
+  });
+});
+
+describe('Result.ensureNotNull', () => {
+  it('passes through non-null success', () => {
+    const r = Result.ensureNotNull(Result.success(42), validationError);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(42);
+  });
+
+  it('fails on null value', () => {
+    const r = Result.ensureNotNull(Result.success(null), validationError);
+    expect(r.ok).toBe(false);
+  });
+
+  it('fails on undefined value', () => {
+    const r = Result.ensureNotNull(Result.success(undefined), validationError);
+    expect(r.ok).toBe(false);
+  });
+
+  it('passes through existing failure', () => {
+    const r = Result.ensureNotNull(Result.failure<number | null>(notFoundError), validationError);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Test.NotFound');
+  });
+});
+
+describe('Result.failWhen', () => {
+  it('fails when predicate is true', () => {
+    const r = Result.failWhen(Result.success(3), (n) => n < 5, validationError);
+    expect(r.ok).toBe(false);
+  });
+
+  it('passes through when predicate is false', () => {
+    const r = Result.failWhen(Result.success(10), (n) => n < 5, validationError);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(10);
+  });
+
+  it('supports function error factory', () => {
+    const r = Result.failWhen(
+      Result.success(3),
+      (n) => n < 5,
+      (n) => Err.validation('Value.TooSmall', `Value ${n} is too small`),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.description).toBe('Value 3 is too small');
+  });
+
+  it('passes through existing failure', () => {
+    const r = Result.failWhen(Result.failure<number>(notFoundError), () => true, validationError);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Test.NotFound');
+  });
+});
+
+describe('Result.tryCatch', () => {
+  it('maps value on success', () => {
+    const r = Result.tryCatch(Result.success('{"a":1}'), (s) => JSON.parse(s) as unknown);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual({ a: 1 });
+  });
+
+  it('catches thrown error with default handler', () => {
+    const r = Result.tryCatch(Result.success('{invalid}'), (s) => JSON.parse(s) as unknown);
+    expect(r.ok).toBe(false);
+  });
+
+  it('catches thrown error with static AppError', () => {
+    const r = Result.tryCatch(
+      Result.success('{invalid}'),
+      (s) => JSON.parse(s) as unknown,
+      Err.validation('JSON.Bad', 'Bad JSON'),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('JSON.Bad');
+  });
+
+  it('catches thrown error with function error factory', () => {
+    const r = Result.tryCatch(
+      Result.success('{invalid}'),
+      (s) => JSON.parse(s) as unknown,
+      (e) => Err.validation('JSON.Custom', String(e)),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('JSON.Custom');
+  });
+
+  it('passes through existing failure', () => {
+    const r = Result.tryCatch(Result.failure<string>(notFoundError), (s) => s.toUpperCase());
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Test.NotFound');
+  });
+});
+
+describe('Result.tryCatchAsync', () => {
+  it('maps value on success', async () => {
+    const r = await Result.tryCatchAsync(Result.success(5), async (n) => n * 2);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(10);
+  });
+
+  it('catches thrown error with default handler', async () => {
+    const r = await Result.tryCatchAsync(Result.success(1), async () => {
+      throw new Error('boom');
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it('catches thrown error with static AppError', async () => {
+    const r = await Result.tryCatchAsync(
+      Result.success(1),
+      async () => {
+        throw new Error('boom');
+      },
+      Err.validation('Async.Bad', 'Bad async'),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Async.Bad');
+  });
+
+  it('catches thrown error with function error factory', async () => {
+    const r = await Result.tryCatchAsync(
+      Result.success(1),
+      async () => {
+        throw new Error('async boom');
+      },
+      (e) => Err.validation('Async.Custom', String(e)),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Async.Custom');
+  });
+
+  it('passes through existing failure', async () => {
+    const r = await Result.tryCatchAsync(Result.failure<number>(notFoundError), async (n) => n * 2);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Test.NotFound');
+  });
+});
+
+describe('Result.fromValue', () => {
+  it('creates a success result from a value', () => {
+    const r = Result.fromValue(42);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(42);
+  });
+});
+
+describe('Result.fromError', () => {
+  it('creates a failure result from an error', () => {
+    const r = Result.fromError(validationError);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Test.Invalid');
+  });
+});
+
+describe('Result.ensure passes through failure', () => {
+  it('returns the failure without calling predicate', () => {
+    const called: boolean[] = [];
+    const r = Result.ensure(
+      Result.failure<number>(validationError),
+      () => {
+        called.push(true);
+        return true;
+      },
+      notFoundError,
+    );
+    expect(r.ok).toBe(false);
+    expect(called).toHaveLength(0);
+  });
+});
+
+describe('Result.ensureAsync passes through failure', () => {
+  it('returns the failure without calling predicate', async () => {
+    const called: boolean[] = [];
+    const r = await Result.ensureAsync(
+      Result.failure<number>(validationError),
+      async () => {
+        called.push(true);
+        return true;
+      },
+      notFoundError,
+    );
+    expect(r.ok).toBe(false);
+    expect(called).toHaveLength(0);
+  });
+});
+
+describe('Result.compensateFirst with empty errors (edge)', () => {
+  it('uses fallback error for empty errors array', () => {
+    const fakeFailure = { ok: false as const, errors: [] as const };
+    const r = Result.compensateFirst(fakeFailure, (err) => Result.success(err.code));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe('Result.Empty');
+  });
+});
+
+describe('Result.compensateFirstAsync with empty errors (edge)', () => {
+  it('uses fallback error for empty errors array', async () => {
+    const fakeFailure = { ok: false as const, errors: [] as const };
+    const r = await Result.compensateFirstAsync(fakeFailure, async (err) =>
+      Result.success(err.code),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe('Result.Empty');
+  });
+});

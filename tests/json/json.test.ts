@@ -1,3 +1,5 @@
+import { vi } from 'vitest';
+import * as jsonGuards from '../../src/json/json-guards.js';
 import { isJson, isJsonArray, isJsonObject, isJsonPrimitive } from '../../src/json/json-guards.js';
 import { parseAndValidate, safeJsonParse, safeJsonStringify } from '../../src/json/json-utils.js';
 import { Result } from '../../src/result/result.js';
@@ -153,5 +155,85 @@ describe('parseAndValidate', () => {
     expect(Result.isFailure(validateError)).toBe(true);
     expect(Result.firstError(parseError)?.code).toBe('Json.SyntaxError');
     expect(Result.firstError(validateError)?.code).toBe('Json.TypeValidationError');
+  });
+});
+
+// ─── safeJsonParse — ValidationError branch ──────────────────────────────────
+
+describe('safeJsonParse (ValidationError branch)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns Json.ValidationError when isJson returns false for parsed value', () => {
+    vi.spyOn(jsonGuards, 'isJson').mockReturnValue(false);
+    const result = safeJsonParse('{"key":"value"}');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.code).toBe('Json.ValidationError');
+    }
+  });
+
+  it('uses fallback message when JSON.parse throws a non-Error value', () => {
+    vi.spyOn(JSON, 'parse').mockImplementation(() => {
+      throw 'string error';
+    });
+    const result = safeJsonParse('anything');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.code).toBe('Json.SyntaxError');
+      expect(result.errors[0]?.description).toBe('JSON syntax error');
+    }
+  });
+});
+
+// ─── safeJsonStringify — error branch ────────────────────────────────────────
+
+describe('safeJsonStringify (error branch)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns Json.StringifyFailed on circular reference', () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const result = safeJsonStringify(circular as never);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.code).toBe('Json.StringifyFailed');
+    }
+  });
+
+  it('uses fallback message when JSON.stringify throws a non-Error value', () => {
+    vi.spyOn(JSON, 'stringify').mockImplementation(() => {
+      throw 'string error';
+    });
+    const result = safeJsonStringify({ a: 1 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.code).toBe('Json.StringifyFailed');
+      expect(result.errors[0]?.description).toBe('Failed to stringify JSON value.');
+    }
+  });
+});
+
+// ─── parseAndValidate — non-Error catch branch ───────────────────────────────
+
+describe('parseAndValidate (non-Error catch branch)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('uses fallback message when JSON.parse throws a non-Error value', () => {
+    vi.spyOn(JSON, 'parse').mockImplementation(() => {
+      throw 'string error';
+    });
+    const isNumber = (v: unknown): v is number => typeof v === 'number';
+    const result = parseAndValidate<number>('anything', isNumber);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.code).toBe('Json.SyntaxError');
+      expect(result.errors[0]?.description).toBe('JSON syntax error');
+    }
   });
 });

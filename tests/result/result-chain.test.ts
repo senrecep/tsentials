@@ -335,6 +335,128 @@ describe('ResultChain async API', () => {
   });
 });
 
+describe('ResultChain sync extras', () => {
+  it('bindIf binds when condition true', () => {
+    const r = chain(Result.success(5))
+      .bindIf(true, (n) => Result.success(n * 3))
+      .unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(15);
+  });
+
+  it('bindIf skips when condition false', () => {
+    const called: boolean[] = [];
+    const r = chain(Result.success(5))
+      .bindIf(false, (n) => {
+        called.push(true);
+        return Result.success(n * 3);
+      })
+      .unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(5);
+    expect(called).toHaveLength(0);
+  });
+
+  it('bindIf supports function condition', () => {
+    const r = chain(Result.success(5))
+      .bindIf(
+        (n) => n > 3,
+        (n) => Result.success(n + 1),
+      )
+      .unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(6);
+  });
+
+  it('tapIf runs side effect when condition true', () => {
+    const seen: number[] = [];
+    chain(Result.success(7)).tapIf(true, (n) => seen.push(n));
+    expect(seen).toEqual([7]);
+  });
+
+  it('tapIf skips side effect when condition false', () => {
+    const seen: number[] = [];
+    chain(Result.success(7)).tapIf(false, (n) => seen.push(n));
+    expect(seen).toHaveLength(0);
+  });
+
+  it('tapErrorIf runs on failure when condition true', () => {
+    const seen: string[] = [];
+    chain(Result.failure(err)).tapErrorIf(true, (errs) => seen.push(errs[0]!.code));
+    expect(seen).toEqual(['Test.Invalid']);
+  });
+
+  it('tapErrorIf skips on failure when condition false', () => {
+    const seen: string[] = [];
+    chain(Result.failure(err)).tapErrorIf(false, (errs) => seen.push(errs[0]!.code));
+    expect(seen).toHaveLength(0);
+  });
+
+  it('tapErrorIf supports function condition', () => {
+    const seen: string[] = [];
+    chain(Result.failure(err)).tapErrorIf(
+      (errs) => errs.length > 0,
+      (errs) => seen.push(errs[0]!.code),
+    );
+    expect(seen).toEqual(['Test.Invalid']);
+  });
+
+  it('compensateFirst recovers using first error', () => {
+    const r = chain(Result.failure<number>(err))
+      .compensateFirst((firstErr) => {
+        expect(firstErr.code).toBe('Test.Invalid');
+        return Result.success(55);
+      })
+      .unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(55);
+  });
+
+  it('compensateFirst passes through success', () => {
+    const called: boolean[] = [];
+    const r = chain(Result.success(3))
+      .compensateFirst(() => {
+        called.push(true);
+        return Result.success(0);
+      })
+      .unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(3);
+    expect(called).toHaveLength(0);
+  });
+
+  it('recover recovers matching error', () => {
+    const r = chain(Result.failure<number>(err))
+      .recover(
+        (e) => e.code === 'Test.Invalid',
+        () => Result.success(88),
+      )
+      .unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(88);
+  });
+
+  it('recover skips non-matching error', () => {
+    const r = chain(Result.failure<number>(err))
+      .recover(
+        (e) => e.code === 'Other.Code',
+        () => Result.success(88),
+      )
+      .unwrap();
+    expect(r.ok).toBe(false);
+  });
+
+  it('always runs fn unconditionally on success', () => {
+    const v = chain(Result.success(42)).always((r) => (r.ok ? 'yes' : 'no'));
+    expect(v).toBe('yes');
+  });
+
+  it('always runs fn unconditionally on failure', () => {
+    const v = chain(Result.failure(err)).always((r) => (r.ok ? 'yes' : 'no'));
+    expect(v).toBe('no');
+  });
+});
+
 describe('ResultChain.elseWith', () => {
   it('returns value when chain is success', () => {
     const val = chain(Result.success(42)).elseWith(() => 0);
@@ -371,5 +493,81 @@ describe('ResultChain async API continued', () => {
       async (errs) => errs[0]!.code,
     );
     expect(v).toBe('Test.Invalid');
+  });
+
+  it('alwaysAsync runs fn with result on success', async () => {
+    const v = await chain(Result.success(10)).alwaysAsync(async (r) => (r.ok ? 'yes' : 'no'));
+    expect(v).toBe('yes');
+  });
+
+  it('alwaysAsync runs fn with result on failure', async () => {
+    const v = await chain(Result.failure(err)).alwaysAsync(async (r) => (r.ok ? 'yes' : 'no'));
+    expect(v).toBe('no');
+  });
+
+  it('bindIfAsync binds when condition is true', async () => {
+    const c = await chain(Result.success(5)).bindIfAsync(true, async (n) => Result.success(n * 2));
+    const r = c.unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(10);
+  });
+
+  it('bindIfAsync skips when condition is false', async () => {
+    const called: boolean[] = [];
+    const c = await chain(Result.success(5)).bindIfAsync(false, async (n) => {
+      called.push(true);
+      return Result.success(n * 2);
+    });
+    const r = c.unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(5);
+    expect(called).toHaveLength(0);
+  });
+
+  it('compensateFirstAsync recovers using first error', async () => {
+    const c = await chain(Result.failure<number>(err)).compensateFirstAsync(async (firstErr) => {
+      expect(firstErr.code).toBe('Test.Invalid');
+      return Result.success(99);
+    });
+    const r = c.unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(99);
+  });
+
+  it('compensateFirstAsync passes through success', async () => {
+    const called: boolean[] = [];
+    const c = await chain(Result.success(7)).compensateFirstAsync(async () => {
+      called.push(true);
+      return Result.success(0);
+    });
+    const r = c.unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(7);
+    expect(called).toHaveLength(0);
+  });
+
+  it('recoverAsync recovers matching error', async () => {
+    const c = await chain(Result.failure<number>(err)).recoverAsync(
+      (e) => e.code === 'Test.Invalid',
+      async () => Result.success(42),
+    );
+    const r = c.unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(42);
+  });
+
+  it('recoverAsync skips non-matching error', async () => {
+    const c = await chain(Result.failure<number>(err)).recoverAsync(
+      (e) => e.code === 'Other.Code',
+      async () => Result.success(42),
+    );
+    expect(c.unwrap().ok).toBe(false);
+  });
+
+  it('elseAsync calls function fallback on failure', async () => {
+    const c = await chain(Result.failure<number>(err)).elseAsync(async (errs) => errs.length * 10);
+    const r = c.unwrap();
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(10);
   });
 });

@@ -419,4 +419,119 @@ describe('deepClone fallback (without native structuredClone)', () => {
     expect(copy.value.valueOf()).toBe(BigInt(99));
     expect(copy.value).not.toBe(obj.value);
   });
+
+  it('fallback: clones Error with object cause (recursive clone of cause)', () => {
+    const cause = { reason: 'network', code: 500 };
+    const err = new Error('request failed');
+    (err as Error & { cause?: unknown }).cause = cause;
+    const copy = deepClone(err);
+    expect(copy.message).toBe('request failed');
+    const copyCause = (copy as Error & { cause?: unknown }).cause as typeof cause;
+    expect(copyCause).toEqual(cause);
+    expect(copyCause).not.toBe(cause);
+  });
+
+  it('fallback: clones Error with primitive cause (string)', () => {
+    const err = new Error('bad state');
+    (err as Error & { cause?: unknown }).cause = 'timeout';
+    const copy = deepClone(err);
+    expect(copy.message).toBe('bad state');
+    expect((copy as Error & { cause?: unknown }).cause).toBe('timeout');
+  });
+
+  it('fallback: clones DataView', () => {
+    const buffer = new ArrayBuffer(8);
+    new Uint8Array(buffer).set([1, 2, 3, 4, 5, 6, 7, 8]);
+    const view = new DataView(buffer, 2, 4);
+    const copy = deepClone(view);
+    expect(copy).toBeInstanceOf(DataView);
+    expect(copy.byteLength).toBe(4);
+    expect(copy.buffer).not.toBe(buffer);
+    expect(copy.getUint8(0)).toBe(3);
+  });
+
+  it('fallback: clones Boolean wrapper object', () => {
+    const obj = Object(true);
+    const copy = deepClone(obj);
+    expect(copy.valueOf()).toBe(true);
+    expect(copy).not.toBe(obj);
+  });
+
+  it('fallback: clones Number wrapper object', () => {
+    const obj = Object(42);
+    const copy = deepClone(obj);
+    expect(copy.valueOf()).toBe(42);
+    expect(copy).not.toBe(obj);
+  });
+
+  it('fallback: clones String wrapper object', () => {
+    const obj = Object('hello');
+    const copy = deepClone(obj);
+    expect(copy.valueOf()).toBe('hello');
+    expect(copy).not.toBe(obj);
+  });
+
+  it('fallback: clones Error with custom enumerable properties', () => {
+    const err = new Error('bad input');
+    (err as Error & { code?: string; statusCode?: number }).code = 'INVALID';
+    (err as Error & { code?: string; statusCode?: number }).statusCode = 400;
+    const copy = deepClone(err);
+    expect(copy.message).toBe('bad input');
+    expect((copy as Error & { code?: string }).code).toBe('INVALID');
+    expect((copy as Error & { statusCode?: number }).statusCode).toBe(400);
+  });
+
+  it('fallback: deep clones Array values', () => {
+    const arr = [1, 'hello', { x: 42 }];
+    const copy = deepClone(arr);
+    expect(copy).not.toBe(arr);
+    expect(copy).toEqual(arr);
+    expect(copy[2]).not.toBe(arr[2]);
+  });
+
+  it('fallback: preserves sparse array holes in Array case', () => {
+    // biome-ignore lint/suspicious/noSparseArray: intentionally testing sparse array behavior
+    const sparse = [10, , 30] as unknown[];
+    const copy = deepClone(sparse);
+    expect(copy).toHaveLength(3);
+    expect(0 in copy).toBe(true);
+    expect(1 in copy).toBe(false);
+    expect(2 in copy).toBe(true);
+    expect(copy[0]).toBe(10);
+    expect(copy[2]).toBe(30);
+  });
+
+  it('fallback: deep clones RegExp', () => {
+    const re = /foo\d+/gi;
+    const copy = deepClone(re);
+    expect(copy).not.toBe(re);
+    expect(copy.source).toBe('foo\\d+');
+    expect(copy.flags).toBe('gi');
+  });
+
+  it('fallback: returns same reference for SharedArrayBuffer', () => {
+    const sab = new SharedArrayBuffer(4);
+    const copy = deepClone(sab);
+    expect(copy).toBe(sab);
+  });
+
+  it('fallback: clones TypedArray backed by SharedArrayBuffer (non-ArrayBuffer path)', () => {
+    const sab = new SharedArrayBuffer(4);
+    const view = new Uint8Array(sab);
+    view[0] = 7;
+    view[1] = 8;
+    const copy = deepClone(view);
+    expect(copy).toBeInstanceOf(Uint8Array);
+    expect(copy[0]).toBe(7);
+    expect(copy[1]).toBe(8);
+  });
+
+  it('fallback: clones DataView backed by SharedArrayBuffer (non-ArrayBuffer path)', () => {
+    const sab = new SharedArrayBuffer(4);
+    const view = new DataView(sab);
+    view.setUint8(0, 42);
+    const copy = deepClone(view);
+    expect(copy).toBeInstanceOf(DataView);
+    expect(copy.getUint8(0)).toBe(42);
+  });
 });

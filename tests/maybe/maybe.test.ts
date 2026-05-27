@@ -456,3 +456,79 @@ describe('Maybe new methods', () => {
     if (m.hasValue) expect(m.value).toBe(30);
   });
 });
+
+describe('Maybe utility methods', () => {
+  // tryGet
+  it('tryGet returns [true, value] for Some', () => {
+    const [hasValue, value] = Maybe.tryGet(Maybe.some(42));
+    expect(hasValue).toBe(true);
+    expect(value).toBe(42);
+  });
+
+  it('tryGet returns [false, undefined] for None', () => {
+    const [hasValue, value] = Maybe.tryGet(Maybe.none<number>());
+    expect(hasValue).toBe(false);
+    expect(value).toBeUndefined();
+  });
+
+  // switch
+  it('switch calls onSome when Some', () => {
+    const seen: number[] = [];
+    Maybe.switch(
+      Maybe.some(5),
+      (n) => seen.push(n),
+      () => seen.push(-1),
+    );
+    expect(seen).toEqual([5]);
+  });
+
+  it('switch calls onNone when None', () => {
+    const seen: number[] = [];
+    Maybe.switch(
+      Maybe.none<number>(),
+      (n) => seen.push(n),
+      () => seen.push(-1),
+    );
+    expect(seen).toEqual([-1]);
+  });
+
+  // flatten
+  it('flatten returns inner Maybe when outer is Some', () => {
+    const m = Maybe.flatten(Maybe.some(Maybe.some(42)));
+    expect(m.hasValue).toBe(true);
+    if (m.hasValue) expect(m.value).toBe(42);
+  });
+
+  it('flatten returns None when outer is Some of None', () => {
+    const m = Maybe.flatten(Maybe.some(Maybe.none<number>()));
+    expect(m.hasValue).toBe(false);
+  });
+
+  it('flatten returns None when outer is None', () => {
+    const m = Maybe.flatten(Maybe.none<Maybe<number>>());
+    expect(m.hasValue).toBe(false);
+  });
+
+  // toArray
+  it('toArray returns single-element array for Some', () => {
+    const arr = Maybe.toArray(Maybe.some(7));
+    expect(arr).toEqual([7]);
+  });
+
+  it('toArray returns empty array for None', () => {
+    const arr = Maybe.toArray(Maybe.none<number>());
+    expect(arr).toEqual([]);
+  });
+
+  // getOrThrowFactory
+  it('getOrThrowFactory returns value when Some', () => {
+    const value = Maybe.getOrThrowFactory(Maybe.some(99), () => new Error('fail'));
+    expect(value).toBe(99);
+  });
+
+  it('getOrThrowFactory throws factory error when None', () => {
+    expect(() =>
+      Maybe.getOrThrowFactory(Maybe.none<number>(), () => new Error('domain error')),
+    ).toThrow('domain error');
+  });
+});
