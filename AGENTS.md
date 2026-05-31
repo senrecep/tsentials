@@ -418,7 +418,7 @@ Result.then(safeJsonParse(raw), data => validatePayload(data));
 
 ```bash
 npm run build      # tsc compile
-npm test           # vitest run (762 tests)
+npm test           # vitest run (1079 tests)
 npm run check      # biome lint + format check
 npm run lint:fix   # auto-fix lint
 ```
