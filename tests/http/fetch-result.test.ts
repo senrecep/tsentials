@@ -373,6 +373,16 @@ describe('fetchResult.put', () => {
     const result = await fetchResult.put<unknown>('https://api.example.com/user/1', {});
     expect(result.ok).toBe(false);
   });
+
+  it('returns failure on network error (TypeError)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('fetch failed'))),
+    );
+    const result = await fetchResult.put('https://api.example.com/user/1', {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]!.code).toBe('TypeError');
+  });
 });
 
 describe('fetchResult.patch', () => {
@@ -412,6 +422,16 @@ describe('fetchResult.patch', () => {
     );
     const result = await fetchResult.patch<unknown>('https://api.example.com/user/1', {});
     expect(result.ok).toBe(false);
+  });
+
+  it('returns failure on network error (TypeError)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('fetch failed'))),
+    );
+    const result = await fetchResult.patch('https://api.example.com/user/1', {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]!.code).toBe('TypeError');
   });
 });
 

@@ -15,9 +15,6 @@ function cloneArrayBuffer(buffer: ArrayBufferLike): ArrayBufferLike {
 }
 
 function cloneTypedArray(view: ArrayBufferView, buffer: ArrayBufferLike): ArrayBufferView {
-  if (view instanceof DataView) {
-    return new DataView(buffer, view.byteOffset, view.byteLength);
-  }
   const Constructor = view.constructor as new (
     buffer: ArrayBufferLike,
     byteOffset?: number,

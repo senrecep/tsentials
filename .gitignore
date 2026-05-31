@@ -32,3 +32,5 @@ npm-debug.log*
 
 
 .omc/
+plans/
+test-report.junit.xml

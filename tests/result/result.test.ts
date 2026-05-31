@@ -1327,3 +1327,59 @@ describe('Result.compensateFirstAsync with empty errors (edge)', () => {
     if (r.ok) expect(r.value).toBe('Result.Empty');
   });
 });
+
+describe('Result.traverse', () => {
+  it('collects all success values', () => {
+    const r = Result.traverse([1, 2, 3], (n) => Result.success(n * 2));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([2, 4, 6]);
+  });
+
+  it('collects ALL errors when some items fail', () => {
+    const r = Result.traverse([1, 2, 3], (n) =>
+      n === 1 ? Result.failure(validationError) : n === 3 ? Result.failure(notFoundError) : Result.success(n),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors).toHaveLength(2);
+  });
+
+  it('returns success with empty array for empty input', () => {
+    const r = Result.traverse([], () => Result.success(0));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('returns failure when a single item fails', () => {
+    const r = Result.traverse([1], () => Result.failure(validationError));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Test.Invalid');
+  });
+});
+
+describe('Result.traverseAsync', () => {
+  it('collects all success values', async () => {
+    const r = await Result.traverseAsync([1, 2, 3], async (n) => Result.success(n * 2));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([2, 4, 6]);
+  });
+
+  it('collects ALL errors when some items fail', async () => {
+    const r = await Result.traverseAsync([1, 2, 3], async (n) =>
+      n === 1 ? Result.failure(validationError) : n === 3 ? Result.failure(notFoundError) : Result.success(n),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors).toHaveLength(2);
+  });
+
+  it('returns success with empty array for empty input', async () => {
+    const r = await Result.traverseAsync([], async () => Result.success(0));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('returns failure when a single item fails', async () => {
+    const r = await Result.traverseAsync([1], async () => Result.failure(validationError));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]!.code).toBe('Test.Invalid');
+  });
+});

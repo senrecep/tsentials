@@ -83,6 +83,13 @@ describe('ErrorMetadata.fromException', () => {
     expect(meta.get('exceptionType')).toBe('Error');
     expect(meta.get('exceptionMessage')).toBe('obj');
   });
+
+  it('returns empty string for exceptionStack when stack is undefined', () => {
+    const err = new Error('no stack');
+    delete err.stack;
+    const meta = ErrorMetadata.fromException(err);
+    expect(meta.get('exceptionStack')).toBe('');
+  });
 });
 
 describe('ErrorMetadata.combine', () => {
