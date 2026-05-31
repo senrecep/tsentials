@@ -417,7 +417,8 @@ export const Result = {
    */
   tapErrorFirst<T>(result: Result<T>, fn: (firstError: AppError) => void): Result<T> {
     if (!result.ok && result.errors.length > 0) {
-      fn(result.errors[0] ?? Err.unexpected('Result.Empty', 'No errors found.'));
+      const [firstError] = result.errors;
+      if (firstError) fn(firstError);
     }
     return result;
   },
@@ -772,6 +773,43 @@ export const Result = {
       else err.push(...r.errors);
     }
     return { ok, err };
+  },
+
+  // ─── TRAVERSE ──────────────────────────────────────────────────────────────
+
+  /**
+   * Maps items through a Result-returning function, collecting ALL errors.
+   * Unlike `and(items.map(fn))`, this avoids creating an intermediate array of Results.
+   */
+  traverse<A, B>(items: readonly A[], fn: (item: A) => Result<B>): Result<B[]> {
+    const values: B[] = [];
+    const errors: AppError[] = [];
+    for (const item of items) {
+      const r = fn(item);
+      if (r.ok) values.push(r.value);
+      else errors.push(...r.errors);
+    }
+    return errors.length > 0 ? Result.failureFrom<B[]>(errors) : Result.success(values);
+  },
+
+  /**
+   * Async version of traverse.
+   * Processes items sequentially; collects ALL errors.
+   */
+  traverseAsync<A, B>(
+    items: readonly A[],
+    fn: (item: A) => Promise<Result<B>>,
+  ): Promise<Result<B[]>> {
+    return (async () => {
+      const values: B[] = [];
+      const errors: AppError[] = [];
+      for (const item of items) {
+        const r = await fn(item);
+        if (r.ok) values.push(r.value);
+        else errors.push(...r.errors);
+      }
+      return errors.length > 0 ? Result.failureFrom<B[]>(errors) : Result.success(values);
+    })();
   },
 
   // ─── ASYNC SEQUENCE ────────────────────────────────────────────────────────

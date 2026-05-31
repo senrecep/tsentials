@@ -87,6 +87,13 @@ describe('Maybe pipeline', () => {
     expect(m.hasValue).toBe(false);
   });
 
+  it('bind returns none without calling fn when input is None', () => {
+    const fn = vi.fn(() => Maybe.some(99));
+    const m = Maybe.bind(Maybe.none<number>(), fn);
+    expect(m.hasValue).toBe(false);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
   it('tap runs side effect on Some', () => {
     const seen: number[] = [];
     const m = Maybe.tap(Maybe.some(7), (n) => seen.push(n));

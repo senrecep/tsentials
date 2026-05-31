@@ -1,7 +1,7 @@
 # tsentials — Developer Guide
 
 Railway-oriented programming toolkit for TypeScript.  
-Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`, `union`, `json`.
+Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`, `union`, `json`, `string`.
 
 ## Commands
 
@@ -31,6 +31,7 @@ src/
   clone/          — Cloneable<T>, deepClone(), cloneArray()
   union/          — Union<T> discriminated union utility
   json/           — Json types, isJson/isJsonObject guards, safeJsonParse(), safeJsonStringify(), parseAndValidate()
+  string/         — String case conversion (toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase)
 ```
 
 ### Result<T>
@@ -84,6 +85,8 @@ Result.or([r1, r2])                          // first success, else all errors
 Result.combine(r1, r2, r3)                   // heterogeneous → Result<[T1, T2, T3]>
 Result.flatten(Result.success(r))            // Result<Result<T>> → Result<T>
 Result.always(r, fn)                         // unconditional — returns fn result
+Result.traverse(items, fn)                   // A[] → (A → Result<B>) → Result<B[]>, collects ALL errors
+await Result.traverseAsync(items, async fn)  // async version
 
 // Fluent chain — bind() NOT then()
 chain(Result.success(5)).bind(fn).map(fn).ensure(pred, err).match(ok, err)
@@ -238,6 +241,20 @@ await RequestBuilder.post('/users').json({ name: 'Alice' }).send<User>();
 
 // Status → ErrorType: 400/422→Validation, 401→Unauthorized, 403→Forbidden,
 //   404/410→NotFound, 409/429→Conflict, ≥500→Unexpected
+
+import { HttpCodes } from 'tsentials/http';
+import type { HttpCode } from 'tsentials/http';
+
+// Type-safe HTTP status constants
+HttpCodes.Ok           // 200
+HttpCodes.Created      // 201
+HttpCodes.NoContent    // 204
+HttpCodes.BadRequest   // 400
+HttpCodes.Unauthorized // 401
+HttpCodes.Forbidden    // 403
+HttpCodes.NotFound     // 404
+HttpCodes.Conflict     // 409
+// ... 21 total constants
 ```
 
 ### Union\<T\>
@@ -251,6 +268,10 @@ const s: Shape = { tag: 'circle', value: { radius: 5 } };
 Union.match(s, { circle: ({ radius }) => radius * 2, rect: ({ w, h }) => w * h });
 Union.is(s, 'circle')    // type guard
 Union.get(s, 'circle')   // value or throws
+
+// Collection utilities
+Union.partition(items, 'leftTag', 'rightTag')  // → { lefts: Left[], rights: Right[] }
+Union.groupBy(items)                           // → { [tag]: value[] }
 ```
 
 ### Json
@@ -287,13 +308,29 @@ isJson({ fn: () => {} })   // false — functions not valid JSON
 const processed = Result.then(safeJsonParse(rawInput), data => validatePayload(data));
 ```
 
+### String
+
+```typescript
+import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
+
+// Case conversion utilities
+toPascalCase('hello-world')          // "HelloWorld"
+toCamelCase('hello-world')           // "helloWorld"
+toKebabCase('helloWorld')            // "hello-world"
+toSnakeCase('helloWorld')            // "hello_world"
+toMacroCase('helloWorld')            // "HELLO_WORLD"
+toTrainCase('hello_world')           // "Hello-World"
+toTitleCase('helloWorld')            // "Hello World"
+toUnderscoreCamelCase('helloWorld')  // "_helloWorld"
+```
+
 ## TypeScript configuration
 - `strict: true`, `exactOptionalPropertyTypes: true`, `noUncheckedIndexedAccess: true`
 - ESM only (`"type": "module"`), `moduleResolution: "bundler"`
 - `"sideEffects": false` in package.json for full tree-shaking
 
 ## Testing
-Vitest — `npm test` runs all 652 tests across 22 test files.
+Vitest — `npm test` runs all 1075 tests across 33 test files.
 Test files mirror src/ structure under `tests/`.
 
 ## Publishing

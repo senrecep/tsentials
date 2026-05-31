@@ -118,3 +118,98 @@ describe('Union.get', () => {
     );
   });
 });
+
+describe('Union.partition', () => {
+  it('partitions circles and rects from a mixed array', () => {
+    const shapes: Shape[] = [
+      { tag: 'circle', value: { radius: 5 } },
+      { tag: 'rect', value: { width: 3, height: 4 } },
+      { tag: 'circle', value: { radius: 10 } },
+    ];
+    const { lefts, rights } = Union.partition(shapes, 'circle', 'rect');
+    expect(lefts).toEqual([{ radius: 5 }, { radius: 10 }]);
+    expect(rights).toEqual([{ width: 3, height: 4 }]);
+  });
+
+  it('partitions all variants including triangle', () => {
+    const shapes: Shape[] = [
+      { tag: 'circle', value: { radius: 1 } },
+      { tag: 'triangle', value: { base: 2, height: 3 } },
+      { tag: 'rect', value: { width: 4, height: 5 } },
+      { tag: 'triangle', value: { base: 6, height: 7 } },
+    ];
+    const { lefts, rights } = Union.partition(shapes, 'circle', 'rect');
+    expect(lefts).toEqual([{ radius: 1 }]);
+    expect(rights).toEqual([{ width: 4, height: 5 }]);
+  });
+
+  it('returns empty arrays for an empty input', () => {
+    const { lefts, rights } = Union.partition([], 'circle', 'rect');
+    expect(lefts).toEqual([]);
+    expect(rights).toEqual([]);
+  });
+
+  it('returns only lefts when no rightTag items exist', () => {
+    const shapes: Shape[] = [
+      { tag: 'circle', value: { radius: 3 } },
+      { tag: 'circle', value: { radius: 7 } },
+    ];
+    const { lefts, rights } = Union.partition(shapes, 'circle', 'rect');
+    expect(lefts).toEqual([{ radius: 3 }, { radius: 7 }]);
+    expect(rights).toEqual([]);
+  });
+
+  it('returns only rights when no leftTag items exist', () => {
+    const shapes: Shape[] = [{ tag: 'rect', value: { width: 1, height: 2 } }];
+    const { lefts, rights } = Union.partition(shapes, 'circle', 'rect');
+    expect(lefts).toEqual([]);
+    expect(rights).toEqual([{ width: 1, height: 2 }]);
+  });
+});
+
+describe('Union.groupBy', () => {
+  it('groups a mixed array by tag', () => {
+    const shapes: Shape[] = [
+      { tag: 'circle', value: { radius: 1 } },
+      { tag: 'rect', value: { width: 2, height: 3 } },
+      { tag: 'circle', value: { radius: 4 } },
+      { tag: 'triangle', value: { base: 5, height: 6 } },
+    ];
+    const groups = Union.groupBy(shapes);
+    expect(groups.circle).toEqual([{ radius: 1 }, { radius: 4 }]);
+    expect(groups.rect).toEqual([{ width: 2, height: 3 }]);
+    expect(groups.triangle).toEqual([{ base: 5, height: 6 }]);
+  });
+
+  it('returns empty object for empty input', () => {
+    const groups = Union.groupBy<{
+      circle: { radius: number };
+      rect: { width: number; height: number };
+      triangle: { base: number; height: number };
+    }>([]);
+    expect(groups).toEqual({});
+  });
+
+  it('groups array with only one tag type', () => {
+    const shapes: Shape[] = [
+      { tag: 'circle', value: { radius: 10 } },
+      { tag: 'circle', value: { radius: 20 } },
+    ];
+    const groups = Union.groupBy(shapes);
+    expect(groups.circle).toEqual([{ radius: 10 }, { radius: 20 }]);
+    expect(groups.rect).toBeUndefined();
+    expect(groups.triangle).toBeUndefined();
+  });
+
+  it('groups multiple tags independently', () => {
+    const shapes: Shape[] = [
+      { tag: 'rect', value: { width: 1, height: 2 } },
+      { tag: 'triangle', value: { base: 3, height: 4 } },
+      { tag: 'rect', value: { width: 5, height: 6 } },
+    ];
+    const groups = Union.groupBy(shapes);
+    expect(groups.rect).toHaveLength(2);
+    expect(groups.triangle).toHaveLength(1);
+    expect(groups.circle).toBeUndefined();
+  });
+});

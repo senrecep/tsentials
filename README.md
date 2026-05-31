@@ -7,7 +7,7 @@
 [![npm version](https://img.shields.io/npm/v/tsentials?style=flat-square&color=blue)](https://www.npmjs.com/package/tsentials)
 [![npm downloads](https://img.shields.io/npm/dm/tsentials?style=flat-square)](https://www.npmjs.com/package/tsentials)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/tsentials?style=flat-square&label=gzip)](https://bundlephobia.com/package/tsentials)
-[![tests](https://img.shields.io/badge/tests-978%20passing-brightgreen?style=flat-square)](./tests)
+[![tests](https://img.shields.io/badge/tests-1079%20passing-brightgreen?style=flat-square)](./tests)
 [![CI](https://img.shields.io/github/actions/workflow/status/senrecep/tsentials/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/senrecep/tsentials/actions)
 [![license](https://img.shields.io/github/license/senrecep/tsentials?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
@@ -58,6 +58,7 @@ Railway-oriented programming for TypeScript — `Result<T>`, `Maybe<T>`, Rule En
 - [These\<E, A\>](#these-e-a)
 - [Tree\<T\>](#treet)
 - [Record Utilities](#record-utilities)
+- [String Utilities](#string-utilities)
 - [Design Notes](#design-notes)
 - [AI Skills](#ai-skills)
 
@@ -91,6 +92,7 @@ npm install tsentials
 | `tsentials/these` | `These<E, A>`, `toResult`, `fromResult`, `partition` |
 | `tsentials/tree` | `Tree<T>`, `map`, `filter`, `fold`, `drawTree` |
 | `tsentials/record` | `Record` utilities — `map`, `filter`, `pick`, `omit`, `reduce` |
+| `tsentials/string` | String case conversion utilities (Pascal, Camel, Kebab, Snake, Macro, Train, Title, _camelCase) |
 
 ---
 
@@ -279,6 +281,12 @@ Result.always(result, r => {
   console.log(r.ok ? 'success' : 'failure');
   return 'done';
 });
+
+// traverse: map array items through a Result-returning fn, collect ALL errors
+Result.traverse([1, 2, 3], n => n > 0 ? Result.success(n * 2) : Result.failure(err));
+// → Result<number[]>
+await Result.traverseAsync([1, 2], async n => fetchUser(n));
+// → Promise<Result<User[]>>
 ```
 
 ---
@@ -556,6 +564,16 @@ Status code mapping:
 
 Supports `application/problem+json` (RFC 9457) for error descriptions.
 
+```typescript
+import { HttpCodes } from 'tsentials/http';
+import type { HttpCode } from 'tsentials/http';
+
+// Type-safe HTTP status constants (no magic numbers)
+const status: HttpCode = HttpCodes.Ok;           // 200
+const notFound = HttpCodes.NotFound;             // 404
+const serverErr = HttpCodes.InternalServerError; // 500
+```
+
 ---
 
 ## Union\<T\>
@@ -586,6 +604,14 @@ if (Union.is(result, 'success')) {
 
 // Unsafe extraction
 const id = Union.get(result, 'success').transactionId; // throws if wrong tag
+
+// partition: split union array into two typed arrays by tag
+const { lefts, rights } = Union.partition(shapes, 'circle', 'rect');
+// lefts: Array<{ radius: number }>, rights: Array<{ w: number; h: number }>
+
+// groupBy: group all items by tag into a record
+const groups = Union.groupBy(shapes);
+// { circle: [...], rect: [...] }
 ```
 
 ---
@@ -836,6 +862,23 @@ R.filter(users, u => u.name !== 'Bob');
 R.pick(users, 'a');                   // { a: { name: 'Alice' } }
 R.omit(users, 'b');                   // { a: { name: 'Alice' } }
 ```
+
+## String Utilities
+
+```typescript
+import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
+
+toPascalCase('hello world')         // 'HelloWorld'
+toCamelCase('hello-world')          // 'helloWorld'
+toKebabCase('HelloWorld')           // 'hello-world'
+toSnakeCase('helloWorld')           // 'hello_world'
+toMacroCase('hello world')          // 'HELLO_WORLD'  (SCREAMING_SNAKE_CASE)
+toTrainCase('hello world')          // 'Hello-World'
+toTitleCase('hello world foo')      // 'Hello World Foo'
+toUnderscoreCamelCase('helloWorld') // '_helloWorld'
+```
+
+All functions handle: spaces, hyphens, underscores, camelCase, PascalCase, and mixed input.
 
 ## Design Notes
 

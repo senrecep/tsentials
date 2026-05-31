@@ -81,6 +81,10 @@
     "./record": {
       "import": "./dist/record/index.js",
       "types": "./dist/record/index.d.ts"
+    },
+    "./string": {
+      "import": "./dist/string/index.js",
+      "types": "./dist/string/index.d.ts"
     }
   },
   "sideEffects": false,
