@@ -1337,7 +1337,11 @@ describe('Result.traverse', () => {
 
   it('collects ALL errors when some items fail', () => {
     const r = Result.traverse([1, 2, 3], (n) =>
-      n === 1 ? Result.failure(validationError) : n === 3 ? Result.failure(notFoundError) : Result.success(n),
+      n === 1
+        ? Result.failure(validationError)
+        : n === 3
+          ? Result.failure(notFoundError)
+          : Result.success(n),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors).toHaveLength(2);
@@ -1365,7 +1369,11 @@ describe('Result.traverseAsync', () => {
 
   it('collects ALL errors when some items fail', async () => {
     const r = await Result.traverseAsync([1, 2, 3], async (n) =>
-      n === 1 ? Result.failure(validationError) : n === 3 ? Result.failure(notFoundError) : Result.success(n),
+      n === 1
+        ? Result.failure(validationError)
+        : n === 3
+          ? Result.failure(notFoundError)
+          : Result.success(n),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors).toHaveLength(2);

@@ -160,9 +160,7 @@ describe('Union.partition', () => {
   });
 
   it('returns only rights when no leftTag items exist', () => {
-    const shapes: Shape[] = [
-      { tag: 'rect', value: { width: 1, height: 2 } },
-    ];
+    const shapes: Shape[] = [{ tag: 'rect', value: { width: 1, height: 2 } }];
     const { lefts, rights } = Union.partition(shapes, 'circle', 'rect');
     expect(lefts).toEqual([]);
     expect(rights).toEqual([{ width: 1, height: 2 }]);
