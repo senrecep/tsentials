@@ -6,7 +6,7 @@ Thank you for your interest in contributing!
 
 ```bash
 git clone https://github.com/senrecep/tsentials.git
-cd TypeScriptEssentials
+cd tsentials
 npm install
 npm run build
 npm test

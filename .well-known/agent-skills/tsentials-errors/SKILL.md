@@ -174,7 +174,7 @@ function findUser(id: string): Result<User> {
 
 ```typescript
 import { Result } from 'tsentials/result';
-import { Err } from 'tsentials/errors';
+import { Err, ErrorType } from 'tsentials/errors';
 
 function divide(a: number, b: number): Result<number> {
   if (b === 0) return Result.failure(Err.validation('Math.DivideByZero', 'Cannot divide by zero.'));

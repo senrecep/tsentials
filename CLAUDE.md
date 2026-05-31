@@ -330,7 +330,7 @@ toUnderscoreCamelCase('helloWorld')  // "_helloWorld"
 - `"sideEffects": false` in package.json for full tree-shaking
 
 ## Testing
-Vitest — `npm test` runs all 1075 tests across 33 test files.
+Vitest — `npm test` runs all 1079 tests across 33 test files.
 Test files mirror src/ structure under `tests/`.
 
 ## Publishing

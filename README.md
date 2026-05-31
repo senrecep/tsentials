@@ -130,13 +130,14 @@ Result.ok();
 ### Pipeline (sync)
 
 ```typescript
-import { Result } from 'tsentials/result';
+import { Result, chain } from 'tsentials/result';
 import { Err } from 'tsentials/errors';
 
-const price = Result.success(100)
-  |> Result.map(_, n => n * 1.2)
-  |> Result.ensure(_, n => n < 200, Err.validation('Price.TooHigh', 'Exceeds limit'))
-  |> Result.map(_, n => `$${n.toFixed(2)}`);
+const price = chain(Result.success(100))
+  .map(n => n * 1.2)
+  .ensure(n => n < 200, Err.validation('Price.TooHigh', 'Exceeds limit'))
+  .map(n => `$${n.toFixed(2)}`)
+  .unwrap();
 // => { ok: true, value: "$120.00" }
 
 // Dynamic error from value
@@ -786,12 +787,12 @@ const sure  = asNonEmptyArray([1, 2]);    // Some([1, 2])
 Composable, type-safe equality and ordering.
 
 ```typescript
-import { Eq, Ord } from 'tsentials/eq';
-import { sortBy, min, max, clamp } from 'tsentials/ord';
+import { Eq } from 'tsentials/eq';
+import { Ord, sortBy, min, max, clamp } from 'tsentials/ord';
 
-interface User { readonly id: number; readonly name: string; }
+interface User { readonly id: number; readonly name: string; readonly age: number; }
 
-const eqUser = Eq.struct<User>({ id: Eq.number, name: Eq.string });
+const eqUser = Eq.struct<User>({ id: Eq.number, name: Eq.string, age: Eq.number });
 
 const byAge = Ord.contramap(Ord.number, (u: User) => u.age);
 const sorted = sortBy(users, byAge);
