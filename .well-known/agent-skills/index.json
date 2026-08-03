@@ -91,8 +91,13 @@
       "files": ["SKILL.md"]
     },
     {
+      "name": "tsentials-string",
+      "description": "Use when converting string casing — toPascalCase/toCamelCase/toKebabCase/toSnakeCase/toMacroCase/toTrainCase/toTitleCase/toUnderscoreCamelCase, all word-boundary aware (camelCase, PascalCase, consecutive-uppercase runs like \"XMLParser\", whitespace, hyphens, underscores).",
+      "files": ["SKILL.md"]
+    },
+    {
       "name": "tsentials-meta",
-      "description": "Use when deciding which tsentials module to use — overview of all 18 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.",
+      "description": "Use when deciding which tsentials module to use — overview of all 19 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.",
       "files": ["SKILL.md"]
     }
   ]

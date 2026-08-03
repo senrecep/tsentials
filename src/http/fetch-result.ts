@@ -125,4 +125,19 @@ export const fetchResult = {
       (e) => Err.fromException(e),
     ).then((r) => (r.ok ? r.value : r)) as Promise<Result<T>>;
   },
+
+  /**
+   * Sends `init` as-is (including any body already set on it) — returns Result<T>.
+   * Use for non-JSON payloads; for JSON bodies prefer post/put/patch, which serialize
+   * the body for you.
+   */
+  async send<T>(url: string | URL, init: RequestInit): Promise<Result<T>> {
+    return R.tryAsync(
+      async () => {
+        const response = await fetch(url, init);
+        return responseToResult<T>(response);
+      },
+      (e) => Err.fromException(e),
+    ).then((r) => (r.ok ? r.value : r)) as Promise<Result<T>>;
+  },
 } as const;

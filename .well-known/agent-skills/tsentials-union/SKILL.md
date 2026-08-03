@@ -35,18 +35,25 @@ type PaymentResult = Union<{
 
 ## Creating Values
 
-```typescript
-// Union.of(tag, value)
-const result: PaymentResult = Union.of<PaymentResult extends Union<infer T> ? T : never, 'success'>(
-  'success',
-  { transactionId: 'txn_123' },
-);
+Assign a fresh literal with `as`, not `:` — annotating the *variable* with `: PaymentResult` narrows it down to whichever member the literal matches, which breaks `Union.match` exhaustiveness the moment you use that variable:
 
-// Or assign directly (the shape is { tag, value })
-const result: PaymentResult = { tag: 'success', value: { transactionId: 'txn_123' } };
-const pending: PaymentResult = { tag: 'pending', value: { estimatedMs: 3000 } };
-const failed: PaymentResult  = { tag: 'failed',  value: { error: Err.unexpected('Pay.Failed', 'Payment failed.') } };
+```typescript
+const result = { tag: 'success', value: { transactionId: 'txn_123' } } as PaymentResult;
+const pending = { tag: 'pending', value: { estimatedMs: 3000 } } as PaymentResult;
+const failed = { tag: 'failed', value: { error: Err.unexpected('Pay.Failed', 'Payment failed.') } } as PaymentResult;
 ```
+
+`Union.of(tag, value)` also constructs a value, but its type parameter can't be inferred from a `Union<T>` alias — you must spell out the full record shape `T` explicitly:
+
+```typescript
+const created = Union.of<{
+  success: { transactionId: string };
+  pending: { estimatedMs: number };
+  failed: { error: AppError };
+}, 'success'>('success', { transactionId: 'txn_123' });
+```
+
+The `as` form above is shorter and equally type-safe — prefer it unless you specifically need `Union.of`.
 
 ---
 

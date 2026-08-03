@@ -16,8 +16,8 @@ npm install tsentials
 ## Import
 
 ```typescript
-import { Err, ErrorMetadata } from 'tsentials/errors';
-import type { AppError, ErrorType } from 'tsentials/errors';
+import { Err, ErrorMetadata, ErrorType } from 'tsentials/errors';
+import type { AppError } from 'tsentials/errors';
 ```
 
 > **Important:** Import `Err` from `'tsentials/errors'` — NOT from `'tsentials/result'`.
@@ -92,7 +92,7 @@ error.metadata     // ErrorMetadata | undefined  (ReadonlyMap<string, unknown>)
 ## ErrorType Enum
 
 ```typescript
-import type { ErrorType } from 'tsentials/errors';
+import { ErrorType } from 'tsentials/errors';
 
 ErrorType.Failure       // general failure
 ErrorType.Validation    // 400-class, user input errors

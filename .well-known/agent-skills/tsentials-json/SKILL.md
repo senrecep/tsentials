@@ -116,7 +116,7 @@ isJson({ key: undefined });         // false — undefined not valid JSON
 `safeJsonParse` returns `Result<Json>` so it chains directly into any railway pipeline:
 
 ```typescript
-import { Result } from 'tsentials/result';
+import { Result, fromAsync } from 'tsentials/result';
 import { safeJsonParse, isJsonObject, parseAndValidate } from 'tsentials/json';
 
 // Chain into Result pipeline

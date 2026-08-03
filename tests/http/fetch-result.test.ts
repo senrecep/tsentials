@@ -508,3 +508,64 @@ describe('fetchResult.delete', () => {
     if (!result.ok) expect(result.errors[0]!.type).toBe(ErrorType.Failure);
   });
 });
+
+describe('fetchResult.send', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends init as-is without forcing JSON encoding', async () => {
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(createMockResponse({ ok: true, status: 200, json: {} })),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+    await fetchResult.send('https://api.example.com/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'raw text',
+    });
+    expect(fetchSpy).toHaveBeenCalledWith('https://api.example.com/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'raw text',
+    });
+  });
+
+  it('returns success on 200', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(createMockResponse({ ok: true, status: 200, json: { id: 1 } }))),
+    );
+    const result = await fetchResult.send<{ id: number }>('https://api.example.com/user', {
+      method: 'POST',
+      body: 'raw',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual({ id: 1 });
+  });
+
+  it('returns failure on 4xx without throwing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(createMockResponse({ ok: false, status: 400 }))),
+    );
+    const result = await fetchResult.send('https://api.example.com/upload', {
+      method: 'POST',
+      body: 'not json',
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('returns failure on network error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('fetch failed'))),
+    );
+    const result = await fetchResult.send('https://api.example.com/upload', {
+      method: 'POST',
+      body: 'not json',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]!.code).toBe('TypeError');
+  });
+});

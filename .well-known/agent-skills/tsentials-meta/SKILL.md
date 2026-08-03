@@ -1,6 +1,6 @@
 ---
 name: tsentials-meta
-description: Use when deciding which tsentials module to use — overview of all 18 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.
+description: Use when deciding which tsentials module to use — overview of all 19 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.
 ---
 
 # tsentials — Module Index
@@ -26,6 +26,7 @@ npm install tsentials
 | `tsentials/maybe` | `Maybe<T>`, `tryFirst`, `tryFind`, `choose` | `tsentials-maybe` |
 | `tsentials/union` | `Union<T>` discriminated union utility | `tsentials-union` |
 | `tsentials/function` | `pipe`, `flow`, `identity`, `constant`, `flip` | `tsentials-function` |
+| `tsentials/string` | `toPascalCase`, `toCamelCase`, `toKebabCase`, `toSnakeCase`, `toMacroCase`, `toTrainCase`, `toTitleCase`, `toUnderscoreCamelCase` | `tsentials-string` |
 
 ### Data Structures & Types
 
@@ -96,6 +97,7 @@ npm install tsentials
 | Composable equality checks | `tsentials/eq` |
 | Type-safe sorting and ordering | `tsentials/ord` |
 | Composable boolean predicates | `tsentials/predicate` |
+| Convert between naming conventions (camelCase, kebab-case, snake_case, ...) | `tsentials/string` |
 
 ---
 
@@ -128,6 +130,7 @@ import type { Cloneable }                               from 'tsentials/clone';
 import { safeJsonParse, safeJsonStringify, parseAndValidate } from 'tsentials/json';
 import { isJson, isJsonObject }                         from 'tsentials/json';
 import type { Json, JsonObject }                        from 'tsentials/json';
+import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
 ```
 
 ---

@@ -103,12 +103,14 @@ const deleted = await RequestBuilder.delete(`https://api.example.com/users/${id}
   .header('Authorization', `Bearer ${token}`)
   .send<void>();
 
-// Raw body (non-JSON)
+// Raw (non-JSON) body on POST/PUT/PATCH — .body() bypasses JSON serialization entirely
 const uploaded = await RequestBuilder.post('https://api.example.com/upload')
   .header('Content-Type', 'text/plain')
   .body(rawText)
   .send<UploadResult>();
 ```
+
+`.json(value)` stringifies `value` and sets `Content-Type: application/json`. `.body(raw)` sends `raw` (a `BodyInit` — string, `Blob`, `FormData`, `ArrayBuffer`, ...) untouched, with no assumption that it's JSON — `send<T>()` never runs `JSON.parse`/`JSON.stringify` on a `.body()` payload, so it can't throw on non-JSON content. Calling `.json()` after `.body()` (or vice versa) simply replaces whichever was set last.
 
 ### RequestBuilder API
 

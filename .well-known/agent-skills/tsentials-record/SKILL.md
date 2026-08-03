@@ -24,7 +24,7 @@ Record.filter(users, u => u.name !== 'Bob');
 Record.filterMap(users, u => u.name.length > 3 ? u.name : null);
 
 // Modify
-Record.upsert(users, 'c', { name: 'Charlie' });
+Record.upsert(users, 'b', { name: 'Bobby' }); // { a: {...}, b: { name: 'Bobby' } }
 Record.remove(users, 'b');
 Record.pick(users, 'a');
 Record.omit(users, 'b');
@@ -38,3 +38,4 @@ Record.partition(users, u => u.name.startsWith('A'));
 
 - Use `Record.map` instead of `Object.entries(...).reduce(...)`.
 - Use `pick` / `omit` for whitelist/blacklist field selection.
+- `upsert`'s `key` must belong to the record's existing key union — `Record.upsert(users, 'c', ...)` above would not compile since `users` only has keys `'a' | 'b'`. Widen the record's type first if you need to add a genuinely new key.

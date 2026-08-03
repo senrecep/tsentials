@@ -122,11 +122,18 @@ export const RuleEngine = {
     ...rules: TypedRule<TContext, TResult>[]
   ): TypedRule<TContext, TResult> {
     return (context: TContext) => {
+      if (rules.length === 0) {
+        return Result.failure(
+          Err.unexpected('RuleEngine.Empty', 'No rules provided in linearTyped'),
+        );
+      }
+      let lastValue: TResult | undefined;
       for (const rule of rules) {
         const result = rule(context);
         if (!result.ok) return result;
+        lastValue = result.value;
       }
-      return Result.failure(Err.unexpected('RuleEngine.Empty', 'No rules provided in linearTyped'));
+      return Result.success(lastValue as TResult);
     };
   },
 
@@ -137,13 +144,18 @@ export const RuleEngine = {
     ...rules: TypedAsyncRule<TContext, TResult>[]
   ): TypedAsyncRule<TContext, TResult> {
     return async (context: TContext) => {
+      if (rules.length === 0) {
+        return Result.failure(
+          Err.unexpected('RuleEngine.Empty', 'No rules provided in linearTypedAsync'),
+        );
+      }
+      let lastValue: TResult | undefined;
       for (const rule of rules) {
         const result = await rule(context);
         if (!result.ok) return result;
+        lastValue = result.value;
       }
-      return Result.failure(
-        Err.unexpected('RuleEngine.Empty', 'No rules provided in linearTypedAsync'),
-      );
+      return Result.success(lastValue as TResult);
     };
   },
 
