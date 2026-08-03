@@ -17,6 +17,7 @@ npm install tsentials
 
 ```typescript
 import { Result, ResultChain, chain, ResultAsync, fromAsync } from 'tsentials/result';
+import type { VoidResult } from 'tsentials/result';
 import { maybeToResult, resultToMaybe } from 'tsentials/result';
 ```
 

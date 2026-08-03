@@ -59,7 +59,7 @@ Hybrid implementation: tries native `structuredClone()` first; if unavailable (R
 | Type | Behavior |
 |------|---------|
 | Primitives (string, number, boolean, null, undefined, bigint) | Returned as-is (immutable) |
-| Plain object | Deep copy — `__proto__` preserved |
+| Plain object | Deep copy of own enumerable keys — result is always a plain `Object.prototype` object; class instances lose their custom prototype/methods (see note below) |
 | Array (including sparse) | Deep copy — holes preserved |
 | Date | `new Date(timestamp)` |
 | RegExp | `new RegExp(source, flags)` |
@@ -68,10 +68,14 @@ Hybrid implementation: tries native `structuredClone()` first; if unavailable (R
 | ArrayBuffer | `buffer.slice(0)` |
 | DataView | Buffer + byteOffset + byteLength |
 | TypedArray (Uint8Array, Float64Array, BigInt64Array, …) | Buffer cloned separately |
-| Error and subclasses | message, name, cause, custom props (code, statusCode, …) |
+| Error (built-in: `Error`, `TypeError`, `RangeError`, …) | message, name, cause preserved; subclass identity kept |
 | Boolean / Number / String wrapper objects | `Object(valueOf())` |
 | Circular reference | Tracked via WeakMap — preserved correctly |
-| SharedArrayBuffer | Same reference returned (shared memory semantics) |
+| SharedArrayBuffer | **Native `structuredClone` (default in Node ≥ 17 / modern browsers):** returns a *new* `SharedArrayBuffer` instance backed by the same shared memory — not the same reference. **Recursive fallback only** (no native `structuredClone`): returns the exact same reference |
+
+> **Important caveat — custom Error subclasses and custom properties:** `deepClone` tries native `structuredClone` first, and it does **not** throw for `Error` objects — so the recursive fallback (which is the part of this library that copies custom properties and preserves user-defined subclasses) is *not* reached for a standalone `Error` in Node.js or a browser. Under native `structuredClone`, a **user-defined** `Error` subclass becomes a plain `Error` (its class identity and any custom `name` are lost), and **any custom enumerable properties** (`code`, `statusCode`, etc.) are silently dropped. Only in environments without native `structuredClone` (e.g. some React Native/Hermes builds) does the recursive fallback run and actually preserve subclass identity and custom properties. Verified empirically — see the corrected example below.
+>
+> **Custom prototypes:** for the same reason, cloning a class instance (not a plain object literal) with `deepClone` produces a plain object — it does **not** remain `instanceof YourClass` and loses its methods. Use `Cloneable<T>` (see below) for class instances that must retain their type/methods.
 
 ### Graceful degradation
 
@@ -107,11 +111,13 @@ deepClone({ createdAt: new Date(), tags: new Set(['a', 'b']) });
 const buf = new Uint8Array([1, 2, 3]);
 const bufClone = deepClone(buf);
 
-// Error with custom properties
+// Error — under native structuredClone (default in Node/browsers), only
+// message/name/cause survive; custom own properties are dropped
 const err = Object.assign(new Error('fail'), { code: 'ERR_X', statusCode: 500 });
 const errClone = deepClone(err);
-errClone.code;       // 'ERR_X'
-errClone.statusCode; // 500
+errClone.message;        // 'fail'
+errClone instanceof Error; // true
+errClone.code;            // undefined — custom properties are NOT preserved here
 
 // Graceful degradation — never throws
 deepClone({ fn: () => 42 });      // { fn: () => 42 } — same reference
@@ -184,7 +190,8 @@ const changed = working.filter((p, i) => p.price !== entities[i]?.price);
 - Circular reference support works in both native and fallback modes
 - `Function` values are returned by reference (closures cannot be copied)
 - `WeakMap` / `WeakSet` cannot be cloned — use `Map` / `Set` if you need copyable contents
-- Error subclass custom properties (`code`, `statusCode`, etc.) are cloned automatically
+- Error custom properties (`code`, `statusCode`, etc.) and custom Error subclasses are **not** preserved under native `structuredClone` (the default in Node.js/browsers) — they only survive via the recursive fallback (no native `structuredClone` available). Do not rely on custom Error properties surviving `deepClone()` in Node
+- Class instances lose their custom prototype/methods through `deepClone()` — they come back as plain objects; use `Cloneable<T>` instead if type/methods must be retained
 - `cloneArray()` calls `.clone()` on each item — items must implement `Cloneable<T>`
 - Always deep-copy nested collections inside `clone()` — a shallow copy defeats the purpose
 - For simple value objects or DTOs, prefer `deepClone()` over implementing `Cloneable<T>`

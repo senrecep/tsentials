@@ -381,6 +381,75 @@ describe('RequestBuilder fluent API', () => {
     expect(init.method).toBe('PATCH');
   });
 
+  it('sends a raw non-JSON body on POST without throwing', async () => {
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await RequestBuilder.post('https://api.example.com/upload')
+      .header('Content-Type', 'text/plain')
+      .body('not json at all')
+      .send<unknown>();
+
+    expect(result.ok).toBe(true);
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBe('not json at all');
+    expect(init.headers).toEqual({ 'Content-Type': 'text/plain' });
+  });
+
+  it('sends a raw non-JSON body on PUT without throwing', async () => {
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await RequestBuilder.put('https://api.example.com/upload')
+      .body('plain text body')
+      .send<unknown>();
+
+    expect(result.ok).toBe(true);
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBe('plain text body');
+  });
+
+  it('sends a raw non-JSON body on PATCH without throwing', async () => {
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await RequestBuilder.patch('https://api.example.com/upload')
+      .body('plain text body')
+      .send<unknown>();
+
+    expect(result.ok).toBe(true);
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBe('plain text body');
+  });
+
+  it('does not double-encode JSON bodies (no parse/stringify round-trip)', async () => {
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await RequestBuilder.post('https://api.example.com/users')
+      .json({ name: 'Alice' })
+      .send<unknown>();
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBe(JSON.stringify({ name: 'Alice' }));
+  });
+
   it('falls back to GET for unknown HTTP method (default branch)', async () => {
     const fetchSpy = vi.fn(() =>
       Promise.resolve(

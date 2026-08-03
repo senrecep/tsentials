@@ -205,6 +205,8 @@ RuleEngine.andTypedAsync<TContext, TResult>(...rules: TypedAsyncRule<TContext, T
 RuleEngine.orTypedAsync<TContext, TResult>(...rules: TypedAsyncRule<TContext, TResult>[])
 ```
 
+All three typed combinators return `Result.success(value)` when their rules pass: `andTyped`/`andTypedAsync` carry the *last passing* rule's value, `orTyped`/`orTypedAsync` carry the value of the *first passing* rule, and `linearTyped`/`linearTypedAsync` carry the *last* rule's value once the whole sequence passes. Zero rules is a special case per combinator: `linearTyped`/`linearTypedAsync` return a `RuleEngine.Empty` failure; `andTyped`/`andTypedAsync` return `Result.success(undefined)` (no errors to collect); `orTyped`/`orTypedAsync` **throw** `Error('Result.failureFrom requires at least one error.')` — same as the untyped `or` — because there are no errors to report and no success to return.
+
 ---
 
 ## Domain Error Hierarchies with Rules
@@ -242,7 +244,7 @@ if (!result.ok) {
 ```typescript
 import { fromAsync } from 'tsentials/result';
 
-// evaluate() is sync — use Result.then to chain into a pipeline
+// evaluate() is sync — call it inside .andThen() to fold it into the async pipeline
 const response = await fromAsync(fetchUser(userId))
   .andThen(user => RuleEngine.evaluate(canRegister, user))
   .match(

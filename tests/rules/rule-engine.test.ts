@@ -256,11 +256,19 @@ describe('RuleEngine.linearTyped', () => {
     if (!result.ok) expect(result.errors[0]!.code).toBe('Typed.Fail');
   });
 
-  it('returns RuleEngine.Empty fallback when all rules pass', () => {
+  it('returns the last rule value when all rules pass', () => {
     const rule = RuleEngine.linearTyped(toAge, toAge);
     const result = rule(validUser);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]!.code).toBe('RuleEngine.Empty');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(25);
+  });
+
+  it('returns the LAST value, not the first, when values differ', () => {
+    const doubleAge = (ctx: UserContext): Result<number> => Result.success(ctx.age * 2);
+    const rule = RuleEngine.linearTyped(toAge, doubleAge);
+    const result = rule(validUser);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(50);
   });
 
   it('returns RuleEngine.Empty for empty rules', () => {
@@ -283,11 +291,20 @@ describe('RuleEngine.linearTypedAsync', () => {
     if (!result.ok) expect(result.errors[0]!.code).toBe('Typed.Fail');
   });
 
-  it('returns RuleEngine.Empty fallback when all rules pass', async () => {
+  it('returns the last rule value when all rules pass', async () => {
     const rule = RuleEngine.linearTypedAsync(toAgeAsync);
     const result = await rule(validUser);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]!.code).toBe('RuleEngine.Empty');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(25);
+  });
+
+  it('returns the LAST value, not the first, when values differ', async () => {
+    const doubleAgeAsync = async (ctx: UserContext): Promise<Result<number>> =>
+      Result.success(ctx.age * 2);
+    const rule = RuleEngine.linearTypedAsync(toAgeAsync, doubleAgeAsync);
+    const result = await rule(validUser);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(50);
   });
 
   it('returns RuleEngine.Empty for empty rules', async () => {

@@ -18,6 +18,8 @@ export class RequestBuilder {
   readonly #headers: Record<string, string> = {};
   readonly #query: URLSearchParams;
   #body: BodyInit | null = null;
+  #jsonPayload: unknown;
+  #hasJsonPayload = false;
 
   private constructor(method: string, url: string | URL) {
     this.#method = method;
@@ -60,6 +62,8 @@ export class RequestBuilder {
   /** Sets the request body as JSON and adds Content-Type header. */
   json(body: unknown): this {
     this.#body = JSON.stringify(body);
+    this.#jsonPayload = body;
+    this.#hasJsonPayload = true;
     this.#headers['Content-Type'] = 'application/json';
     return this;
   }
@@ -67,6 +71,7 @@ export class RequestBuilder {
   /** Sets a raw body. */
   body(body: BodyInit): this {
     this.#body = body;
+    this.#hasJsonPayload = false;
     return this;
   }
 
@@ -84,11 +89,17 @@ export class RequestBuilder {
       case 'GET':
         return fetchResult.get<T>(this.#url, init);
       case 'POST':
-        return fetchResult.post<T>(this.#url, JSON.parse((this.#body as string) ?? 'null'), init);
+        return this.#hasJsonPayload
+          ? fetchResult.post<T>(this.#url, this.#jsonPayload, init)
+          : fetchResult.send<T>(this.#url, init);
       case 'PUT':
-        return fetchResult.put<T>(this.#url, JSON.parse((this.#body as string) ?? 'null'), init);
+        return this.#hasJsonPayload
+          ? fetchResult.put<T>(this.#url, this.#jsonPayload, init)
+          : fetchResult.send<T>(this.#url, init);
       case 'PATCH':
-        return fetchResult.patch<T>(this.#url, JSON.parse((this.#body as string) ?? 'null'), init);
+        return this.#hasJsonPayload
+          ? fetchResult.patch<T>(this.#url, this.#jsonPayload, init)
+          : fetchResult.send<T>(this.#url, init);
       case 'DELETE':
         return fetchResult.delete<T>(this.#url, init);
       default:

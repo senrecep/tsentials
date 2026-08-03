@@ -1,6 +1,6 @@
 ---
 name: tsentials
-description: Master skill for tsentials — railway-oriented programming library for TypeScript. Load this skill first when working with any tsentials module. Contains critical naming rules, API patterns, decision trees for module selection, and references to all 18 module-specific skills.
+description: Master skill for tsentials — railway-oriented programming library for TypeScript. Load this skill first when working with any tsentials module. Contains critical naming rules, API patterns, decision trees for module selection, and references to all 19 module-specific skills.
 ---
 
 # tsentials — Master Skill
@@ -33,6 +33,7 @@ These naming rules MUST be followed. Getting them wrong causes runtime bugs.
 | RequestBuilder terminal | `.fetchResult<T>()` | `.send<T>()` | Terminal method is `send`, not `fetchResult` |
 | deepClone mechanism | "calls .clone()" | uses `structuredClone()` | `cloneArray` calls `.clone()`, `deepClone` uses structuredClone |
 | Predicate.and arity | `Predicate.and(a, b, c)` | `Predicate.and(Predicate.and(a, b), c)` | `and`/`or` take exactly 2 args. Use `all`/`any` for variadic |
+| String case functions | `toCamelCase(str, opts)` | `toCamelCase(str)` | Single-argument, no options object — normalization is automatic |
 
 ## Core API Patterns
 
@@ -137,6 +138,7 @@ RuleEngine.evaluateAsync(rule, ctx)  // async → Promise<VoidResult>
 | Structural equality | `eq` | `tsentials-eq` |
 | Type-safe ordering/sorting | `ord` | `tsentials-ord` |
 | Composable boolean predicates | `predicate` | `tsentials-predicate` |
+| Convert between naming conventions | `string` | `tsentials-string` |
 | Module overview / all imports | — | `tsentials-meta` |
 
 ## Design Principles
@@ -172,4 +174,5 @@ import { SystemDateTimeProvider, createFakeDateTimeProvider } from 'tsentials/ti
 import type { DateTimeProvider } from 'tsentials/time';
 import { deepClone, cloneArray } from 'tsentials/clone';
 import { safeJsonParse, parseAndValidate } from 'tsentials/json';
+import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase } from 'tsentials/string';
 ```
