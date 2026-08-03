@@ -28,7 +28,7 @@ describe('Union.of', () => {
 
 describe('Union.match', () => {
   it('calls the correct handler', () => {
-    const circle: Shape = { tag: 'circle', value: { radius: 10 } };
+    const circle = { tag: 'circle', value: { radius: 10 } } as Shape;
     const area = Union.match(circle, {
       circle: ({ radius }) => Math.PI * radius * radius,
       rect: ({ width, height }) => width * height,
@@ -38,7 +38,7 @@ describe('Union.match', () => {
   });
 
   it('dispatches rect correctly', () => {
-    const rect: Shape = { tag: 'rect', value: { width: 4, height: 5 } };
+    const rect = { tag: 'rect', value: { width: 4, height: 5 } } as Shape;
     const area = Union.match(rect, {
       circle: ({ radius }) => Math.PI * radius * radius,
       rect: ({ width, height }) => width * height,
@@ -48,7 +48,7 @@ describe('Union.match', () => {
   });
 
   it('dispatches triangle correctly', () => {
-    const triangle: Shape = { tag: 'triangle', value: { base: 10, height: 4 } };
+    const triangle = { tag: 'triangle', value: { base: 10, height: 4 } } as Shape;
     const area = Union.match(triangle, {
       circle: ({ radius }) => Math.PI * radius * radius,
       rect: ({ width, height }) => width * height,
@@ -70,7 +70,7 @@ describe('Union.match', () => {
   });
 
   it('returns different types from handlers', () => {
-    const rect: Shape = { tag: 'rect', value: { width: 4, height: 5 } };
+    const rect = { tag: 'rect', value: { width: 4, height: 5 } } as Shape;
     const result = Union.match(rect, {
       circle: () => 'circle',
       rect: () => 42,
@@ -82,12 +82,12 @@ describe('Union.match', () => {
 
 describe('Union.is', () => {
   it('returns true for matching tag', () => {
-    const circle: Shape = { tag: 'circle', value: { radius: 5 } };
+    const circle = { tag: 'circle', value: { radius: 5 } } as Shape;
     expect(Union.is(circle, 'circle')).toBe(true);
   });
 
   it('returns false for non-matching tag', () => {
-    const circle: Shape = { tag: 'circle', value: { radius: 5 } };
+    const circle = { tag: 'circle', value: { radius: 5 } } as Shape;
     expect(Union.is(circle, 'rect')).toBe(false);
   });
 
@@ -101,18 +101,18 @@ describe('Union.is', () => {
 
 describe('Union.get', () => {
   it('returns value for matching tag', () => {
-    const rect: Shape = { tag: 'rect', value: { width: 3, height: 4 } };
+    const rect = { tag: 'rect', value: { width: 3, height: 4 } } as Shape;
     const value = Union.get(rect, 'rect');
     expect(value.width).toBe(3);
   });
 
   it('throws for non-matching tag', () => {
-    const circle: Shape = { tag: 'circle', value: { radius: 5 } };
+    const circle = { tag: 'circle', value: { radius: 5 } } as Shape;
     expect(() => Union.get(circle, 'rect')).toThrow("Expected union tag 'rect' but got 'circle'.");
   });
 
   it('throws with correct message for another mismatch', () => {
-    const triangle: Shape = { tag: 'triangle', value: { base: 10, height: 5 } };
+    const triangle = { tag: 'triangle', value: { base: 10, height: 5 } } as Shape;
     expect(() => Union.get(triangle, 'circle')).toThrow(
       "Expected union tag 'circle' but got 'triangle'.",
     );
@@ -144,7 +144,8 @@ describe('Union.partition', () => {
   });
 
   it('returns empty arrays for an empty input', () => {
-    const { lefts, rights } = Union.partition([], 'circle', 'rect');
+    const empty: Shape[] = [];
+    const { lefts, rights } = Union.partition(empty, 'circle', 'rect');
     expect(lefts).toEqual([]);
     expect(rights).toEqual([]);
   });
@@ -182,11 +183,7 @@ describe('Union.groupBy', () => {
   });
 
   it('returns empty object for empty input', () => {
-    const groups = Union.groupBy<{
-      circle: { radius: number };
-      rect: { width: number; height: number };
-      triangle: { base: number; height: number };
-    }>([]);
+    const groups = Union.groupBy<Shape>([]);
     expect(groups).toEqual({});
   });
 

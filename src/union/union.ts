@@ -16,17 +16,24 @@
  *   failed: { error: AppError };
  * }>;
  *
- * const result: PaymentResult = { tag: 'success', value: { transactionId: 'txn_123' } };
- *
- * const message = Union.match(result, {
- *   success: ({ transactionId }) => `Paid! Ref: ${transactionId}`,
- *   pending: ({ estimatedMs }) => `Pending for ${estimatedMs}ms`,
- *   failed: ({ error }) => `Failed: ${error.description}`,
- * });
+ * function toMessage(result: PaymentResult): string {
+ *   return Union.match(result, {
+ *     success: ({ transactionId }) => `Paid! Ref: ${transactionId}`,
+ *     pending: ({ estimatedMs }) => `Pending for ${estimatedMs}ms`,
+ *     failed: ({ error }) => `Failed: ${error.description}`,
+ *   });
+ * }
  */
 export type Union<T extends Record<string, unknown>> = {
   [K in keyof T]: { readonly tag: K; readonly value: T[K] };
 }[keyof T];
+
+/**
+ * Any tagged value — the shape every Union<T> member conforms to.
+ * Used so utilities can infer directly from the union value itself
+ * (inferring T back out of Union<T> is not possible for the compiler).
+ */
+type Tagged = { readonly tag: PropertyKey; readonly value: unknown };
 
 /**
  * Utilities for working with Union<T> values.
@@ -44,9 +51,9 @@ export const Union = {
    * TypeScript ensures all cases are handled at compile time.
    *
    */
-  match<T extends Record<string, unknown>, R>(
-    union: Union<T>,
-    handlers: { [K in keyof T]: (value: T[K]) => R },
+  match<U extends Tagged, R>(
+    union: U,
+    handlers: { [K in U['tag']]: (value: Extract<U, { readonly tag: K }>['value']) => R },
   ): R {
     const handler = (handlers as Record<string | symbol, (value: unknown) => R>)[
       union.tag as string | symbol
@@ -58,21 +65,24 @@ export const Union = {
   /**
    * Type guard — checks if the union has a specific tag.
    */
-  is<T extends Record<string, unknown>, K extends keyof T>(
-    union: Union<T>,
+  is<U extends Tagged, K extends U['tag']>(
+    union: U,
     tag: K,
-  ): union is { tag: K; value: T[K] } {
+  ): union is Extract<U, { readonly tag: K }> {
     return union.tag === tag;
   },
 
   /**
    * Extracts the value for a specific tag, throws otherwise.
    */
-  get<T extends Record<string, unknown>, K extends keyof T>(union: Union<T>, tag: K): T[K] {
+  get<U extends Tagged, K extends U['tag']>(
+    union: U,
+    tag: K,
+  ): Extract<U, { readonly tag: K }>['value'] {
     if (union.tag !== tag) {
       throw new Error(`Expected union tag '${String(tag)}' but got '${String(union.tag)}'.`);
     }
-    return union.value as T[K];
+    return union.value as Extract<U, { readonly tag: K }>['value'];
   },
 
   /**
@@ -89,16 +99,20 @@ export const Union = {
    * // lefts: Array<{ r: number }>
    * // rights: Array<{ w: number; h: number }>
    */
-  partition<T extends Record<string, unknown>, K1 extends keyof T, K2 extends keyof T>(
-    items: ReadonlyArray<Union<T>>,
+  partition<U extends Tagged, K1 extends U['tag'], K2 extends U['tag']>(
+    items: ReadonlyArray<U>,
     leftTag: K1,
     rightTag: K2,
-  ): { lefts: Array<T[K1]>; rights: Array<T[K2]> } {
-    const lefts: Array<T[K1]> = [];
-    const rights: Array<T[K2]> = [];
+  ): {
+    lefts: Array<Extract<U, { readonly tag: K1 }>['value']>;
+    rights: Array<Extract<U, { readonly tag: K2 }>['value']>;
+  } {
+    const lefts: Array<Extract<U, { readonly tag: K1 }>['value']> = [];
+    const rights: Array<Extract<U, { readonly tag: K2 }>['value']> = [];
     for (const item of items) {
-      if (item.tag === leftTag) lefts.push(item.value as T[K1]);
-      else if (item.tag === rightTag) rights.push(item.value as T[K2]);
+      if (item.tag === leftTag) lefts.push(item.value as Extract<U, { readonly tag: K1 }>['value']);
+      else if (item.tag === rightTag)
+        rights.push(item.value as Extract<U, { readonly tag: K2 }>['value']);
     }
     return { lefts, rights };
   },
@@ -112,17 +126,17 @@ export const Union = {
    * groups.circle // Array<{ r: number }>
    * groups.rect   // Array<{ w: number; h: number }>
    */
-  groupBy<T extends Record<string, unknown>>(
-    items: ReadonlyArray<Union<T>>,
-  ): { [K in keyof T]?: Array<T[K]> } {
-    const result: { [K in keyof T]?: Array<T[K]> } = {};
+  groupBy<U extends Tagged>(
+    items: ReadonlyArray<U>,
+  ): { [K in U['tag']]?: Array<Extract<U, { readonly tag: K }>['value']> } {
+    const result: Record<PropertyKey, Array<unknown>> = {};
     for (const item of items) {
-      const key = item.tag as keyof T;
+      const key = item.tag;
       if (!result[key]) {
-        result[key] = [] as Array<T[typeof key]>;
+        result[key] = [];
       }
-      (result[key] as Array<T[typeof key]>).push(item.value as T[typeof key]);
+      result[key].push(item.value);
     }
-    return result;
+    return result as { [K in U['tag']]?: Array<Extract<U, { readonly tag: K }>['value']> };
   },
 } as const;

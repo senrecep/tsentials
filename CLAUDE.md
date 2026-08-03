@@ -1,7 +1,7 @@
 # tsentials — Developer Guide
 
 Railway-oriented programming toolkit for TypeScript.  
-Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`, `union`, `json`, `string`.
+Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`, `union`, `json`, `string`, `function`, `array`, `eq`, `ord`, `predicate`, `these`, `tree`, `record`.
 
 ## Commands
 
@@ -32,6 +32,14 @@ src/
   union/          — Union<T> discriminated union utility
   json/           — Json types, isJson/isJsonObject guards, safeJsonParse(), safeJsonStringify(), parseAndValidate()
   string/         — String case conversion (toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase)
+  function/       — pipe, flow, identity, constant, flip — function composition
+  array/          — NonEmptyArray<T>, head/tail/last/init, isNonEmpty, asNonEmptyArray
+  eq/             — Eq<T> equality type class (strict/string/number/boolean/date, contramap, struct, getArrayEq)
+  ord/            — Ord<T> ordering type class (sortBy, min, max, clamp, between, reverse, contramap, struct)
+  predicate/      — Predicate<T>, Refinement<A,B> (from, and, or, not, all, any)
+  these/          — These<E,A> partial success (Left | Right | Both), Result bridge
+  tree/           — Tree<T> recursive hierarchy (map, filter, find, fold, drawTree)
+  record/         — Functional object utilities (map, filter, pick, omit, reduce, partition, upsert)
 ```
 
 ### Result<T>
@@ -92,7 +100,8 @@ await Result.traverseAsync(items, async fn)  // async version
 chain(Result.success(5)).bind(fn).map(fn).ensure(pred, err).match(ok, err)
 
 // Async pipeline — one await at the end, andThen() NOT then()
-await fromAsync(promise)
+// fromAsync takes Promise<Result<T>>, NOT Promise<T>
+await fromAsync(promiseOfResult)
   .andThen(fn)    // monadic bind
   .map(fn)
   .ensure(pred, err)
@@ -115,7 +124,7 @@ await Result.alwaysAsync(r, async fn)
 - `error.description` — NOT `.message` (AppError uses `description`)
 
 ### Maybe<T>
-Functional namespace — all static methods, no class instantiation.
+Functional namespace: all static methods, no class instantiation.
 
 ```typescript
 import { Maybe, tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
@@ -195,7 +204,7 @@ RuleEngine.evaluateAsync(asyncRule, ctx)  // Promise<VoidResult>
 ```
 
 ### Entity (DDD)
-Mixin factory pattern — no deep inheritance.
+Mixin factory pattern instead of deep inheritance.
 
 ```typescript
 import { createEntityBase, createSoftDeletable } from 'tsentials/entity';
@@ -264,9 +273,11 @@ import { Union } from 'tsentials/union';
 
 type Shape = Union<{ circle: { radius: number }; rect: { w: number; h: number } }>;
 
-const s: Shape = { tag: 'circle', value: { radius: 5 } };
+// NOTE: use `as Shape` (not `: Shape`) for fresh literals — assignment narrowing
+// would otherwise narrow the value to one member and break exhaustive match.
+const s = { tag: 'circle', value: { radius: 5 } } as Shape;
 Union.match(s, { circle: ({ radius }) => radius * 2, rect: ({ w, h }) => w * h });
-Union.is(s, 'circle')    // type guard
+Union.is(s, 'circle')    // type guard — narrows to the tagged member
 Union.get(s, 'circle')   // value or throws
 
 // Collection utilities
@@ -275,7 +286,7 @@ Union.groupBy(items)                           // → { [tag]: value[] }
 ```
 
 ### Json
-Safe JSON parsing — returns `Result<T>`, never throws.
+Safe JSON parsing that returns `Result<T>` instead of throwing.
 
 ```typescript
 import { safeJsonParse, safeJsonStringify, parseAndValidate } from 'tsentials/json';
@@ -324,13 +335,145 @@ toTitleCase('helloWorld')            // "Hello World"
 toUnderscoreCamelCase('helloWorld')  // "_helloWorld"
 ```
 
+### Function (pipe & flow)
+
+```typescript
+import { pipe, flow, identity, constant, flip } from 'tsentials/function';
+
+pipe(5, n => n * 2, n => n + 1, n => String(n))  // "11" — value through unary fns (up to 15 steps)
+const f = flow((n: number) => n * 2, n => String(n)); f(5)  // "10" — reusable composition
+identity(42)                       // 42
+constant(true)()                   // true — always returns the captured value
+flip((a: number, b: number) => a - b)(3, 10)  // 7 — reverses binary fn args
+```
+
+### Eq\<T\> & Ord\<T\>
+
+Type classes: `Eq<A> = { equals(a, b) }`, `Ord<A> extends Eq<A>` adds `compare(a, b): -1 | 0 | 1`.
+
+```typescript
+import { Eq } from 'tsentials/eq';
+import { Ord, sortBy, min, max, clamp, between, reverse } from 'tsentials/ord';
+
+// Primitive instances: Eq.strict/string/number/boolean/date, Ord.number/string/boolean/date
+const eqUser = Eq.struct({ id: Eq.number, name: Eq.string });   // structural equality
+Eq.contramap(Eq.number, (u: User) => u.id)                      // compare by projection
+Eq.getArrayEq(Eq.number)                                        // element-wise array equality
+
+const byAge = Ord.contramap(Ord.number, (u: User) => u.age);
+sortBy(users, byAge)               // sorted copy (ascending)
+sortBy(users, reverse(byAge))      // descending
+min(byAge, a, b) / max(byAge, a, b)
+clamp(Ord.number, 0, 100, 150)     // 100 — throws if lower > upper
+between(Ord.number, 0, 100, 42)    // true
+Ord.struct({ name: Ord.string, age: Ord.number })  // field-by-field, short-circuits
+```
+
+### Predicate\<T\>
+
+`Predicate<A> = { test(value): boolean }` — composable boolean logic.
+
+```typescript
+import { Predicate } from 'tsentials/predicate';
+
+const isAdult = Predicate.from((u: User) => u.age >= 18);
+Predicate.and(p1, p2) / Predicate.or(p1, p2) / Predicate.not(p)
+Predicate.all(p1, p2, p3)          // every predicate must pass
+Predicate.any(p1, p2, p3)          // at least one must pass
+Predicate.refinement((v: unknown): v is string => typeof v === 'string')  // narrows on .test()
+```
+
+### NonEmptyArray\<T\>
+
+```typescript
+import { NonEmptyArray, isNonEmpty, prepend, append, head, tail, last, init, asNonEmptyArray } from 'tsentials/array';
+
+const items: NonEmptyArray<string> = ['a', 'b', 'c'];
+head(items) / last(items)          // safe — no Maybe, no null check
+tail(items) / init(items)          // plain arrays
+isNonEmpty(plainArray)             // type guard, narrows to NonEmptyArray<T>
+prepend(0, [1, 2]) / append([1, 2], 3)  // construct NonEmptyArray
+asNonEmptyArray([])                // Maybe.none — safe conversion
+NonEmptyArray.map(items, fn)       // preserves non-empty guarantee (also: reverse, sort)
+NonEmptyArray.filter(items, fn)    // plain array — filtering may empty it
+```
+
+### These\<E, A\>
+
+Partial success: `Left` (errors only) | `Right` (value only) | `Both` (value AND errors).
+For the `Result` bridge, use `These<AppError[], A>`, since `toResult` expects the error side to be an array.
+
+```typescript
+import { These } from 'tsentials/these';
+import { Err, type AppError } from 'tsentials/errors';
+
+const parseAge = (raw: string): These<AppError[], number> => {
+  const age = Number(raw);
+  if (Number.isNaN(age)) return These.left([Err.validation('Age.NaN', 'Not a number')]);
+  if (age < 0) return These.both([Err.validation('Age.Negative', 'Clamped to 0')], 0);
+  return These.right(age);
+};
+
+These.isLeft(t) / These.isRight(t) / These.isBoth(t)   // type guards — narrow
+These.map(t, fn) / These.mapLeft(t, fn) / These.flatMap(t, fn)
+These.tap(t, fn) / These.tapLeft(t, fn)
+These.match(t, onLeft, onRight, onBoth)                // exhaustive
+These.getRight(t) / These.getLeft(t)                   // value | undefined
+These.toResult(t)          // Both → failure (errors win)
+These.toResultLenient(t)   // Both → success (errors discarded)
+These.fromResult(r)        // Result<T> → These<readonly AppError[], T>
+These.partition(theses)    // { lefts: E[], rights: A[], boths: {error, value}[] }
+```
+
+### Tree\<T\>
+
+`Tree<T> = { value: T; forest: Tree<T>[] }` — recursive hierarchies.
+
+```typescript
+import { Tree, drawTree } from 'tsentials/tree';
+
+const t = Tree.of('Electronics', [
+  Tree.of('Phones', [Tree.leaf('iPhone'), Tree.leaf('Android')]),
+  Tree.leaf('Laptops'),
+]);
+
+Tree.toArray(t)            // ['Electronics', 'Phones', 'iPhone', 'Android', 'Laptops'] (pre-order)
+Tree.toArrayWithDepth(t)   // [{ value, depth }, ...]
+Tree.size(t)               // 5
+Tree.map(t, fn)            // preserves structure
+Tree.filter(t, pred)       // Tree<T> | null — parent kept if any descendant matches
+Tree.find(t, pred)         // first matching node (depth-first) | null
+Tree.findAll(t, pred)      // all matching nodes
+Tree.fold(t, (value, childResults) => ...)  // post-order reduction
+drawTree(t)                // pretty-printed with ├── └── lines
+```
+
+### Record utilities
+
+Functional operations on plain objects. NOTE: `upsert`'s key must belong to the record's key union.
+
+```typescript
+import { Record as R } from 'tsentials/record';
+
+R.keys(rec) / R.values(rec) / R.entries(rec)   // typed arrays
+R.has(rec, key) / R.size(rec) / R.isEmpty(rec)
+R.map(rec, (v, k) => ...)                      // preserves keys
+R.mapWithKey(rec, (k, v) => [newKey, v])       // can rename keys
+R.filter(rec, pred)                            // Partial<Record<K, V>>
+R.filterMap(rec, v => mappedOrNull)            // map + drop nullish results
+R.upsert(rec, key, value)                      // immutable insert/update
+R.remove(rec, key) / R.pick(rec, ...keys) / R.omit(rec, ...keys)
+R.reduce(rec, initial, (acc, v, k) => ...)
+R.partition(rec, pred)                         // { pass, fail }
+```
+
 ## TypeScript configuration
 - `strict: true`, `exactOptionalPropertyTypes: true`, `noUncheckedIndexedAccess: true`
 - ESM only (`"type": "module"`), `moduleResolution: "bundler"`
 - `"sideEffects": false` in package.json for full tree-shaking
 
 ## Testing
-Vitest — `npm test` runs all 1079 tests across 33 test files.
+Vitest. `npm test` runs all 1079 tests across 33 test files.
 Test files mirror src/ structure under `tests/`.
 
 ## Publishing

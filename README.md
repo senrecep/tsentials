@@ -13,12 +13,12 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js)](https://nodejs.org)
 
-Railway-oriented programming for TypeScript — `Result<T>`, `Maybe<T>`, Rule Engine, and DDD base classes with full async pipeline support.
+Railway-oriented programming for TypeScript: `Result<T>`, `Maybe<T>`, Rule Engine, and DDD base classes with full async pipeline support.
 
 ---
 
 > **[Your Function Signature Is Lying →](https://www.senrecep.com/en/blog/your-function-signature-is-lying)**  
-> A deep dive into why `try/catch` falls short in TypeScript, the philosophy behind Railway Oriented Programming, and the design decisions that shaped `tsentials`.
+> Why `try/catch` falls short in TypeScript, the thinking behind Railway Oriented Programming, and the design decisions that shaped `tsentials`.
 
 ---
 
@@ -98,7 +98,7 @@ npm install tsentials
 
 ## Result\<T\>
 
-Discriminated union `{ ok: true; value: T } | { ok: false; errors: AppError[] }`. No exceptions — errors are values.
+Discriminated union `{ ok: true; value: T } | { ok: false; errors: AppError[] }`. Errors are values, not exceptions.
 
 ### Creating Results
 
@@ -211,12 +211,13 @@ const [ok, value, errors] = Result.deconstruct(result);
 
 ### Async Pipeline — ResultAsync\<T\>
 
-`ResultAsync<T>` implements `PromiseLike<Result<T>>` — the entire chain builds synchronously, resolves once at the end with a single `await`.
+`ResultAsync<T>` implements `PromiseLike<Result<T>>`. The entire chain builds synchronously and resolves once at the end with a single `await`.
 
 ```typescript
 import { fromAsync } from 'tsentials/result';
 import { Err } from 'tsentials/errors';
 
+// fromAsync takes a Promise<Result<T>> — here fetchUser returns Promise<Result<User>>
 const profile = await fromAsync(fetchUser(userId))
   .andThen(user => validateUser(user))
   .ensure(user => user.isActive, Err.validation('User.Inactive', 'Not active'))
@@ -231,18 +232,19 @@ const profile = await fromAsync(fetchUser(userId))
 Async variants of all sync operations are available: `thenAsync`, `mapAsync`, `ensureAsync`, `tapAsync`, `tapErrorAsync`, `compensateAsync`, `mapErrorAsync`.
 
 ```typescript
-// Conditional async bind
+// Conditional async bind — the bind fn preserves T; when the condition is
+// false the original Result<T> passes through unchanged
 await Result.bindIfAsync(
   Result.success(user),
   u => u.isAdmin,
-  async u => fetchAdminDashboard(u),
+  async u => loadAdminProfile(u), // (u: User) => Promise<Result<User>>
 );
 
-// Async recovery
+// Async recovery — the recovery fn returns the same Result<T>
 await Result.recoverAsync(
   Result.failure(cacheMiss),
   e => e.code === 'Cache.Miss',
-  async () => fetchFromDatabase(),
+  async () => fetchFromDatabase(), // () => Promise<Result<T>>
 );
 ```
 
@@ -294,7 +296,7 @@ await Result.traverseAsync([1, 2], async n => fetchUser(n));
 
 ## Maybe\<T\>
 
-Explicit optional values — no accidental `undefined`.
+Explicit optional values instead of accidental `undefined`.
 
 ### Creating Maybe Values
 
@@ -520,7 +522,7 @@ class Order implements EntityBase, SoftDeletable {
 
 ## HTTP (fetchResult)
 
-`fetchResult` never throws — network errors and HTTP error responses are captured as `Result<T>`.
+`fetchResult` never throws. It captures network errors and HTTP error responses as `Result<T>`.
 
 ```typescript
 import { fetchResult, RequestBuilder } from 'tsentials/http';
@@ -583,6 +585,7 @@ Programmatic discriminated union with exhaustive match.
 
 ```typescript
 import { Union } from 'tsentials/union';
+import type { AppError } from 'tsentials/errors';
 
 type PaymentResult = Union<{
   success: { transactionId: string };
@@ -590,7 +593,9 @@ type PaymentResult = Union<{
   failed: { error: AppError };
 }>;
 
-const result = Union.of<{ success: { transactionId: string }; pending: { estimatedMs: number }; failed: { error: AppError } }>('success', { transactionId: 'txn_123' });
+// Construct with `as PaymentResult` (not `: PaymentResult`) for fresh literals —
+// assignment narrowing would otherwise pin the value to a single member.
+const result = { tag: 'success', value: { transactionId: 'txn_123' } } as PaymentResult;
 
 const message = Union.match(result, {
   success: ({ transactionId }) => `Paid! Ref: ${transactionId}`,
@@ -598,7 +603,7 @@ const message = Union.match(result, {
   failed: ({ error }) => `Failed: ${error.description}`,
 });
 
-// Type guard
+// Type guard — narrows to the tagged member
 if (Union.is(result, 'success')) {
   console.log(result.value.transactionId);
 }
@@ -606,13 +611,21 @@ if (Union.is(result, 'success')) {
 // Unsafe extraction
 const id = Union.get(result, 'success').transactionId; // throws if wrong tag
 
+// Collection utilities
+type Shape = Union<{ circle: { radius: number }; rect: { w: number; h: number } }>;
+const shapes: Shape[] = [
+  { tag: 'circle', value: { radius: 1 } },
+  { tag: 'rect', value: { w: 2, h: 3 } },
+  { tag: 'circle', value: { radius: 4 } },
+];
+
 // partition: split union array into two typed arrays by tag
 const { lefts, rights } = Union.partition(shapes, 'circle', 'rect');
-// lefts: Array<{ radius: number }>, rights: Array<{ w: number; h: number }>
+// lefts: Array<{ radius: number }> (2 items), rights: Array<{ w: number; h: number }> (1 item)
 
 // groupBy: group all items by tag into a record
 const groups = Union.groupBy(shapes);
-// { circle: [...], rect: [...] }
+// { circle: [{ radius: 1 }, { radius: 4 }], rect: [{ w: 2, h: 3 }] }
 ```
 
 ---
@@ -644,8 +657,8 @@ import { deepClone, cloneArray } from 'tsentials/clone';
 import type { Cloneable } from 'tsentials/clone';
 ```
 
-`deepClone` uses the native `structuredClone` API when available, falling back to a robust
-recursive implementation. Never throws — works in React Native (Hermes) and all JS runtimes.
+`deepClone` uses the native `structuredClone` API when available and falls back to a recursive
+implementation when it is not. It never throws, and it works in React Native (Hermes) and other JS runtimes.
 
 ```typescript
 // Plain objects, nested structures
@@ -683,7 +696,7 @@ const cloned = cloneArray([new Product(1), new Product(2)]);
 
 ## JSON Utilities
 
-Type-safe JSON parsing and validation that returns `Result<T>` — no exceptions, fits directly into the railway pipeline.
+Type-safe JSON parsing and validation that returns `Result<T>` instead of throwing, so it fits directly into the railway pipeline.
 
 ```typescript
 import { safeJsonParse, safeJsonStringify, parseAndValidate } from 'tsentials/json';
@@ -750,8 +763,9 @@ const processed = Result.then(
 ## pipe & flow
 
 ```typescript
-import { pipe, flow } from 'tsentials/function';
+import { pipe, flow, identity, constant, flip } from 'tsentials/function';
 
+// pipe — thread a value through unary functions (up to 15 steps, fully typed)
 const result = pipe(
   5,
   n => n * 2,
@@ -759,46 +773,87 @@ const result = pipe(
   n => String(n),
 ); // "11"
 
+// flow — compose functions into a reusable pipeline
 const doubleAndStringify = flow(
   (n: number) => n * 2,
   n => String(n),
 );
 doubleAndStringify(5); // "10"
+
+identity(42);                                    // 42
+const alwaysTrue = constant(true);
+alwaysTrue();                                    // true
+const subtract = (a: number, b: number) => a - b;
+flip(subtract)(3, 10);                           // 7 — arguments reversed
 ```
 
 ## NonEmptyArray\<T\>
 
-Type-safe arrays guaranteed to have at least one element. No null checks needed for `head()` or `last()`.
+Type-safe arrays guaranteed to have at least one element, so `head()` and `last()` never need a null check.
 
 ```typescript
-import { NonEmptyArray, asNonEmptyArray } from 'tsentials/array';
+import { NonEmptyArray, asNonEmptyArray, isNonEmpty, prepend, append, head, tail, last, init } from 'tsentials/array';
 
 const items: NonEmptyArray<string> = ['a', 'b', 'c'];
-NonEmptyArray.head(items); // 'a' — safe, no Maybe
-NonEmptyArray.last(items);  // 'c'
+head(items);  // 'a' — safe, no Maybe
+last(items);  // 'c'
+tail(items);  // ['b', 'c'] — plain array
+init(items);  // ['a', 'b'] — plain array
 
 // Safe conversion from plain array
 const maybe = asNonEmptyArray([]);        // None
 const sure  = asNonEmptyArray([1, 2]);    // Some([1, 2])
+
+// Type guard — narrows a plain array
+const values = [1, 2, 3];
+if (isNonEmpty(values)) {
+  head(values); // 1 — no null check needed inside the guard
+}
+
+// Construction that preserves the guarantee
+prepend(0, [1, 2]);  // NonEmptyArray [0, 1, 2]
+append([1, 2], 3);   // NonEmptyArray [1, 2, 3]
+
+// map/reverse/sort keep the non-empty guarantee; filter returns a plain array
+NonEmptyArray.map(items, s => s.toUpperCase()); // NonEmptyArray ['A', 'B', 'C']
+NonEmptyArray.filter(items, s => s !== 'a');    // ['b', 'c'] — may become empty
 ```
 
 ## Eq\<T\> & Ord\<T\>
 
-Composable, type-safe equality and ordering.
+Composable, type-safe equality and ordering. `Eq<A>` provides `equals`, `Ord<A>` extends it with `compare` returning `-1 | 0 | 1`.
 
 ```typescript
 import { Eq } from 'tsentials/eq';
-import { Ord, sortBy, min, max, clamp } from 'tsentials/ord';
+import { Ord, sortBy, min, max, clamp, between, reverse } from 'tsentials/ord';
 
 interface User { readonly id: number; readonly name: string; readonly age: number; }
 
+// Structural equality from primitive instances (Eq.strict/string/number/boolean/date)
 const eqUser = Eq.struct<User>({ id: Eq.number, name: Eq.string, age: Eq.number });
+eqUser.equals({ id: 1, name: 'A', age: 30 }, { id: 1, name: 'A', age: 30 }); // true
+
+// Compare by projection
+const eqById = Eq.contramap(Eq.number, (u: User) => u.id);
+const eqNumberArray = Eq.getArrayEq(Eq.number); // element-wise array equality
+
+const users: User[] = [
+  { id: 1, name: 'Carol', age: 35 },
+  { id: 2, name: 'Alice', age: 30 },
+];
 
 const byAge = Ord.contramap(Ord.number, (u: User) => u.age);
-const sorted = sortBy(users, byAge);
+sortBy(users, byAge);            // sorted copy, ascending
+sortBy(users, reverse(byAge));   // descending
 
-min(byAge, userA, userB);
-clamp(Ord.number, 0, 100, 150); // 100
+const [a, b] = [users[0]!, users[1]!];
+min(byAge, a, b);                // Alice (30)
+max(byAge, a, b);                // Carol (35)
+clamp(Ord.number, 0, 100, 150);  // 100
+between(Ord.number, 0, 100, 42); // true
+
+// Multi-field ordering — compares fields in order, short-circuits
+const byNameThenAge = Ord.struct({ name: Ord.string, age: Ord.number });
 ```
 
 ## Predicate\<T\>
@@ -808,28 +863,60 @@ Composable boolean predicates for validation and filtering.
 ```typescript
 import { Predicate } from 'tsentials/predicate';
 
+interface User { readonly age: number; readonly isActive: boolean; readonly role: string; }
+
 const isAdult = Predicate.from((u: User) => u.age >= 18);
 const isActive = Predicate.from((u: User) => u.isActive);
+const isAdmin = Predicate.from((u: User) => u.role === 'admin');
 
 const isValid = Predicate.and(isAdult, isActive);
-const isAnyOf = Predicate.any(isAdult, isGuest, isAdmin);
+isValid.test({ age: 20, isActive: true, role: 'user' }); // true
+
+Predicate.or(isAdult, isAdmin);            // either passes
+Predicate.not(isAdult);                    // negation
+Predicate.all(isAdult, isActive, isAdmin); // every predicate must pass
+Predicate.any(isAdult, isActive, isAdmin); // at least one must pass
+
+// Refinement — narrows the type on success
+const isString = Predicate.refinement((v: unknown): v is string => typeof v === 'string');
+const input: unknown = 'hello';
+if (isString.test(input)) input.toUpperCase(); // input is string here
 ```
 
 ## These\<E, A\>
 
-Partial success — a value together with errors/warnings. Unlike `Result<T>` which is either-or, `These` allows both.
+Partial success: a value together with errors or warnings. `Result<T>` is either-or; `These` allows both at once. Use `These<AppError[], A>` when you want the `Result` bridge, since `toResult` expects the error side to be an array.
 
 ```typescript
 import { These } from 'tsentials/these';
+import { Err, type AppError } from 'tsentials/errors';
 
-const parseAge = (raw: string): These<AppError, number> => {
+const parseAge = (raw: string): These<AppError[], number> => {
   const age = Number(raw);
-  if (Number.isNaN(age)) return These.left(Err.validation('Age.NaN', 'Not a number'));
-  if (age < 0) return These.both(Err.validation('Age.Negative', 'Negative age'), 0);
+  if (Number.isNaN(age)) return These.left([Err.validation('Age.NaN', 'Not a number')]);
+  if (age < 0) return These.both([Err.validation('Age.Negative', 'Clamped to 0')], 0);
   return These.right(age);
 };
 
-These.toResult(parseAge('-5')); // failure (Both converts to failure)
+// Exhaustive match — Left, Right, and Both each get a handler
+const label = These.match(
+  parseAge('-5'),
+  (errors) => `failed: ${errors[0]?.code}`,
+  (age) => `ok: ${age}`,
+  (errors, age) => `partial: ${age} with ${errors.length} warning(s)`,
+); // "partial: 0 with 1 warning(s)"
+
+// Type guards narrow
+const t = parseAge('30');
+if (These.isRight(t)) console.log(t.right); // 30
+
+// Bridge to Result
+These.toResult(parseAge('-5'));        // failure — Both converts to failure (errors win)
+These.toResultLenient(parseAge('-5')); // success(0) — Both keeps the value, discards errors
+
+// Split a batch into successes / failures / partials
+const { lefts, rights, boths } = These.partition([parseAge('30'), parseAge('abc'), parseAge('-5')]);
+// rights: [30], lefts: [[Age.NaN]], boths: [{ error: [...], value: 0 }]
 ```
 
 ## Tree\<T\>
@@ -837,16 +924,31 @@ These.toResult(parseAge('-5')); // failure (Both converts to failure)
 Recursive tree data structure for hierarchies.
 
 ```typescript
-import { Tree } from 'tsentials/tree';
+import { Tree, drawTree } from 'tsentials/tree';
 
-const tree = Tree.of('root', [
-  Tree.of('a', [Tree.leaf('a1')]),
-  Tree.leaf('b'),
+const tree = Tree.of('Electronics', [
+  Tree.of('Phones', [Tree.leaf('iPhone'), Tree.leaf('Android')]),
+  Tree.leaf('Laptops'),
 ]);
 
-Tree.toArray(tree);           // ['root', 'a', 'a1', 'b']
-Tree.find(tree, v => v === 'a1');
-Tree.drawTree(tree);
+Tree.toArray(tree);          // ['Electronics', 'Phones', 'iPhone', 'Android', 'Laptops'] (pre-order)
+Tree.size(tree);             // 5
+Tree.map(tree, s => s.toUpperCase());       // same structure, transformed values
+Tree.find(tree, v => v === 'iPhone');       // first matching node (depth-first) | null
+Tree.findAll(tree, v => v.length > 6);      // all matching nodes
+Tree.filter(tree, v => v === 'Phones');     // parent kept if any descendant matches
+
+// Post-order fold — e.g. count all nodes
+Tree.fold(tree, (_value, children: readonly number[]) =>
+  1 + children.reduce((a, b) => a + b, 0),
+); // 5
+
+console.log(drawTree(tree));
+// Electronics
+// ├── Phones
+// │   ├── iPhone
+// │   └── Android
+// └── Laptops
 ```
 
 ## Record Utilities
@@ -858,10 +960,24 @@ import { Record as R } from 'tsentials/record';
 
 const users = { a: { name: 'Alice' }, b: { name: 'Bob' } };
 
-R.map(users, u => u.name);            // { a: 'Alice', b: 'Bob' }
-R.filter(users, u => u.name !== 'Bob');
-R.pick(users, 'a');                   // { a: { name: 'Alice' } }
-R.omit(users, 'b');                   // { a: { name: 'Alice' } }
+R.map(users, u => u.name);              // { a: 'Alice', b: 'Bob' }
+R.filter(users, u => u.name !== 'Bob'); // { a: { name: 'Alice' } }
+R.pick(users, 'a');                     // { a: { name: 'Alice' } }
+R.omit(users, 'b');                     // { a: { name: 'Alice' } }
+R.keys(users);                          // ['a', 'b'] — typed
+R.size(users);                          // 2
+R.has(users, 'a');                      // true
+
+const scores = { math: 90, art: 40, science: 75 };
+
+R.reduce(scores, 0, (acc, v) => acc + v);      // 205
+R.partition(scores, v => v >= 60);             // { pass: { math, science }, fail: { art } }
+R.filterMap(scores, v => (v >= 60 ? v + 10 : null)); // { math: 100, science: 85 }
+R.mapWithKey(scores, (k, v) => [k.toUpperCase(), v]); // { MATH: 90, ART: 40, SCIENCE: 75 }
+
+// upsert/remove — immutable; the key must belong to the record's key union
+R.upsert(scores, 'art', 55);  // { math: 90, art: 55, science: 75 }
+R.remove(scores, 'art');      // { math: 90, science: 75 }
 ```
 
 ## String Utilities

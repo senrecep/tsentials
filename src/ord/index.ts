@@ -105,9 +105,7 @@ export function contramap<A, B>(ordA: Ord<A>, f: (b: B) => A): Ord<B> {
  *   age: Ord.number,
  * });
  */
-export function struct<A extends Record<string, unknown>>(
-  ords: { [K in keyof A]: Ord<A[K]> },
-): Ord<A> {
+export function struct<A extends object>(ords: { [K in keyof A]: Ord<A[K]> }): Ord<A> {
   const keys = Object.keys(ords) as Array<keyof A>;
   return {
     equals: (first, second) => {
