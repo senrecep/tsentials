@@ -179,7 +179,7 @@
   <div class="hero-badge">Railway-Oriented Programming</div>
   <h1><span>tsentials</span></h1>
   <p class="hero-sub">
-    Result&lt;T&gt;, Maybe&lt;T&gt;, Rule Engine, DDD base classes, type-safe JSON, and functional utilities — with full async pipeline support.
+    Result&lt;T&gt;, Maybe&lt;T&gt;, Rule Engine, DDD base classes, type-safe JSON, and functional utilities, with full async pipeline support.
   </p>
 
   <div class="install-box">
@@ -209,7 +209,7 @@
         </svg>
       </div>
       <h4>Railway-Oriented</h4>
-      <p>Chain operations that automatically short-circuit on failure — no try/catch.</p>
+      <p>Chain operations that short-circuit on failure instead of throwing.</p>
     </div>
     <div class="feature">
       <div class="feature-icon">
@@ -218,7 +218,7 @@
         </svg>
       </div>
       <h4>Async-first</h4>
-      <p>ResultAsync&lt;T&gt; chains build synchronously, resolve once. Zero intermediate awaits.</p>
+      <p>ResultAsync&lt;T&gt; chains build synchronously and resolve with a single await at the end.</p>
     </div>
     <div class="feature">
       <div class="feature-icon">
@@ -254,7 +254,7 @@
         </svg>
       </div>
       <h4>Zero dependencies</h4>
-      <p>No runtime dependencies. Pure TypeScript that compiles to clean ESM.</p>
+      <p>Pure TypeScript with no runtime dependencies, compiled to clean ESM.</p>
     </div>
     <div class="feature">
       <div class="feature-icon">
@@ -263,7 +263,7 @@
         </svg>
       </div>
       <h4>Type-safe JSON</h4>
-      <p>safeJsonParse and parseAndValidate return Result&lt;T&gt; — never throw, chain directly into any pipeline.</p>
+      <p>safeJsonParse and parseAndValidate return Result&lt;T&gt; instead of throwing, so they chain into any pipeline.</p>
     </div>
   </div>
 </section>
@@ -344,6 +344,10 @@
       <div class="module-import">tsentials/record</div>
       <div class="module-desc">Functional object utilities — map, filter, pick, omit, reduce, partition</div>
     </div>
+    <div class="module-card">
+      <div class="module-import">tsentials/string</div>
+      <div class="module-desc">Case conversion — toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase</div>
+    </div>
   </div>
 </section>
 
@@ -357,8 +361,10 @@
         <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
         <span>Async pipeline — ResultAsync&lt;T&gt;</span>
       </div>
-      <pre><code><span class="kw">import</span> { <span class="fn">fromAsync</span>, <span class="type">Err</span> } <span class="kw">from</span> <span class="str">'tsentials/result'</span>;
+      <pre><code><span class="kw">import</span> { <span class="fn">fromAsync</span> } <span class="kw">from</span> <span class="str">'tsentials/result'</span>;
+<span class="kw">import</span> { <span class="type">Err</span> } <span class="kw">from</span> <span class="str">'tsentials/errors'</span>;
 
+<span class="cmt">// fromAsync takes a Promise&lt;Result&lt;T&gt;&gt; — fetchUser: (id) =&gt; Promise&lt;Result&lt;User&gt;&gt;</span>
 <span class="kw">const</span> profile = <span class="kw">await</span> <span class="fn">fromAsync</span>(<span class="fn">fetchUser</span>(userId))
   <span class="chain">.<span class="fn">andThen</span></span>(user => <span class="fn">validateUser</span>(user))       <span class="cmt">// Result&lt;User&gt; | ResultAsync&lt;User&gt;</span>
   <span class="chain">.<span class="fn">ensure</span></span>(user => user.isActive, <span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'User.Inactive'</span>, <span class="str">'Not active'</span>))
@@ -376,6 +382,14 @@
         <span>Maybe&lt;T&gt; — null-safe pipelines</span>
       </div>
       <pre><code><span class="kw">import</span> { <span class="type">Maybe</span>, <span class="fn">tryFind</span>, <span class="fn">choose</span> } <span class="kw">from</span> <span class="str">'tsentials/maybe'</span>;
+
+<span class="kw">interface</span> <span class="type">User</span> { nickname: <span class="type">string</span> | <span class="kw">null</span>; email: <span class="type">string</span>; role: <span class="type">string</span>; displayName?: <span class="type">string</span>; }
+
+<span class="kw">const</span> users: <span class="type">User</span>[] = [
+  { nickname: <span class="kw">null</span>, email: <span class="str">'trinity@zion.io'</span>, role: <span class="str">'admin'</span> },
+  { nickname: <span class="str">'  neo  '</span>, email: <span class="str">'neo@zion.io'</span>, role: <span class="str">'user'</span>, displayName: <span class="str">'Neo'</span> },
+];
+<span class="kw">const</span> user = users[<span class="num">1</span>]!;
 
 <span class="cmt">// Wrap nullable, chain operations</span>
 <span class="kw">const</span> display = <span class="type">Maybe</span>.<span class="fn">getOrElse</span>(
@@ -398,6 +412,10 @@
       </div>
       <pre><code><span class="kw">import</span> { <span class="type">RuleEngine</span> } <span class="kw">from</span> <span class="str">'tsentials/rules'</span>;
 <span class="kw">import</span> <span class="kw">type</span> { <span class="type">Rule</span> } <span class="kw">from</span> <span class="str">'tsentials/rules'</span>;
+<span class="kw">import</span> { <span class="type">Result</span> } <span class="kw">from</span> <span class="str">'tsentials/result'</span>;
+<span class="kw">import</span> { <span class="type">Err</span> } <span class="kw">from</span> <span class="str">'tsentials/errors'</span>;
+
+<span class="kw">interface</span> <span class="type">User</span> { age: <span class="type">number</span>; email: <span class="type">string</span> | <span class="kw">null</span>; }
 
 <span class="kw">const</span> isAdult: <span class="type">Rule</span>&lt;<span class="type">User</span>&gt; = ctx =>
   ctx.age >= <span class="num">18</span> ? <span class="type">Result</span>.<span class="fn">ok</span>() : <span class="type">Result</span>.<span class="fn">failure</span>(<span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'Age.TooLow'</span>, <span class="str">'Must be 18+'</span>));
@@ -426,6 +444,8 @@
 }
 
 <span class="cmt">// Parse + type guard → fully typed Result&lt;User&gt;</span>
+<span class="kw">interface</span> <span class="type">User</span> { name: <span class="type">string</span>; age: <span class="type">number</span>; }
+
 <span class="kw">function</span> <span class="fn">isUser</span>(v: <span class="type">unknown</span>): v <span class="kw">is</span> <span class="type">User</span> {
   <span class="kw">return</span> <span class="fn">isJsonObject</span>(v) &amp;&amp; <span class="kw">typeof</span> v.name === <span class="str">'string'</span> &amp;&amp; <span class="kw">typeof</span> v.age === <span class="str">'number'</span>;
 }
@@ -478,16 +498,18 @@ doubleAndStringify(<span class="num">5</span>); <span class="cmt">// "10"</span>
         <span>These&lt;E,A&gt; — partial success</span>
       </div>
       <pre><code><span class="kw">import</span> { <span class="type">These</span> } <span class="kw">from</span> <span class="str">'tsentials/these'</span>;
+<span class="kw">import</span> { <span class="type">Err</span>, <span class="kw">type</span> <span class="type">AppError</span> } <span class="kw">from</span> <span class="str">'tsentials/errors'</span>;
 
-<span class="cmt">// A value together with warnings/errors</span>
-<span class="kw">const</span> parseAge = (raw: <span class="type">string</span>): <span class="type">These</span>&lt;<span class="type">AppError</span>, <span class="type">number</span>&gt; => {
+<span class="cmt">// A value together with warnings/errors — These&lt;AppError[], A&gt; bridges to Result</span>
+<span class="kw">const</span> parseAge = (raw: <span class="type">string</span>): <span class="type">These</span>&lt;<span class="type">AppError</span>[], <span class="type">number</span>&gt; => {
   <span class="kw">const</span> age = <span class="type">Number</span>(raw);
-  <span class="kw">if</span> (<span class="type">Number</span>.<span class="fn">isNaN</span>(age)) <span class="kw">return</span> <span class="type">These</span>.<span class="fn">left</span>(<span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'Age.NaN'</span>, <span class="str">'Not a number'</span>));
-  <span class="kw">if</span> (age &lt; <span class="num">0</span>) <span class="kw">return</span> <span class="type">These</span>.<span class="fn">both</span>(<span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'Age.Negative'</span>, <span class="str">'Negative age'</span>), <span class="num">0</span>);
+  <span class="kw">if</span> (<span class="type">Number</span>.<span class="fn">isNaN</span>(age)) <span class="kw">return</span> <span class="type">These</span>.<span class="fn">left</span>([<span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'Age.NaN'</span>, <span class="str">'Not a number'</span>)]);
+  <span class="kw">if</span> (age &lt; <span class="num">0</span>) <span class="kw">return</span> <span class="type">These</span>.<span class="fn">both</span>([<span class="type">Err</span>.<span class="fn">validation</span>(<span class="str">'Age.Negative'</span>, <span class="str">'Clamped to 0'</span>)], <span class="num">0</span>);
   <span class="kw">return</span> <span class="type">These</span>.<span class="fn">right</span>(age);
 };
 
-<span class="type">These</span>.<span class="fn">toResult</span>(parseAge(<span class="str">'-5'</span>)); <span class="cmt">// failure (Both → failure)</span></code></pre>
+<span class="type">These</span>.<span class="fn">toResult</span>(parseAge(<span class="str">'-5'</span>));        <span class="cmt">// failure (Both → failure, errors win)</span>
+<span class="type">These</span>.<span class="fn">toResultLenient</span>(parseAge(<span class="str">'-5'</span>)); <span class="cmt">// success(0) — errors discarded</span></code></pre>
     </div>
 
     <div class="example">
@@ -499,10 +521,28 @@ doubleAndStringify(<span class="num">5</span>); <span class="cmt">// "10"</span>
 
 <span class="kw">interface</span> <span class="type">User</span> { <span class="kw">readonly</span> age: <span class="type">number</span>; }
 
+<span class="kw">const</span> users: <span class="type">User</span>[] = [{ age: <span class="num">35</span> }, { age: <span class="num">25</span> }, { age: <span class="num">30</span> }];
+
 <span class="kw">const</span> byAge = <span class="type">Ord</span>.<span class="fn">contramap</span>(<span class="type">Ord</span>.number, (u: <span class="type">User</span>) => u.age);
-<span class="fn">sortBy</span>(users, byAge); <span class="cmt">// sorted by age ascending</span>
+<span class="fn">sortBy</span>(users, byAge); <span class="cmt">// [{ age: 25 }, { age: 30 }, { age: 35 }]</span>
 
 <span class="fn">clamp</span>(<span class="type">Ord</span>.number, <span class="num">0</span>, <span class="num">100</span>, <span class="num">150</span>); <span class="cmt">// 100</span></code></pre>
+    </div>
+
+    <div class="example">
+      <div class="example-header">
+        <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+        <span>String — case conversion</span>
+      </div>
+      <pre><code><span class="kw">import</span> { <span class="fn">toPascalCase</span>, <span class="fn">toKebabCase</span>, <span class="fn">toSnakeCase</span>, <span class="fn">toMacroCase</span>, <span class="fn">toTitleCase</span> } <span class="kw">from</span> <span class="str">'tsentials/string'</span>;
+
+<span class="fn">toPascalCase</span>(<span class="str">'hello world'</span>);  <span class="cmt">// 'HelloWorld'</span>
+<span class="fn">toKebabCase</span>(<span class="str">'HelloWorld'</span>);    <span class="cmt">// 'hello-world'</span>
+<span class="fn">toSnakeCase</span>(<span class="str">'helloWorld'</span>);    <span class="cmt">// 'hello_world'</span>
+<span class="fn">toMacroCase</span>(<span class="str">'helloWorld'</span>);    <span class="cmt">// 'HELLO_WORLD'</span>
+<span class="fn">toTitleCase</span>(<span class="str">'helloWorld'</span>);    <span class="cmt">// 'Hello World'</span>
+
+<span class="cmt">// Handles spaces, hyphens, underscores, camelCase, PascalCase, and mixed input</span></code></pre>
     </div>
 
   </div>
@@ -528,6 +568,9 @@ doubleAndStringify(<span class="num">5</span>); <span class="cmt">// "10"</span>
     });
   }
 </script>
+
+<!-- Context7 AI chat assistant -->
+<script async src="https://context7.com/widget.js" data-library="/senrecep/tsentials"></script>
 
 </body>
 </html>

@@ -3,7 +3,7 @@
 ## Quick Reference
 
 **Package:** `tsentials` (npm)  
-**Purpose:** Railway-oriented programming — error-as-value, no exceptions  
+**Purpose:** Railway-oriented programming: errors as values instead of exceptions  
 **Node:** ≥18, TypeScript ≥5.0, ESM only
 
 ## Import Paths
@@ -16,7 +16,8 @@ import { RuleEngine } from 'tsentials/rules';
 import type { Rule } from 'tsentials/rules';
 import { createEntityBase, createSoftDeletable } from 'tsentials/entity';
 import type { DomainEvent } from 'tsentials/entity';
-import { fetchResult, RequestBuilder } from 'tsentials/http';
+import { fetchResult, RequestBuilder, HttpCodes } from 'tsentials/http';
+import type { HttpCode } from 'tsentials/http';
 import { SystemDateTimeProvider, createFakeDateTimeProvider } from 'tsentials/time';
 import { deepClone, cloneArray } from 'tsentials/clone';
 import { Union } from 'tsentials/union';
@@ -30,6 +31,7 @@ import { NonEmptyArray, head, asNonEmptyArray } from 'tsentials/array';
 import { These } from 'tsentials/these';
 import { Tree } from 'tsentials/tree';
 import { Record } from 'tsentials/record';
+import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
 ```
 
 ---
@@ -91,6 +93,8 @@ Result.always(r, fn)              // unconditional cleanup — returns fn result
 Result.ap(fab, fa)                // applicative apply
 Result.partition(results)         // split into { ok: T[], err: AppError[] }
 Result.sequence(promises)         // await Promise<Result<T>>[] → Result<T[]>
+Result.traverse(items, fn)        // A[] → (A → Result<B>) → Result<B[]>, collects ALL errors
+await Result.traverseAsync(items, async fn)  // async version
 ```
 
 ### Async Pipeline — fromAsync / ResultAsync\<T\>
@@ -283,6 +287,11 @@ await RequestBuilder.post('/users')
 
 // Status → ErrorType: 400/422→Validation, 401→Unauthorized, 403→Forbidden,
 //   404/410→NotFound, 409/429→Conflict, ≥500→Unexpected
+
+// Type-safe status constants — no magic numbers (21 constants, 2xx–5xx)
+const status: HttpCode = HttpCodes.Ok;  // 200
+HttpCodes.NotFound                      // 404
+HttpCodes.InternalServerError           // 500
 ```
 
 ### Entity Base (DDD)
@@ -321,7 +330,9 @@ type PaymentResult = Union<{
   failed:  { error: AppError };
 }>;
 
-const r: PaymentResult = { tag: 'success', value: { transactionId: 'txn_123' } };
+// Use `as PaymentResult` (NOT `: PaymentResult`) for fresh literals —
+// assignment narrowing would pin the value to one member and break exhaustive match.
+const r = { tag: 'success', value: { transactionId: 'txn_123' } } as PaymentResult;
 
 Union.match(r, {
   success: ({ transactionId }) => `Paid: ${transactionId}`,
@@ -329,8 +340,12 @@ Union.match(r, {
   failed:  ({ error })         => `Failed: ${error.description}`,
 });
 
-Union.is(r, 'success')         // type guard
+Union.is(r, 'success')         // type guard — narrows to the tagged member
 Union.get(r, 'success')        // value or throws
+
+// Collection utilities
+Union.partition(items, 'leftTag', 'rightTag')  // { lefts: Left[], rights: Right[] } — other tags discarded
+Union.groupBy(items)                           // { [tag]?: value[] }
 ```
 
 ### Clone — deepClone & cloneArray
@@ -398,6 +413,119 @@ parseAndValidate<User>(raw, isUser)
 Result.then(safeJsonParse(raw), data => validatePayload(data));
 ```
 
+### Function — pipe & flow
+
+```typescript
+import { pipe, flow, identity, constant, flip } from 'tsentials/function';
+
+pipe(5, n => n * 2, n => String(n))            // "10" — value through unary fns (max 15 steps)
+const f = flow((n: number) => n * 2, n => String(n))  // reusable composition
+identity(x) / constant(v)() / flip(binaryFn)
+```
+
+### Eq\<T\> & Ord\<T\>
+
+```typescript
+import { Eq } from 'tsentials/eq';
+import { Ord, sortBy, min, max, clamp, between, reverse } from 'tsentials/ord';
+
+// Instances: Eq.strict/string/number/boolean/date — Ord.number/string/boolean/date
+Eq.struct({ id: Eq.number, name: Eq.string })   // structural equality (works with interfaces)
+Eq.contramap(Eq.number, (u: User) => u.id)      // equality by projection
+Eq.getArrayEq(Eq.number)                        // element-wise
+
+const byAge = Ord.contramap(Ord.number, (u: User) => u.age);
+sortBy(users, byAge) / sortBy(users, reverse(byAge))
+min(byAge, a, b) / max(byAge, a, b)
+clamp(Ord.number, 0, 100, 150)                  // 100 — throws if lower > upper
+between(Ord.number, 0, 100, 42)                 // true
+Ord.struct({ name: Ord.string, age: Ord.number })  // multi-field, short-circuits
+```
+
+### Predicate\<T\>
+
+```typescript
+import { Predicate } from 'tsentials/predicate';
+
+const isAdult = Predicate.from((u: User) => u.age >= 18);  // { test(value): boolean }
+Predicate.and(p1, p2) / Predicate.or(p1, p2) / Predicate.not(p)
+Predicate.all(...ps) / Predicate.any(...ps)
+Predicate.refinement((v: unknown): v is string => typeof v === 'string')  // narrows on .test()
+```
+
+### NonEmptyArray\<T\>
+
+```typescript
+import { NonEmptyArray, isNonEmpty, prepend, append, head, tail, last, init, asNonEmptyArray } from 'tsentials/array';
+
+const items: NonEmptyArray<string> = ['a', 'b'];
+head(items) / last(items)          // safe — no Maybe
+isNonEmpty(plain)                  // type guard → NonEmptyArray<T>
+prepend(head, arr) / append(arr, last)  // construct
+asNonEmptyArray([])                // Maybe.none
+NonEmptyArray.map/reverse/sort     // preserve guarantee; filter → plain array
+```
+
+### These\<E, A\> — partial success
+
+```typescript
+import { These } from 'tsentials/these';
+
+// Left (errors) | Right (value) | Both (value AND errors)
+// Use These<AppError[], A> — toResult expects the error side to be an array
+These.left([err]) / These.right(value) / These.both([err], value)
+These.isLeft(t) / These.isRight(t) / These.isBoth(t)   // type guards — narrow
+These.map / mapLeft / flatMap / tap / tapLeft
+These.match(t, onLeft, onRight, onBoth)                // exhaustive
+These.toResult(t)         // Both → failure (errors win)
+These.toResultLenient(t)  // Both → success (errors discarded)
+These.fromResult(r)
+These.partition(theses)   // { lefts, rights, boths }
+```
+
+### Tree\<T\>
+
+```typescript
+import { Tree, drawTree } from 'tsentials/tree';
+
+const t = Tree.of('root', [Tree.leaf('a'), Tree.of('b', [Tree.leaf('b1')])]);
+Tree.toArray(t)            // pre-order values
+Tree.size(t) / Tree.isLeaf(t) / Tree.root(t) / Tree.children(t)
+Tree.map(t, fn) / Tree.filter(t, pred)   // filter: parent kept if any descendant matches
+Tree.find(t, pred) / Tree.findAll(t, pred)
+Tree.fold(t, (value, childResults) => ...)  // post-order
+drawTree(t)                // ├── └── pretty print
+```
+
+### Record utilities
+
+```typescript
+import { Record as R } from 'tsentials/record';
+
+R.keys / R.values / R.entries / R.has / R.size / R.isEmpty
+R.map(rec, (v, k) => ...) / R.mapWithKey(rec, (k, v) => [newKey, v])
+R.filter(rec, pred) / R.filterMap(rec, v => mappedOrNull)
+R.upsert(rec, key, value)   // NOTE: key must belong to the record's key union
+R.remove / R.pick / R.omit
+R.reduce(rec, initial, (acc, v, k) => ...) / R.partition(rec, pred)
+```
+
+### String — case conversion
+
+```typescript
+import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
+
+toPascalCase('hello world')          // 'HelloWorld'
+toCamelCase('hello-world')           // 'helloWorld'
+toKebabCase('HelloWorld')            // 'hello-world'
+toSnakeCase('helloWorld')            // 'hello_world'
+toMacroCase('helloWorld')            // 'HELLO_WORLD'
+toTrainCase('hello_world')           // 'Hello-World'
+toTitleCase('helloWorld')            // 'Hello World'
+toUnderscoreCamelCase('helloWorld')  // '_helloWorld'
+// Handles spaces, hyphens, underscores, camelCase, PascalCase, and mixed input
+```
+
 ---
 
 ## Important: Naming Pitfalls
@@ -411,6 +539,9 @@ Result.then(safeJsonParse(raw), data => validatePayload(data));
 | `error.message` | `error.description` | AppError property is `.description` |
 | `JSON.parse(raw)` | `safeJsonParse(raw)` | Never throws |
 | `import { Err } from 'tsentials/result'` | `import { Err } from 'tsentials/errors'` | Wrong module |
+| `const u: Shape = { tag, value }` then `Union.match(u, ...)` | `const u = { tag, value } as Shape` | Assignment narrowing breaks exhaustive match |
+| `These<AppError, T>` with `These.toResult` | `These<AppError[], T>` | `toResult` expects an error array |
+| `fromAsync(promiseOfT)` | `fromAsync(promiseOfResultT)` | Takes `Promise<Result<T>>`, not `Promise<T>` |
 
 ---
 
