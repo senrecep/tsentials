@@ -71,9 +71,7 @@ export function contramap<A, B>(eqA: Eq<A>, f: (b: B) => A): Eq<B> {
  * @example
  * const eqPoint = struct({ x: Eq.number, y: Eq.number });
  */
-export function struct<A extends Record<string, unknown>>(
-  eqs: { [K in keyof A]: Eq<A[K]> },
-): Eq<A> {
+export function struct<A extends object>(eqs: { [K in keyof A]: Eq<A[K]> }): Eq<A> {
   return {
     equals: (first, second) => {
       for (const key of Object.keys(eqs)) {

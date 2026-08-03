@@ -16,8 +16,8 @@
  * // Railway-oriented pipeline
  * const r = pipe(
  *   Result.success(10),
- *   Result.map(n => n * 2),
- *   Result.ensure(n => n > 10, Err.validation('Value.TooSmall', 'Too small')),
+ *   (res) => Result.map(res, (n) => n * 2),
+ *   (res) => Result.ensure(res, (n) => n > 10, Err.validation('Value.TooSmall', 'Too small')),
  * );
  */
 export function pipe<A>(a: A): A;
@@ -195,8 +195,8 @@ export function pipe(a: unknown, ...fns: ReadonlyArray<(x: unknown) => unknown>)
  * @example
  * // Reusable pipeline
  * const validateAge = flow(
- *   Result.map((u: User) => u.age),
- *   Result.ensure(a => a >= 18, Err.validation('Age.Underage', 'Must be 18+')),
+ *   (r: Result<User>) => Result.map(r, (u) => u.age),
+ *   (r) => Result.ensure(r, (a) => a >= 18, Err.validation('Age.Underage', 'Must be 18+')),
  * );
  */
 export function flow<A extends ReadonlyArray<unknown>, B>(ab: (...a: A) => B): (...a: A) => B;

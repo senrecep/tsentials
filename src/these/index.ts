@@ -9,12 +9,13 @@
  * to collect as much information as possible.
  *
  * @example
- * import { These, Result } from 'tsentials/these';
+ * import { These } from 'tsentials/these';
+ * import { Err, type AppError } from 'tsentials/errors';
  *
- * const parseAge = (raw: string): These<AppError, number> => {
+ * const parseAge = (raw: string): These<AppError[], number> => {
  *   const age = Number(raw);
- *   if (Number.isNaN(age)) return These.left(Err.validation('Age.NaN', 'Not a number'));
- *   if (age < 0) return These.both(Err.validation('Age.Negative', 'Negative age'), 0);
+ *   if (Number.isNaN(age)) return These.left([Err.validation('Age.NaN', 'Not a number')]);
+ *   if (age < 0) return These.both([Err.validation('Age.Negative', 'Clamped to 0')], 0);
  *   return These.right(age);
  * };
  */
@@ -52,18 +53,24 @@ export function both<E, A>(error: E, value: A): These<E, A> {
 
 // ─── Type guards ─────────────────────────────────────────────────────────────
 
-/** Checks if the These is a Left. */
-export function isLeft<E, A>(these: These<E, A>): boolean {
+/** Checks if the These is a Left — narrows the type on success. */
+export function isLeft<E, A>(
+  these: These<E, A>,
+): these is { readonly _tag: 'Left'; readonly left: E } {
   return these._tag === 'Left';
 }
 
-/** Checks if the These is a Right. */
-export function isRight<E, A>(these: These<E, A>): boolean {
+/** Checks if the These is a Right — narrows the type on success. */
+export function isRight<E, A>(
+  these: These<E, A>,
+): these is { readonly _tag: 'Right'; readonly right: A } {
   return these._tag === 'Right';
 }
 
-/** Checks if the These is a Both. */
-export function isBoth<E, A>(these: These<E, A>): boolean {
+/** Checks if the These is a Both — narrows the type on success. */
+export function isBoth<E, A>(
+  these: These<E, A>,
+): these is { readonly _tag: 'Both'; readonly left: E; readonly right: A } {
   return these._tag === 'Both';
 }
 

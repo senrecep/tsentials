@@ -7,7 +7,7 @@
  * const users = { a: { name: 'Alice' }, b: { name: 'Bob' } };
  *
  * const names = R.map(users, u => u.name); // { a: 'Alice', b: 'Bob' }
- * const withCharlie = R.upsert(users, 'c', { name: 'Charlie' });
+ * const renamed = R.upsert(users, 'b', { name: 'Bobby' }); // key must belong to the record's key union
  */
 
 // ─── Query ───────────────────────────────────────────────────────────────────

@@ -168,6 +168,6 @@ describe('These.partition', () => {
     expect(lefts).toHaveLength(1);
     expect(rights).toHaveLength(1);
     expect(boths).toHaveLength(1);
-    expect(boths[0].value).toBe(2);
+    expect(boths[0]?.value).toBe(2);
   });
 });
