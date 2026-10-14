@@ -7,7 +7,7 @@
 [![npm version](https://img.shields.io/npm/v/tsentials?style=flat-square&color=blue)](https://www.npmjs.com/package/tsentials)
 [![npm downloads](https://img.shields.io/npm/dm/tsentials?style=flat-square)](https://www.npmjs.com/package/tsentials)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/tsentials?style=flat-square&label=gzip)](https://bundlephobia.com/package/tsentials)
-[![tests](https://img.shields.io/badge/tests-1089%20passing-brightgreen?style=flat-square)](./tests)
+[![tests](https://img.shields.io/badge/tests-2498%20passing-brightgreen?style=flat-square)](./tests)
 [![CI](https://img.shields.io/github/actions/workflow/status/senrecep/tsentials/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/senrecep/tsentials/actions)
 [![license](https://img.shields.io/github/license/senrecep/tsentials?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
@@ -49,6 +49,7 @@ Railway-oriented programming for TypeScript: `Result<T>`, `Maybe<T>`, Rule Engin
 - [Union\<T\>](#uniont)
 - [Time & Fake Providers](#time--fake-providers)
 - [Clone Utilities](#clone-utilities)
+- [Cancellation (AbortSignal)](#cancellation-abortsignal)
 - [JSON Utilities](#json-utilities)
 - [pipe & flow](#pipe--flow)
 - [NonEmptyArray\<T\>](#nonemptyarrayt)
@@ -59,6 +60,11 @@ Railway-oriented programming for TypeScript: `Result<T>`, `Maybe<T>`, Rule Engin
 - [Tree\<T\>](#treet)
 - [Record Utilities](#record-utilities)
 - [String Utilities](#string-utilities)
+- [Validation](#validation)
+- [Resilience](#resilience)
+- [Pagination](#pagination)
+- [Enums](#enums)
+- [Mediator](#mediator)
 - [Design Notes](#design-notes)
 - [AI Skills](#ai-skills)
 
@@ -80,7 +86,7 @@ npm install tsentials
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
 | `tsentials/entity` | `createEntityBase`, `createSoftDeletable`, `DomainEvent` |
 | `tsentials/http` | `fetchResult`, `RequestBuilder` |
-| `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider` |
+| `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider`, `nextDayOfWeek`, `getAge`, `toDateOnly`, `toTimeOnly`, `msToDate` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
 | `tsentials/union` | `Union<T>` |
 | `tsentials/json` | `Json`, `JsonObject`, `JsonArray`, `JsonPrimitive`, `safeJsonParse`, `safeJsonStringify`, `parseAndValidate`, type guards |
@@ -93,6 +99,15 @@ npm install tsentials
 | `tsentials/tree` | `Tree<T>`, `map`, `filter`, `fold`, `drawTree` |
 | `tsentials/record` | `Record` utilities — `map`, `filter`, `pick`, `omit`, `reduce` |
 | `tsentials/string` | String case conversion utilities (Pascal, Camel, Kebab, Snake, Macro, Train, Title, _camelCase) |
+| `tsentials/validation` | `Validator<T>`, `RuleContext`, `RuleChain`, `CascadeMode` |
+| `tsentials/resilience` | `ResiliencePolicy`, `retryIfFailed` |
+| `tsentials/pagination` | `paginate`, `keysetOrdering`, `keysetPaginate`, cursor helpers |
+| `tsentials/enums` | `defineEnum` |
+| `tsentials/mediator` | `createMediator`, `pipeline`, behaviors |
+
+> **Subpath-only modules.** `validation`, `resilience`, `pagination`, `enums` and `mediator` are not re-exported
+> from the root `tsentials` entry; import them from their subpath (`tsentials/validation`, …). The time
+> extensions (`nextDayOfWeek`, `getAge`, …) are exported from `tsentials/time` only.
 
 ---
 
@@ -140,7 +155,7 @@ const price = chain(Result.success(100))
   .unwrap();
 // => { ok: true, value: "$120.00" }
 
-// Dynamic error from value
+// Dynamic error from value — the factory runs only when the guard fails (lazy)
 Result.ensure(
   Result.success(3),
   n => n > 5,
@@ -177,6 +192,7 @@ Result.tapErrorIf(
 
 ```typescript
 import { Result } from 'tsentials/result';
+import { ErrorType } from 'tsentials/errors';
 
 // Recover from all failures
 Result.compensate(Result.failure(err), () => Result.success(-1));
@@ -187,18 +203,24 @@ Result.compensateFirst(
   first => Result.success(first.code),
 );
 
-// Recover only when predicate matches first error
+// Recover: scans ALL errors; the first error matching an ErrorType or a predicate goes to fn
 Result.recover(
-  Result.failure(notFoundError),
-  e => e.code === 'User.NotFound',
+  Result.failureFrom([validationError, notFoundError]),
+  ErrorType.NotFound,                       // or: e => e.code === 'User.NotFound'
   () => Result.success(guestUser),
 );
+
+// recoverFirst: recover only when the FIRST error matches
+Result.recoverFirst(Result.failure(notFoundError), ErrorType.NotFound, () => Result.success(guestUser));
 
 // Transform errors
 Result.mapError(
   Result.failure(err),
   errs => errs.map(e => ({ ...e, code: `Wrapped.${e.code}` })),
 );
+
+// Map every error one by one, in order (mapper never runs on success)
+Result.mapEachError(Result.failure(err), e => ({ ...e, code: `Api.${e.code}` }));
 
 // Fallback values
 Result.unwrapOr(Result.success(42), 0);       // 42
@@ -258,6 +280,11 @@ const r = chain(Result.success(5))
   .ensure(n => n > 5, Err.validation('Value.TooSmall', 'Too small'))
   .map(n => `value: ${n}`)
   .unwrap();
+
+// Async methods (thenAsync, mapAsync, ensureAsync, recoverAsync, ...) return ResultAsync,
+// so `await` gives a plain Result<T> — not a ResultChain.
+const doubled = await chain(Result.success(2)).mapAsync(async n => n + 1).map(n => n * 2);
+// => { ok: true, value: 6 }
 ```
 
 ### Combination & Utilities
@@ -289,7 +316,10 @@ Result.always(result, r => {
 Result.traverse([1, 2, 3], n => n > 0 ? Result.success(n * 2) : Result.failure(err));
 // → Result<number[]>
 await Result.traverseAsync([1, 2], async n => fetchUser(n));
-// → Promise<Result<User[]>>
+// → Promise<Result<User[]>> (sequential by default)
+
+// Bounded concurrency + cancellation; results keep item order, ALL errors collected
+await Result.traverseAsync(ids, async (id, signal) => fetchUser(id, signal), { concurrency: 4, signal });
 ```
 
 ---
@@ -304,9 +334,12 @@ Explicit optional values instead of accidental `undefined`.
 import { Maybe } from 'tsentials/maybe';
 
 Maybe.some(42);
+Maybe.some(null);                 // None — a Some never holds null/undefined
 Maybe.none<number>();
 Maybe.from(user.nickname);        // null/undefined → None
+Maybe.map(Maybe.some(user), u => u.nickname); // None when nickname is null/undefined
 Maybe.fromTry(() => riskyParse()); // thrown → None
+Maybe.format(Maybe.some(1));       // 'Some(1)' (None → 'None'; named format, not toString)
 ```
 
 ### Pipeline
@@ -362,16 +395,25 @@ const profile = await Maybe.bindAsync(user, async u =>
   u.isActive ? Maybe.some(u.profile) : Maybe.none(),
 );
 const filtered = await Maybe.filterAsync(profile, async p => p.isPublic);
+
+// fromTry: a throw becomes None, but abort errors are rethrown (never swallowed)
+const found = await Maybe.fromTryAsync(signal => repo.find(id, { signal }), { signal });
 ```
 
 ### Collection Utilities
 
 ```typescript
-import { tryFirst, tryFind, choose, asMaybe } from 'tsentials/maybe';
+import { tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
 
 const first = tryFirst(items);                               // Maybe<T>
+const firstAdmin = tryFirst(users, (u) => u.isAdmin);        // first match
+const lastAdmin = tryLast(users, (u) => u.isAdmin);          // last match
 const found = tryFind(items, (x) => x.id === targetId);      // Maybe<T>
+const cached = tryFind(cacheMap, key);                       // Map lookup
+const setting = tryFind(settings, 'theme');                  // own-key lookup on an object
 const values = choose([Maybe.some(1), Maybe.none(), Maybe.some(3)]); // [1, 3]
+const emails = choose(users, (u) => Maybe.from(u.email));    // map + keep Some values
+// A found null/undefined element is None.
 
 const m = asMaybe(maybeNullValue);                           // Maybe<T>
 ```
@@ -385,12 +427,13 @@ import { maybeToResult, resultToMaybe } from 'tsentials/result';
 import { Maybe } from 'tsentials/maybe';
 import { Err } from 'tsentials/errors';
 
-// Maybe → Result
+// Maybe → Result (alias of Maybe.toResult)
 const result = maybeToResult(Maybe.from(user), Err.notFound('User.NotFound', 'Missing'));
 
 // Result → Maybe (errors dropped)
 const maybe = resultToMaybe(Result.success(42)); // Some(42)
 const none = resultToMaybe(Result.failure(err)); // None
+resultToMaybe(Result.ok());                      // None — undefined is never a Some value
 
 // Round-trip preserves success value
 maybeToResult(resultToMaybe(Result.success(data)), fallbackError);
@@ -416,13 +459,16 @@ const hasBalance = RuleEngine.fromPredicate<Account>(
 );
 
 // Combinators
-RuleEngine.and(isAdult, hasBalance);       // ALL must pass, collects ALL errors
+RuleEngine.and(isAdult, hasBalance);       // ALL must pass, stops at first failure
+RuleEngine.andAll(isAdult, hasBalance);    // ALL must pass, collects ALL errors
 RuleEngine.linear(isAdult, hasBalance);    // ALL must pass, stops at first failure
 RuleEngine.or(isAdult, hasBalance);        // AT LEAST ONE must pass
+RuleEngine.and<User>();                    // empty list → Validation failure EMPTY_RULE_ARRAY
 
 // Conditional branching
 RuleEngine.if(isAdult, hasBalance);        // if adult → check balance, else skip
 RuleEngine.if(isAdult, hasBalance, minorRule); // if adult → balance, else → minorRule
+RuleEngine.if(config.strict, strictRule);  // plain boolean condition
 
 // Async rules
 const asyncRule = RuleEngine.fromPredicateAsync<User>(
@@ -430,14 +476,17 @@ const asyncRule = RuleEngine.fromPredicateAsync<User>(
   Err.validation('User.Inactive', 'Not active'),
 );
 RuleEngine.andAsync(asyncRule, anotherAsyncRule);
+RuleEngine.andAllAsync(asyncRule, anotherAsyncRule);
 RuleEngine.linearAsync(asyncRule, anotherAsyncRule);
 RuleEngine.orAsync(asyncRule, fallbackAsyncRule);
 RuleEngine.ifAsync(asyncRule, onTrue, onFalse);
 
-// Evaluation
-const result = RuleEngine.evaluate(isAdult, user);
-const asyncResult = await RuleEngine.evaluateAsync(asyncRule, user);
+// Evaluation — evaluate is synchronous and never throws
+const result = RuleEngine.evaluate(isAdult, user);                  // VoidResult
+const asyncResult = await RuleEngine.evaluateAsync(asyncRule, user, { signal }); // Promise<VoidResult>
 ```
+
+A rule that throws becomes a failure with code `Rule.EvaluationFailed` (`Unexpected`). Every combinator node is guarded the same way, so `or` can still succeed on a later child and `if` takes the else branch. With a `signal`, the caller's abort rejects the promise instead (see [Cancellation](#cancellation-abortsignal)). `AsyncRule<T>` is `(ctx, signal?) => Promise<VoidResult>`.
 
 ---
 
@@ -453,12 +502,18 @@ Err.conflict('Email.AlreadyTaken', 'This email is already in use');
 Err.unauthorized('Auth.InvalidToken', 'Token is expired');
 Err.forbidden('Permissions.Denied', 'Insufficient permissions');
 
-// From exceptions with metadata
+// From exceptions with metadata — type defaults to Failure, code to the constructor name
 Err.fromException(new Error('timeout'));
 Err.fromException(new Error('timeout'), ErrorType.Unexpected, 'Network.Timeout');
 
-// Structural equality
-Err.equals(errA, errB); // true if code + description + type match
+// Equality: code + description + type + metadata (same keys, Object.is per value)
+Err.equals(errA, errB);
+
+// Combine errors and error arrays into one flat array
+Err.combine(errA, [errB, errC], errD);
+
+// JSON wire shape: { code, description, type, numericType, metadata? }
+JSON.stringify(Err.validation('Field.Required', 'Name is required'));
 ```
 
 ### Error Metadata
@@ -469,7 +524,7 @@ import { ErrorMetadata } from 'tsentials/errors';
 const meta = ErrorMetadata.fromRecord({ field: 'email', constraint: 'unique' });
 const err = Err.validation('Email.Invalid', 'Invalid format', meta);
 
-// Combine multiple metadata maps
+// Combine metadata maps (on key collision the base value wins)
 const combined = ErrorMetadata.combine(baseMeta, additionalMeta);
 
 // Convert back to plain object
@@ -477,7 +532,8 @@ const record = ErrorMetadata.toRecord(meta);
 
 // Extract from exceptions
 const exceptionMeta = ErrorMetadata.fromException(new TypeError('fail'));
-// { exceptionType: 'TypeError', exceptionMessage: 'fail', exceptionStack: '...' }
+// { exceptionType: 'TypeError', exceptionMessage: 'fail', exceptionStackTrace: '...' }
+// plus a nested `innerException` map when error.cause is an Error
 ```
 
 ---
@@ -522,7 +578,7 @@ class Order implements EntityBase, SoftDeletable {
 
 ## HTTP (fetchResult)
 
-`fetchResult` never throws. It captures network errors and HTTP error responses as `Result<T>`.
+`fetchResult` captures network errors, body parse errors and HTTP error responses as `Result<T>`. The only rejection is the caller's own abort (`signal`), which rejects with the abort reason. The default timeout is 30 s (`timeout` option; `0` or `Infinity` disables it); on expiry the result is a failure with code `Http.Timeout` (`Unexpected`). A 2xx JSON response with an empty or `null` body is a `NotFound` failure ("Response body was empty or could not be deserialized."), except for `fetchResult.delete`, where it is a void success; 204/205 and non-JSON responses are void successes.
 
 ```typescript
 import { fetchResult, RequestBuilder } from 'tsentials/http';
@@ -536,6 +592,7 @@ await fetchResult.post('/users', { name: 'Alice' });
 await fetchResult.put('/users/1', { name: 'Bob' });
 await fetchResult.patch('/users/1', { active: true });
 await fetchResult.delete('/users/1');
+await fetchResult.get<User>('/users/42', { signal, timeout: 5_000 });
 
 // Network errors are caught automatically
 const r = await fetchResult.get('/offline'); // Result.failure with TypeError metadata
@@ -545,7 +602,13 @@ const users = await RequestBuilder.get('https://api.example.com/users')
   .header('Authorization', `Bearer ${token}`)
   .query('page', '1')
   .query('limit', '10')
+  .query({ sort: 'name', q: undefined })   // record form; null/undefined values are skipped
+  .timeout(5_000)
+  .signal(signal)
   .send<User[]>();
+
+// Relative URLs stay relative (resolved against the page origin as with plain fetch)
+await RequestBuilder.get('/api/users').send<User[]>();
 
 // JSON body with custom headers
 const created = await RequestBuilder.post('https://api.example.com/users')
@@ -558,14 +621,15 @@ Status code mapping:
 
 | Status | ErrorType |
 |--------|-----------|
-| 400, 422 | `Validation` |
-| 401 | `Unauthorized` |
+| 400, 411, 413, 414, 415, 416, 417, 422 | `Validation` |
+| 401, 407 | `Unauthorized` |
 | 403 | `Forbidden` |
 | 404, 410 | `NotFound` |
-| 409, 429 | `Conflict` |
-| ≥500 | `Unexpected` |
+| 409, 412, 429 | `Conflict` |
+| 408, ≥500 | `Unexpected` |
+| anything else (402, 405, 406, other 4xx, 1xx-3xx) | `Failure` |
 
-Supports `application/problem+json` (RFC 9457) for error descriptions.
+Supports `application/problem+json` (RFC 9457). An `errors` extension (list or dictionary shape) yields one `AppError` per entry; otherwise `detail`, then `title`, becomes the description (`problemDetailsToErrors`).
 
 ```typescript
 import { HttpCodes } from 'tsentials/http';
@@ -648,6 +712,19 @@ fake.setTime(newDate);   // jump to any time
 fake.utcNowDate();       // midnight of current fake date
 ```
 
+Date helpers (UTC calendar unless noted, return new `Date` values):
+
+```typescript
+import { nextDayOfWeek, previousDayOfWeek, DayOfWeek, getAge, toDateOnly, toTimeOnly, msToDate, SystemDateTimeProvider } from 'tsentials/time';
+
+nextDayOfWeek(new Date('2024-06-15T10:00:00Z'), DayOfWeek.Monday); // 2024-06-17T10:00:00Z (same weekday → +7 days unless includeCurrent)
+getAge(new Date('2000-06-15'), new Date('2024-06-14'));            // 23 (reference: Date or DateTimeProvider; RangeError if birth is later)
+getAge(new Date('2000-06-15'), SystemDateTimeProvider);            // today in the provider's timeZone (system: host zone, fake: UTC)
+toDateOnly(new Date('2024-06-15T10:30:00Z'));                      // 2024-06-15T00:00:00Z
+toTimeOnly(new Date('2024-06-15T10:30:15.250Z'));                  // { hour: 10, minute: 30, second: 15, millisecond: 250 }
+msToDate(1609459200000);                                           // Maybe<Date>: Some(2021-01-01T00:00:00Z); msToDate(null) → None
+```
+
 ---
 
 ## Clone Utilities
@@ -657,8 +734,10 @@ import { deepClone, cloneArray } from 'tsentials/clone';
 import type { Cloneable } from 'tsentials/clone';
 ```
 
-`deepClone` uses the native `structuredClone` API when available and falls back to a recursive
-implementation when it is not. It never throws, and it works in React Native (Hermes) and other JS runtimes.
+`deepClone` is a self-contained recursive implementation. It never delegates to the native
+`structuredClone`, so results are identical on every runtime (Node, browsers, React Native/Hermes).
+Unlike `structuredClone`, it does not throw on functions/symbols and preserves Error subclasses.
+`URL` and `URLSearchParams` are cloned; `Blob`, `File`, `Promise` and functions are returned by reference; a `__proto__` own key (e.g. from `JSON.parse`) is dropped.
 
 ```typescript
 // Plain objects, nested structures
@@ -691,6 +770,30 @@ class Product implements Cloneable<Product> {
 }
 const cloned = cloneArray([new Product(1), new Product(2)]);
 ```
+
+---
+
+## Cancellation (AbortSignal)
+
+Every operation that accepts `{ signal }` follows one rule (only the caller's own abort propagates):
+
+- The **caller's** abort propagates: the returned promise rejects with `signal.reason`. It never becomes a failure.
+- **Any other** error, including an abort-like error raised while the caller's signal is not aborted, becomes a failure (`None` for `Maybe`).
+
+Applies to `Result.tryAsync`, `Result.traverseAsync`, `Result.sequenceAsync`, `Maybe.fromTryAsync`, `RuleEngine.evaluateAsync`, `fetchResult`, and `ResiliencePolicy.execute`.
+
+`Validator.validateAsync` differs: a caller abort rejects with `signal.reason`, and an exception thrown by an async rule predicate or by `configure` rejects too (it is never turned into a failure). Use `mustAsync` predicates that return `false` for validation failures.
+
+```typescript
+import { Result, withAbort, isCallerAbort, rethrowIfAborted, throwIfAborted } from 'tsentials/result';
+
+const ctrl = new AbortController();
+const pending = Result.tryAsync((signal) => fetch(url, { signal }), { signal: ctrl.signal });
+ctrl.abort();
+await pending; // rejects with ctrl.signal.reason; a plain network error would resolve to Result.failure(...)
+```
+
+Helpers: `isAbortError(e)`, `isCallerAbort(e, signal)`, `rethrowIfAborted(e, signal)`, `throwIfAborted(signal)`, `withAbort(promise, signal)`.
 
 ---
 
@@ -997,6 +1100,136 @@ toUnderscoreCamelCase('helloWorld') // '_helloWorld'
 
 All functions handle: spaces, hyphens, underscores, camelCase, PascalCase, and mixed input.
 
+## Validation
+
+Eager, Result-based. Default cascade is `Stop` (first failure on a chain skips the rest); `cascade(CascadeMode.Continue)` accumulates. `null`/`undefined` are skipped by every built-in except `notNull`, `notEmpty`, `equal` — guard with `notEmpty()` first. Error code is `<path>.<Rule>`.
+
+```typescript
+import { Validator, CascadeMode, type RuleContext } from 'tsentials/validation';
+
+type User = { name: string; email: string; address: { city: string }; items: { sku: string }[] };
+
+const r = Validator.validate(user, (rules) => {
+  rules.for('name').notEmpty().maxLength(50);
+  rules.for('email').notEmpty().emailAddress();
+  rules.for('address.city').notEmpty();
+  rules.forEach('items', (item) => { item.for('sku').notEmpty(); });
+});
+// failure codes: 'name.NotEmpty', 'email.EmailAddress', 'address.city.NotEmpty', 'items[0].sku.NotEmpty'
+// success carries the validated instance: Result<User>
+
+class UserValidator extends Validator<User> {
+  protected configure(rules: RuleContext<User>) {
+    rules.for('name').notEmpty().cascade(CascadeMode.Continue).minLength(3).maxLength(50);
+  }
+}
+new UserValidator().validate(user);                       // Result<User>
+RuleEngine.evaluate(new UserValidator().toRule(), user);  // as a Rule<User> (import RuleEngine from 'tsentials/rules')
+
+// Async: await every async rule inside the callback; caller abort rejects, never a validation error
+await Validator.validateAsync(user, async (rules, _model, signal) => {
+  await rules.for('email').mustAsync(async (e) => await isFree(e, signal), 'Email.Taken', 'Already used');
+}, { signal });
+
+Validator.validateWith(Result.success(user), (rules) => { rules.for('name').notEmpty(); }); // railway step
+```
+
+Also: `must(pred)`, `must(pred, code, msg)`, `notNull`, `length`, `matches`, `greaterThan`, `inclusiveBetween`, `minCount`, `isDefinedEnum`, `isOneOf`, `setValidator`, `satisfies(rule)`. `validate()` throws `TypeError` if `configure` returns a promise or leaves an async rule un-awaited.
+
+---
+
+## Resilience
+
+Immutable policy; each `with…` returns a new policy and appends the strategy INSIDE the previous ones (first added = outermost; `withFallback` is always outermost). `execute` never rejects except with the caller's abort reason. Retryable = failures whose FIRST error is not Validation/NotFound/Unauthorized/Forbidden, plus thrown values.
+
+```typescript
+import { ResiliencePolicy, retryIfFailed } from 'tsentials/resilience';
+
+const policy = ResiliencePolicy.create()
+  .withRetry({ maxAttempts: 3, delay: 200 })   // defaults: 3 retries, 1000 ms, exponential
+  .withCircuitBreaker()                        // defaults: minimumThroughput 10, 60 s window, 30 s break, ratio 0.5
+  .withTimeout(5_000);                         // per attempt; failure code 'Resilience.Timeout'
+
+const user = await policy.execute((signal) => fetchResult.get<User>('/users/42', { signal }), { signal });
+// open circuit → failure 'Resilience.CircuitBroken'
+
+const cached = await ResiliencePolicy.create<string>().withTimeout(10_000).withFallback(() => 'cached')
+  .execute(async () => Result.failure<string>(Err.failure('X', 'down')));   // success('cached')
+
+await retryIfFailed((signal) => loadOrder(id, signal), { maxAttempts: 2, delay: 100 });
+```
+
+**Note:** `maxAttempts` counts RETRIES, so the action runs at most `maxAttempts + 1` times. `executeValue(fn)` wraps a plain value as success.
+
+---
+
+## Pagination
+
+```typescript
+import { paginate, keysetOrdering, keysetPaginate } from 'tsentials/pagination';
+
+// Offset (in-memory): pageNumber/pageSize clamped (pageSize max 100); totalCount = -1 with includeTotalCount: false
+const page = paginate(items, { pageNumber: 2, pageSize: 10 });
+page.items; page.totalPages; page.hasNextPage; page.hasPreviousPage;
+
+// Keyset: last key must be unique; cursors are bound to the ordering fingerprint
+const byNewest = keysetOrdering<Order>('Order').descending('createdAt', 'date').ascending('id', 'number');
+const first = keysetPaginate(orders, { limit: 10 }, byNewest);              // Result<KeysetPaginationResponse<Order>>
+if (first.ok) {
+  const next = keysetPaginate(orders, { limit: 10, after: first.value.nextCursor }, byNewest);
+}
+// bad cursor → failure 'KeysetPagination.InvalidCursor'; after + before → 'KeysetPagination.AfterAndBefore'
+```
+
+For database queries use `planKeysetPage` + `createKeysetPageResponse` ; `encodeCursor`/`decodeCursor` and a `CursorProtector` (e.g. HMAC) are exported.
+
+---
+
+## Enums
+
+```typescript
+import { defineEnum, type EnumMember } from 'tsentials/enums';
+
+const Status = defineEnum('Status', {
+  Pending: {},                          // wire name 'pending' (default naming snake_case_lower), value 0
+  Active: 'on',                         // string = explicit wire name, value 1
+  Disabled: { aliases: ['off'] },
+  Unknown: { fallback: true },          // at most one fallback; duplicate wire names/aliases throw a TypeError
+});
+type Status = EnumMember<typeof Status>;   // 'Pending' | 'Active' | 'Disabled' | 'Unknown'
+
+Status.parse('on')                      // Result<Status> → success('Active'); also 'ACTIVE'/'Active' (case-insensitive), 'off', '2'
+Status.parse('nope')                    // failure 'Enum.InvalidValue' (Validation; lists allowed values)
+Status.parse('nope', { mode: 'data' })  // success('Unknown') — data mode uses the fallback member
+Status.format('Active')                 // 'on'; format('Active', 'number') → '1'
+Status.parseNumber(1)                   // success('Active')
+Status.is('Active'); Status.wireNames; Status.numberOf('Disabled'); // true; [...]; 2
+```
+
+---
+
+## Mediator
+
+Typed in-process request/response with a behavior pipeline. Handlers return `Result`; behaviors wrap them (outermost first: global, then per-handler).
+
+```typescript
+import { createMediator, exceptionHandlingBehavior, validationBehavior } from 'tsentials/mediator';
+
+type Requests = { GetUser: { request: { id: number }; response: User } };
+
+const mediator = createMediator<Requests>({ behaviors: [exceptionHandlingBehavior()] })
+  .register('GetUser',
+    ({ id }, ctx) => id > 0 ? Result.success(loadUser(id)) : Result.failure(Err.notFound('User.NotFound', 'No user')),
+    validationBehavior<{ id: number }>([(req) => (req.id > 0 ? Result.ok() : Result.failure(Err.validation('Id.Invalid', 'bad')))]),
+  );
+
+const result = await mediator.send('GetUser', { id: 1 }, { signal }); // Promise<Result<User>>
+```
+
+`exceptionHandlingBehavior()` turns a thrown handler error into `Err.fromException(e)` (Failure); any abort-like error (`AbortError`/`TimeoutError`, whoever aborted) still propagates, so a cancellation never becomes an error Result. `send` rejects when no handler is registered; `register` throws on a duplicate name. Other behaviors: `loggingBehavior`, `cachingBehavior`, `lockBehavior` (`InProcessResourceLock`), `transactionBehavior`.
+
+---
+
 ## Design Notes
 
 - **`Result<T>`** — discriminated union, no class, zero runtime overhead
@@ -1004,6 +1237,7 @@ All functions handle: spaces, hyphens, underscores, camelCase, PascalCase, and m
 - **`ResultChain<T>`** — fluent sync wrapper; monadic bind named `bind` (not `then`) for the same reason
 - **`Maybe<T>`** — pure functional namespace, all operations are static functions
 - **`Rule<T>`** — just `(ctx: T) => VoidResult`, no interface hierarchy
+- **Subpath-only modules** — `validation`, `resilience`, `pagination`, `enums`, `mediator` are not in the root entry, keeping the root bundle small
 - **Entity base** — mixin factory pattern (`createEntityBase()`), not abstract class inheritance
 - **`sideEffects: false`** — all subpath imports are fully tree-shakeable
 

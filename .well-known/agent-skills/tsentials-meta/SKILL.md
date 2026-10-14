@@ -1,6 +1,6 @@
 ---
 name: tsentials-meta
-description: Use when deciding which tsentials module to use — overview of all 19 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.
+description: Use when deciding which tsentials module to use — overview of all 24 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.
 ---
 
 # tsentials — Module Index
@@ -57,6 +57,18 @@ npm install tsentials
 |--------|----------|-------|
 | `tsentials/entity` | `createEntityBase`, `createSoftDeletable`, `DomainEvent`, `DomainEventTiming`, `EntityBase`, `EntityBaseWithId<TId>`, `CreationAudit`, `ModificationAudit`, `FullAudit`, `SoftDeletable` | `tsentials-entity` |
 
+### Validation, Resilience & Application Services (subpath-only)
+
+These modules are **not** re-exported from the root `tsentials` entry — import them from their subpath.
+
+| Import | Contents | Skill |
+|--------|----------|-------|
+| `tsentials/validation` | `Validator<T>`, `RuleContext`, `RuleChain`, `CascadeMode` | `tsentials-validation` |
+| `tsentials/resilience` | `ResiliencePolicy`, `retryIfFailed`, `isRetryable`, `ResilienceErrorCode` | `tsentials-resilience` |
+| `tsentials/pagination` | `paginate`, `keysetOrdering`, `keysetPaginate`, `planKeysetPage`, cursor helpers | `tsentials-pagination` |
+| `tsentials/enums` | `defineEnum`, `EnumMember` | `tsentials-enums` |
+| `tsentials/mediator` | `createMediator`, `pipeline`, behaviors, `InProcessResourceLock` | `tsentials-mediator` |
+
 ### Web / Infrastructure
 
 | Import | Contents | Skill |
@@ -67,7 +79,7 @@ npm install tsentials
 
 | Import | Contents | Skill |
 |--------|----------|-------|
-| `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider` | `tsentials-time` |
+| `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider`, `nextDayOfWeek`, `previousDayOfWeek`, `DayOfWeek`, `getAge`, `toDateOnly`, `toTimeOnly`, `msToDate` | `tsentials-time` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` | `tsentials-clone` |
 | `tsentials/json` | `Json`, `JsonObject`, `JsonArray`, `JsonPrimitive`, `safeJsonParse`, `safeJsonStringify`, `parseAndValidate`, type guards | `tsentials-json` |
 
@@ -93,6 +105,13 @@ npm install tsentials
 | Guarantee an array has at least one element | `tsentials/array` (`NonEmptyArray`) |
 | Model partial success (value + warnings) | `tsentials/these` |
 | Model recursive hierarchies | `tsentials/tree` |
+| Validate a model with fluent Result-based rules | `tsentials/validation` |
+| Retry, circuit breaker, timeout, fallback around a Result operation | `tsentials/resilience` |
+| Offset paging of a list | `tsentials/pagination` (`paginate`) |
+| Stable cursor (keyset) paging | `tsentials/pagination` (`keysetPaginate`) |
+| Enum with wire names, aliases and safe parsing | `tsentials/enums` (`defineEnum`) |
+| Typed request/response dispatch with pipeline behaviors | `tsentials/mediator` |
+| Next/previous weekday, age, date-only / time-only | `tsentials/time` |
 | Functional object manipulation | `tsentials/record` |
 | Composable equality checks | `tsentials/eq` |
 | Type-safe sorting and ordering | `tsentials/ord` |
@@ -124,6 +143,7 @@ import type { EntityBase, EntityBaseWithId }             from 'tsentials/entity'
 import type { CreationAudit, ModificationAudit, FullAudit, SoftDeletable } from 'tsentials/entity';
 import { fetchResult, RequestBuilder, httpStatusToError, extractErrorDescription } from 'tsentials/http';
 import { SystemDateTimeProvider, createFakeDateTimeProvider } from 'tsentials/time';
+import { nextDayOfWeek, previousDayOfWeek, DayOfWeek, getAge, toDateOnly, toTimeOnly, msToDate } from 'tsentials/time';
 import type { DateTimeProvider }                        from 'tsentials/time';
 import { deepClone, cloneArray }                        from 'tsentials/clone';
 import type { Cloneable }                               from 'tsentials/clone';
@@ -131,6 +151,12 @@ import { safeJsonParse, safeJsonStringify, parseAndValidate } from 'tsentials/js
 import { isJson, isJsonObject }                         from 'tsentials/json';
 import type { Json, JsonObject }                        from 'tsentials/json';
 import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
+import { Validator, CascadeMode }                      from 'tsentials/validation';
+import { ResiliencePolicy, retryIfFailed }             from 'tsentials/resilience';
+import { paginate, keysetOrdering, keysetPaginate }    from 'tsentials/pagination';
+import { defineEnum }                                   from 'tsentials/enums';
+import type { EnumMember }                              from 'tsentials/enums';
+import { createMediator, exceptionHandlingBehavior, validationBehavior } from 'tsentials/mediator';
 ```
 
 ---
@@ -156,6 +182,7 @@ import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTra
 |-------|---------|-----|
 | `resultAsync.then(fn)` | `resultAsync.andThen(fn)` | `.then()` is the `PromiseLike` protocol |
 | `chain.then(fn)` | `chain.bind(fn)` | Same reason — breaks `await` |
+| `import { Validator } from 'tsentials'` | `import { Validator } from 'tsentials/validation'` | `validation`, `resilience`, `pagination`, `enums`, `mediator` are subpath-only |
 | `import { Err } from 'tsentials/result'` | `import { Err } from 'tsentials/errors'` | `Err` lives in the errors module |
 | `error.message` | `error.description` | Property is named `description` |
 | `throw new Error(...)` | `Result.failure(Err.unexpected(...))` | Errors are values, not exceptions |
