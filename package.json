@@ -1,6 +1,6 @@
 {
   "name": "tsentials",
-  "version": "0.1.12",
+  "version": "1.0.0",
   "description": "Railway-oriented programming for TypeScript — Result<T>, Maybe<T>, Rule Engine, and DDD base classes with full async pipeline support",
   "type": "module",
   "main": "./dist/index.js",
@@ -85,6 +85,26 @@
     "./string": {
       "import": "./dist/string/index.js",
       "types": "./dist/string/index.d.ts"
+    },
+    "./validation": {
+      "import": "./dist/validation/index.js",
+      "types": "./dist/validation/index.d.ts"
+    },
+    "./resilience": {
+      "import": "./dist/resilience/index.js",
+      "types": "./dist/resilience/index.d.ts"
+    },
+    "./pagination": {
+      "import": "./dist/pagination/index.js",
+      "types": "./dist/pagination/index.d.ts"
+    },
+    "./enums": {
+      "import": "./dist/enums/index.js",
+      "types": "./dist/enums/index.d.ts"
+    },
+    "./mediator": {
+      "import": "./dist/mediator/index.js",
+      "types": "./dist/mediator/index.d.ts"
     }
   },
   "sideEffects": false,
@@ -103,6 +123,8 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
+    "docs/BEHAVIOUR-CHANGES.md",
     "LICENSE"
   ],
   "keywords": [
