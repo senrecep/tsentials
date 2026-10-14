@@ -31,8 +31,8 @@ Railway-oriented programming for TypeScript: `Result<T>`, `Maybe<T>`, Rule Engin
   - [Pipeline (sync)](#pipeline-sync)
   - [Conditional & Guarded Pipeline](#conditional--guarded-pipeline)
   - [Error Handling & Recovery](#error-handling--recovery)
-  - [Async Pipeline — ResultAsync\<T\>](#async-pipeline--resultasynct)
-  - [ResultChain\<T\> — Fluent Wrapper](#resultchaint--fluent-wrapper)
+  - [Async Pipeline: ResultAsync\<T\>](#async-pipeline--resultasynct)
+  - [ResultChain\<T\>, Fluent Wrapper](#resultchaint--fluent-wrapper)
   - [Combination & Utilities](#combination--utilities)
 - [Maybe\<T\>](#maybet)
   - [Creating Maybe Values](#creating-maybe-values)
@@ -97,7 +97,7 @@ npm install tsentials
 | `tsentials/predicate` | `Predicate<T>`, `Refinement<A, B>`, `and`, `or`, `not`, `all`, `any` |
 | `tsentials/these` | `These<E, A>`, `toResult`, `fromResult`, `partition` |
 | `tsentials/tree` | `Tree<T>`, `map`, `filter`, `fold`, `drawTree` |
-| `tsentials/record` | `Record` utilities — `map`, `filter`, `pick`, `omit`, `reduce` |
+| `tsentials/record` | `Record` utilities, `map`, `filter`, `pick`, `omit`, `reduce` |
 | `tsentials/string` | String case conversion utilities (Pascal, Camel, Kebab, Snake, Macro, Train, Title, _camelCase) |
 | `tsentials/validation` | `Validator<T>`, `RuleContext`, `RuleChain`, `CascadeMode` |
 | `tsentials/resilience` | `ResiliencePolicy`, `retryIfFailed` |
@@ -231,7 +231,7 @@ Result.unwrapOrElse(Result.failure(err), errs => errs.length); // 1
 const [ok, value, errors] = Result.deconstruct(result);
 ```
 
-### Async Pipeline — ResultAsync\<T\>
+### Async Pipeline, ResultAsync\<T\>
 
 `ResultAsync<T>` implements `PromiseLike<Result<T>>`. The entire chain builds synchronously and resolves once at the end with a single `await`.
 
@@ -270,7 +270,7 @@ await Result.recoverAsync(
 );
 ```
 
-### ResultChain\<T\> — Fluent Wrapper
+### ResultChain\<T\>, Fluent Wrapper
 
 ```typescript
 import { chain } from 'tsentials/result';
@@ -845,7 +845,7 @@ isJson({ key: undefined });      // false — undefined is not valid JSON
 
 | Code | Cause |
 |------|-------|
-| `Json.SyntaxError` | `JSON.parse` failed — malformed input |
+| `Json.SyntaxError` | `JSON.parse` failed, malformed input |
 | `Json.ValidationError` | Parsed value failed type guard |
 | `Json.StringifyFailed` | `JSON.stringify` failed (e.g. circular reference) |
 
@@ -1102,7 +1102,7 @@ All functions handle: spaces, hyphens, underscores, camelCase, PascalCase, and m
 
 ## Validation
 
-Eager, Result-based. Default cascade is `Stop` (first failure on a chain skips the rest); `cascade(CascadeMode.Continue)` accumulates. `null`/`undefined` are skipped by every built-in except `notNull`, `notEmpty`, `equal` — guard with `notEmpty()` first. Error code is `<path>.<Rule>`.
+Eager, Result-based. Default cascade is `Stop` (first failure on a chain skips the rest); `cascade(CascadeMode.Continue)` accumulates. `null`/`undefined` are skipped by every built-in except `notNull`, `notEmpty`, `equal`: guard with `notEmpty()` first. Error code is `<path>.<Rule>`.
 
 ```typescript
 import { Validator, CascadeMode, type RuleContext } from 'tsentials/validation';
@@ -1232,14 +1232,14 @@ const result = await mediator.send('GetUser', { id: 1 }, { signal }); // Promise
 
 ## Design Notes
 
-- **`Result<T>`** — discriminated union, no class, zero runtime overhead
-- **`ResultAsync<T>`** — implements `PromiseLike<Result<T>>` for direct `await`; monadic bind named `andThen` to avoid thenable collision
-- **`ResultChain<T>`** — fluent sync wrapper; monadic bind named `bind` (not `then`) for the same reason
-- **`Maybe<T>`** — pure functional namespace, all operations are static functions
-- **`Rule<T>`** — just `(ctx: T) => VoidResult`, no interface hierarchy
-- **Subpath-only modules** — `validation`, `resilience`, `pagination`, `enums`, `mediator` are not in the root entry, keeping the root bundle small
-- **Entity base** — mixin factory pattern (`createEntityBase()`), not abstract class inheritance
-- **`sideEffects: false`** — all subpath imports are fully tree-shakeable
+- **`Result<T>`**: discriminated union, no class, zero runtime overhead
+- **`ResultAsync<T>`**: implements `PromiseLike<Result<T>>` for direct `await`; monadic bind named `andThen` to avoid thenable collision
+- **`ResultChain<T>`**: fluent sync wrapper; monadic bind named `bind` (not `then`) for the same reason
+- **`Maybe<T>`**: pure functional namespace, all operations are static functions
+- **`Rule<T>`**: just `(ctx: T) => VoidResult`, no interface hierarchy
+- **Subpath-only modules**: `validation`, `resilience`, `pagination`, `enums`, `mediator` are not in the root entry, keeping the root bundle small
+- **Entity base**: mixin factory pattern (`createEntityBase()`), not abstract class inheritance
+- **`sideEffects: false`**: all subpath imports are fully tree-shakeable
 
 ## AI Skills
 

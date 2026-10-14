@@ -38,9 +38,9 @@ export function tryLast<T>(arr: readonly T[], predicate?: (value: T) => boolean)
 
 /**
  * Looks a value up as Maybe<T>:
- * - `tryFind(array, predicate)` — the first element matching the predicate;
- * - `tryFind(map, key)` — the value stored under `key` in a `Map`;
- * - `tryFind(record, key)` — the own property `key` of a plain object.
+ * - `tryFind(array, predicate)`: the first element matching the predicate;
+ * - `tryFind(map, key)`: the value stored under `key` in a `Map`;
+ * - `tryFind(record, key)`: the own property `key` of a plain object.
  *
  * None when nothing is found or when the found value is `null`/`undefined`.
  *

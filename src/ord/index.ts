@@ -1,5 +1,5 @@
 /**
- * Ord<T> — type-safe total ordering.
+ * Ord<T>: type-safe total ordering.
  *
  * Provides composable comparison logic for sorting, min/max, and ordered collections.
  *

@@ -32,7 +32,7 @@ export interface RetryIfFailedOptions extends RetryOptions, AbortOptions {
   /**
    * Replaces the default classification: retry while this returns true for the first error.
    * A thrown value is converted to the error the call would return for it (Unexpected) and passed
-   * here too. Caller aborts are never retried. Keep it pure — it can be called more than once for
+   * here too. Caller aborts are never retried. Keep it pure, it can be called more than once for
    * the same attempt. If it throws while classifying an attempt, retrying stops and the throw is
    * returned as an Unexpected error.
    */
@@ -53,14 +53,14 @@ const circuitBreakerHandle = (outcome: Outcome<unknown>): boolean =>
 
 /**
  * Composable, immutable resilience pipeline returning `Result`s. Every `with…` call returns a NEW policy with the strategy
- * appended INSIDE the existing ones — the first strategy added is the outermost — except
+ * appended INSIDE the existing ones: the first strategy added is the outermost, except
  * {@link withFallback}, which is always placed outermost.
  *
  * `T` is the value type of the fallback. Leave it as the default (`never`) when no fallback is
  * used; `execute` then infers its type per call.
  *
  * Outcome rules (identical for every policy):
- * - a thrown value becomes a failure — `Resilience.Timeout`, `Resilience.CircuitBroken`, or
+ * - a thrown value becomes a failure, `Resilience.Timeout`, `Resilience.CircuitBroken`, or
  *   `Err.fromException(e, Unexpected)`;
  * - an abort of the caller's `signal` rejects the returned promise with the abort reason, also
  *   when the last attempt returned a retryable failure while the caller was aborting;
@@ -82,7 +82,7 @@ export class ResiliencePolicy<T = never> {
 
   /**
    * Creates a policy. Without options it is empty (the action runs directly, once). With options
-   * the strategies are added in this order: retry, circuit breaker, timeout — so the timeout applies
+   * the strategies are added in this order: retry, circuit breaker, timeout, so the timeout applies
    * to EACH attempt and every attempt is counted by the circuit breaker.
    */
   static create<T = never>(options?: ResiliencePolicyOptions): ResiliencePolicy<T> {
@@ -148,7 +148,7 @@ export class ResiliencePolicy<T = never> {
   /**
    * Runs `action` through the policy. Never rejects except with the caller's abort reason.
    * The action receives the signal of the innermost strategy (aborted by the caller's signal and
-   * by the timeout) — pass it on to the underlying I/O.
+   * by the timeout): pass it on to the underlying I/O.
    */
   execute<U = T>(action: ResilienceAction<U>, options?: AbortOptions): ResultAsync<U | T> {
     return ResultAsync.from(

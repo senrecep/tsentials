@@ -72,7 +72,7 @@ export class ResultChain<T> {
   /**
    * Returns the success value, or computes one from the errors.
    *
-   * @deprecated Returns `T`, not a ResultChain — use {@link ResultChain.unwrapOrElse}.
+   * @deprecated Returns `T`, not a ResultChain, use {@link ResultChain.unwrapOrElse}.
    */
   elseWith(factory: (errors: readonly AppError[]) => T): T {
     return this.unwrapOrElse(factory);

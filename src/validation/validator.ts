@@ -104,7 +104,7 @@ export abstract class Validator<T> implements SyncValidator<T>, AsyncValidator<T
 
   /**
    * Validates synchronously. Throws a TypeError when `configure` returns a promise or leaves
-   * an async rule un-awaited — use {@link validateAsync} for async rule sets.
+   * an async rule un-awaited, use {@link validateAsync} for async rule sets.
    */
   validate(instance: T): Result<T> {
     assertInstance(instance);
@@ -113,7 +113,7 @@ export abstract class Validator<T> implements SyncValidator<T>, AsyncValidator<T
 
   /**
    * Validates asynchronously. When `options.signal` aborts the promise rejects with the
-   * signal's reason — an abort never becomes a validation error.
+   * signal's reason, an abort never becomes a validation error.
    */
   async validateAsync(instance: T, options?: AbortOptions): Promise<Result<T>> {
     assertInstance(instance);

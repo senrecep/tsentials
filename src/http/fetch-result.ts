@@ -53,14 +53,14 @@ async function responseToResult<T>(
         body = await response.json();
       } catch (e) {
         if (signal.aborted) throw e;
-        body = undefined; // unreadable error body — fall back to the status error
+        body = undefined; // unreadable error body, fall back to the status error
       }
     }
     return R.failureFrom(problemDetailsToErrors(response.status, body));
   }
 
   // 204 No Content / 205 Reset Content never carry a body, and a non-JSON body is not
-  // deserialized — both are void-style successes.
+  // deserialized: both are void-style successes.
   if (response.status === 204 || response.status === 205 || !isJson) {
     return R.success(undefined as unknown as T);
   }
@@ -149,7 +149,7 @@ const jsonInit = (method: string, body: unknown, init: RequestInit | undefined):
  *   (status mapping: {@link httpStatusToErrorType}; ProblemDetails `errors` are parsed).
  * - 2xx bodies: 204/205 and non-JSON content types are void successes (`undefined`); a JSON
  *   content type with an empty body or a literal `null` is a NotFound failure
- *   (code `NotFound`, "Response body was empty or could not be deserialized.") — except for
+ *   (code `NotFound`, "Response body was empty or could not be deserialized."), except for
  *   {@link fetchResult.delete}, where it is a void success.
  * - Default timeout 30 s (`init.timeout`), failure code `Http.Timeout`.
  * - Aborting the caller's `init.signal` rejects the promise with the abort reason
@@ -162,14 +162,14 @@ const jsonInit = (method: string, body: unknown, init: RequestInit | undefined):
  */
 export const fetchResult = {
   /**
-   * GET — returns Result<T> with deserialized JSON body on success.
+   * GET: returns Result<T> with deserialized JSON body on success.
    */
   async get<T>(url: string | URL, init?: FetchResultInit): Promise<Result<T>> {
     return execute<T>(url, init, () => ({ method: 'GET' }));
   },
 
   /**
-   * POST with JSON body — returns Result<T>. Headers may be any HeadersInit
+   * POST with JSON body: returns Result<T>. Headers may be any HeadersInit
    * (record, `Headers` instance or tuple array); `Content-Type: application/json`
    * is added unless already present.
    */
@@ -178,21 +178,21 @@ export const fetchResult = {
   },
 
   /**
-   * PUT with JSON body — returns Result<T>. See {@link fetchResult.post} for header handling.
+   * PUT with JSON body: returns Result<T>. See {@link fetchResult.post} for header handling.
    */
   async put<T>(url: string | URL, body: unknown, init?: FetchResultInit): Promise<Result<T>> {
     return execute<T>(url, init, () => jsonInit('PUT', body, init));
   },
 
   /**
-   * PATCH with JSON body — returns Result<T>. See {@link fetchResult.post} for header handling.
+   * PATCH with JSON body: returns Result<T>. See {@link fetchResult.post} for header handling.
    */
   async patch<T>(url: string | URL, body: unknown, init?: FetchResultInit): Promise<Result<T>> {
     return execute<T>(url, init, () => jsonInit('PATCH', body, init));
   },
 
   /**
-   * DELETE — returns Result<T>. Any 2xx is a success: an empty or `null` JSON body gives
+   * DELETE: returns Result<T>. Any 2xx is a success: an empty or `null` JSON body gives
    * `undefined` (not NotFound), while a non-empty JSON body is parsed and returned, for APIs
    * that answer DELETE with a body. Malformed JSON is still a failure.
    */
@@ -201,7 +201,7 @@ export const fetchResult = {
   },
 
   /**
-   * Sends `init` as-is (including any body already set on it) — returns Result<T>.
+   * Sends `init` as-is (including any body already set on it), returns Result<T>.
    * Use for non-JSON payloads; for JSON bodies prefer post/put/patch, which serialize
    * the body for you.
    */

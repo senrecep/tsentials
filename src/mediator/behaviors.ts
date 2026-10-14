@@ -83,8 +83,8 @@ type ValidateFn<T> = (
 ) => Result<unknown> | Promise<Result<unknown>>;
 
 /**
- * A request validator: a function — a `Rule<T>` from
- * `tsentials/rules` qualifies — or an object with an `order`. Validators with a lower
+ * A request validator: a function, a `Rule<T>` from
+ * `tsentials/rules` qualifies: or an object with an `order`. Validators with a lower
  * order run first; validators with the same order run concurrently. Default order 0.
  */
 export type RequestValidator<T> =

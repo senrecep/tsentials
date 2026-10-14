@@ -30,7 +30,7 @@ export interface MustOptions {
   /**
    * Text describing the condition, used in the default message
    * `'<path>' did not satisfy the condition: <expression>.`
-   * Defaults to the predicate's source (`predicate.toString()`) — the closest runtime equivalent of the
+   * Defaults to the predicate's source (`predicate.toString()`), the closest runtime equivalent of the
    * source expression, but minifiers rewrite it, so pass it explicitly when
    * the message matters.
    */
@@ -49,7 +49,7 @@ function isEmailShaped(value: string): boolean {
   return lastDot > at + 1 && lastDot < value.length - 1;
 }
 
-// Unbounded — only pass a known, finite set of string patterns.
+// Unbounded: only pass a known, finite set of string patterns.
 const regexCache = new Map<string, RegExp>();
 
 function regexFor(pattern: string | RegExp): RegExp {
@@ -84,12 +84,12 @@ const isNullish = (value: unknown): value is null | undefined =>
  * guard check to accumulate every remaining error instead.
  *
  * Built-in validators are restricted to the property types they make sense for through
- * `this` parameters — `maxLength` on a `number` chain is a compile error. Every built-in
+ * `this` parameters: `maxLength` on a `number` chain is a compile error. Every built-in
  * accepts an optional `message`: a string replaces the default description, an
  * {@link AppError} replaces the whole error (used verbatim).
  *
  * Null handling: `null` and `undefined` are both "null". Apart from `notNull`, `notEmpty`
- * and `equal`, built-ins skip a null value — guard with `notNull` / `notEmpty` first.
+ * and `equal`, built-ins skip a null value, guard with `notNull` / `notEmpty` first.
  */
 export class RuleChain<TProp> {
   /** The property value captured when the chain was created. */
@@ -110,7 +110,7 @@ export class RuleChain<TProp> {
   }
 
   /**
-   * True when an error has been recorded AND the chain is in Stop mode — later validators
+   * True when an error has been recorded AND the chain is in Stop mode, later validators
    * are skipped. Always false in Continue mode, so every validator runs.
    */
   get hasFailed(): boolean {
@@ -167,7 +167,7 @@ export class RuleChain<TProp> {
    * - `must(pred)` → `<path>.Must`, `'<path>' did not satisfy the condition: <expression>.`
    * - `must(pred, code, message)` → the given code and message, used as-is (no path prefix).
    *
-   * Throws a TypeError when the predicate returns a promise — use {@link mustAsync}.
+   * Throws a TypeError when the predicate returns a promise, use {@link mustAsync}.
    */
   must(predicate: (value: TProp) => boolean, options?: MustOptions): this;
   must(predicate: (value: TProp) => boolean, errorCode: string, errorMessage: string): this;
@@ -200,7 +200,7 @@ export class RuleChain<TProp> {
    * keep chaining on the resolved chain: `(await chain.mustAsync(...)).maxLength(5)`.
    *
    * The predicate receives the abort signal (`options.signal`, else the validation run's
-   * signal). When that signal aborts, the returned promise rejects with its reason — an
+   * signal). When that signal aborts, the returned promise rejects with its reason, an
    * abort is never turned into a validation error. A predicate that throws rejects too.
    */
   mustAsync(
@@ -406,7 +406,7 @@ export class RuleChain<TProp> {
   }
 
   /**
-   * Fails when the string does not match `pattern` (searched, not anchored — add `^…$`
+   * Fails when the string does not match `pattern` (searched, not anchored, add `^…$`
    * yourself) → `<path>.Matches`. String patterns are compiled once and cached.
    */
   matches<S extends string | null | undefined>(
@@ -740,7 +740,7 @@ export class RuleChain<TProp> {
    * Fails when the value is not a declared member of `enumObject` → `<path>.IsDefinedEnum`,
    * `'<value>' is not a valid <enumName>. Allowed values: <members>.` Null is skipped.
    * `enumName` stands in for the type name, which TypeScript does not keep at runtime.
-   * Flag combinations are not members — use {@link hasOnlyDefinedFlags} for flag enums.
+   * Flag combinations are not members: use {@link hasOnlyDefinedFlags} for flag enums.
    */
   isDefinedEnum<V extends string | number | null | undefined>(
     this: RuleChain<V>,

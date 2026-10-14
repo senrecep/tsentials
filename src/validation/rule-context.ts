@@ -11,7 +11,7 @@ import { RuleChain } from './rule-chain.js';
 
 /**
  * Collects validation errors for one model and creates {@link RuleChain}s for its
- * properties. A context lives for a single validation run — never store it.
+ * properties. A context lives for a single validation run, never store it.
  *
  * Inside `forEach` an item context prefixes every property name with the collection path
  * and index (`items[0].name`), and nested `forEach` calls compose (`orders[0].items[1].sku`).
@@ -38,9 +38,9 @@ export class RuleContext<T> {
   /**
    * Starts a chain for a property.
    *
-   * - `for('address.city')` — a typed dotted path of the model, read immediately. A null /
+   * - `for('address.city')`: a typed dotted path of the model, read immediately. A null /
    *   undefined intermediate segment yields `undefined` (guards like `notEmpty` then fire).
-   * - `for(value, 'name')` — a pre-computed value with an explicit property name; computed or renamed properties use this form.
+   * - `for(value, 'name')`: a pre-computed value with an explicit property name; computed or renamed properties use this form.
    *
    * Either form is prefixed inside `forEach` (`items[0].name`).
    */
@@ -56,7 +56,7 @@ export class RuleContext<T> {
 
   /**
    * Starts a chain for the collection item itself, named after the item's indexed path
-   * (`tags[0]`) — use it inside `forEach` over primitive collections. Throws a TypeError on
+   * (`tags[0]`): use it inside `forEach` over primitive collections. Throws a TypeError on
    * a root context, which has no item path.
    */
   self(): RuleChain<T> {
@@ -71,10 +71,10 @@ export class RuleContext<T> {
    * `<path>[<index>].`. A null / undefined collection (or null intermediate segment)
    * produces no errors.
    *
-   * - `forEach('items', (rules, item) => ...)` — a typed collection path of the model.
-   * - `forEach(collection, 'items', (rules, item) => ...)` — explicit collection and name.
+   * - `forEach('items', (rules, item) => ...)`: a typed collection path of the model.
+   * - `forEach(collection, 'items', (rules, item) => ...)`: explicit collection and name.
    *
-   * Throws a TypeError when `configure` returns a promise — use {@link forEachAsync}.
+   * Throws a TypeError when `configure` returns a promise, use {@link forEachAsync}.
    */
   forEach<P extends CollectionPath<T>>(
     path: P,
@@ -113,7 +113,7 @@ export class RuleContext<T> {
 
   /**
    * Async variant of {@link forEach}: items are processed one after another and the abort
-   * signal (`options.signal`, else the run's signal) is checked before each item — an abort
+   * signal (`options.signal`, else the run's signal) is checked before each item, an abort
    * rejects with the signal's reason. The callback receives that signal.
    */
   forEachAsync<P extends CollectionPath<T>>(
@@ -199,7 +199,7 @@ export class RuleContext<T> {
   }
 
   /**
-   * Adds a model-level error (cross-field checks). The code is used as-is — it is NOT
+   * Adds a model-level error (cross-field checks). The code is used as-is, it is NOT
    * prefixed inside `forEach`.
    */
   addFailure(error: AppError): this;

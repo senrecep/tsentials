@@ -1,5 +1,5 @@
 /**
- * Tree<T> — a recursive tree data structure.
+ * Tree<T>: a recursive tree data structure.
  *
  * Useful for modelling hierarchies: category trees, comment threads,
  * file systems, organisation charts, decision trees.

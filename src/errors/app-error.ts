@@ -163,7 +163,7 @@ export const Err = {
   /**
    * Creates an error from a thrown value. Defaults to `ErrorType.Failure`.
    * Code defaults to the exception's constructor name; description is its message; metadata
-   * holds the exception details (see `ErrorMetadata.fromException`) — on key collision the
+   * holds the exception details (see `ErrorMetadata.fromException`), on key collision the
    * exception details win over the supplied `metadata`.
    */
   fromException(

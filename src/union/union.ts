@@ -1,7 +1,7 @@
 /**
  * Generic discriminated union utility type.
  *
- * IMPORTANT: TypeScript has NATIVE discriminated unions — this utility is for
+ * IMPORTANT: TypeScript has NATIVE discriminated unions, this utility is for
  * when you need a programmatic, tag-based union over a record of types.
  * For most use cases, prefer native TypeScript union types directly:
  *
@@ -29,7 +29,7 @@ export type Union<T extends Record<string, unknown>> = {
 }[keyof T];
 
 /**
- * Any tagged value — the shape every Union<T> member conforms to.
+ * Any tagged value: the shape every Union<T> member conforms to.
  * Used so utilities can infer directly from the union value itself
  * (inferring T back out of Union<T> is not possible for the compiler).
  */
@@ -63,7 +63,7 @@ export const Union = {
   },
 
   /**
-   * Type guard — checks if the union has a specific tag.
+   * Type guard: checks if the union has a specific tag.
    */
   is<U extends Tagged, K extends U['tag']>(
     union: U,

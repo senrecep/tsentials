@@ -1,5 +1,5 @@
 /**
- * Record<K, V> utilities — functional operations on plain objects.
+ * Record<K, V> utilities, functional operations on plain objects.
  *
  * @example
  * import { Record as R } from 'tsentials/record';

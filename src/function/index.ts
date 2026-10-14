@@ -1,5 +1,5 @@
 /**
- * pipe — left-to-right function composition starting with a value.
+ * pipe: left-to-right function composition starting with a value.
  *
  * Builds a pipeline by threading a value through a sequence of unary functions.
  * Each function receives the output of the previous one.
@@ -179,7 +179,7 @@ export function pipe(a: unknown, ...fns: ReadonlyArray<(x: unknown) => unknown>)
 }
 
 /**
- * flow — left-to-right function composition returning a new function.
+ * flow: left-to-right function composition returning a new function.
  *
  * Combines multiple unary functions into a single function.
  * Each function receives the output of the previous one.
@@ -270,7 +270,7 @@ export function flow(
 }
 
 /**
- * identity — returns its argument unchanged.
+ * identity: returns its argument unchanged.
  *
  * @example
  * identity(42); // 42
@@ -280,7 +280,7 @@ export function identity<A>(a: A): A {
 }
 
 /**
- * constant — creates a function that always returns the same value.
+ * constant: creates a function that always returns the same value.
  *
  * @example
  * const alwaysTrue = constant(true);
@@ -291,7 +291,7 @@ export function constant<A>(a: A): () => A {
 }
 
 /**
- * flip — reverses the argument order of a binary function.
+ * flip: reverses the argument order of a binary function.
  *
  * @example
  * const subtract = (a: number, b: number) => a - b;

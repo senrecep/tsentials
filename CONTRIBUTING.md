@@ -24,10 +24,10 @@ docs/          — GitHub Pages documentation site
 ## Development Workflow
 
 ### 1. Branch naming
-- `feat/short-description` — new feature
-- `fix/short-description` — bug fix
-- `docs/short-description` — documentation only
-- `chore/short-description` — tooling, deps, config
+- `feat/short-description`: new feature
+- `fix/short-description`: bug fix
+- `docs/short-description`: documentation only
+- `chore/short-description`: tooling, deps, config
 
 ### 2. Make your changes
 
@@ -63,7 +63,7 @@ test(rules): add async rule engine coverage
 
 ### 5. Pull Request
 
-- Keep PRs focused — one feature or fix per PR
+- Keep PRs focused: one feature or fix per PR
 - Update tests and make sure they pass
 - Update documentation if public API changed
 - Describe **what** and **why** in the PR description
@@ -72,20 +72,20 @@ test(rules): add async rule engine coverage
 
 Before adding a new method or type, check that it:
 
-1. **Has clear semantics** — the name unambiguously describes what it does
+1. **Has clear semantics**: the name unambiguously describes what it does
 2. **Is pure / side-effect free** (unless it's a `tap` variant)
-3. **Fits the railway pattern** — functions either succeed or return structured errors
-4. **Has an async variant if relevant** — if you add `foo()`, consider whether `fooAsync()` is needed
-5. **Is tested** — new methods need test coverage
+3. **Fits the railway pattern**: functions either succeed or return structured errors
+4. **Has an async variant if relevant**: if you add `foo()`, consider whether `fooAsync()` is needed
+5. **Is tested**: new methods need test coverage
 
 ## Coding Conventions
 
-- TypeScript strict mode — `strict: true`, `exactOptionalPropertyTypes: true`
-- ESM only — no CommonJS (`"type": "module"`)
-- No `any` types — use generics
-- No thrown exceptions from library code — return `Result.failure(...)` instead
-- Errors are values — `AppError` / `Err.*` factory, not `new Error(...)`
-- Functional namespace style for `Result` and `Maybe` — static methods, no class instantiation
+- TypeScript strict mode: `strict: true`, `exactOptionalPropertyTypes: true`
+- ESM only: no CommonJS (`"type": "module"`)
+- No `any` types: use generics
+- No thrown exceptions from library code: return `Result.failure(...)` instead
+- Errors are values: `AppError` / `Err.*` factory, not `new Error(...)`
+- Functional namespace style for `Result` and `Maybe`: static methods, no class instantiation
 
 ## Reporting Issues
 

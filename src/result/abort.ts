@@ -1,5 +1,5 @@
 /**
- * Shared cancellation helpers — one rule:
+ * Shared cancellation helpers: one rule:
  * "when the caller's token is cancelled the cancellation propagates; cancellation
  * from any other source is just an error".
  *
@@ -25,7 +25,7 @@ export interface AbortOptions {
 /**
  * Returns true when `error` looks like a cancellation: an object whose `name` is
  * `'AbortError'` (`AbortController.abort()`, `fetch`) or `'TimeoutError'`
- * (`AbortSignal.timeout()`). Duck-typed — works for `DOMException` and plain errors.
+ * (`AbortSignal.timeout()`). Duck-typed, works for `DOMException` and plain errors.
  *
  * This says nothing about WHOSE signal was aborted; use {@link isCallerAbort} to
  * decide whether to propagate.
@@ -42,7 +42,7 @@ export function isAbortError(error: unknown): boolean {
  * (see {@link isAbortError}). Both conditions are required.
  *
  * An `AbortError` raised while `signal` is NOT aborted (e.g. from an unrelated
- * controller) returns false — it should become an error Result.
+ * controller) returns false: it should become an error Result.
  */
 export function isCallerAbort(error: unknown, signal: AbortSignal | undefined): boolean {
   if (!signal?.aborted) return false;
@@ -73,7 +73,7 @@ export function throwIfAborted(signal: AbortSignal | undefined): void {
 
 /**
  * Settles with `promise`, or rejects with `signal.reason` as soon as `signal`
- * aborts — whichever happens first.
+ * aborts: whichever happens first.
  *
  * - Without a signal, returns `promise` unchanged.
  * - With an already-aborted signal, rejects immediately (checked explicitly, not
@@ -82,7 +82,7 @@ export function throwIfAborted(signal: AbortSignal | undefined): void {
  * - The abort listener is removed once `promise` settles, so one long-lived signal
  *   can be reused for many calls without leaking listeners.
  *
- * Note: the underlying work is NOT stopped — pass the signal into it for that.
+ * Note: the underlying work is NOT stopped, pass the signal into it for that.
  */
 export function withAbort<T>(promise: PromiseLike<T>, signal: AbortSignal | undefined): Promise<T> {
   if (!signal) return Promise.resolve(promise);

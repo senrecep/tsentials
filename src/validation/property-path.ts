@@ -1,5 +1,5 @@
 /**
- * Typed property paths — path extraction. `rules.for('address.city')` is checked against the model type at
+ * Typed property paths: path extraction. `rules.for('address.city')` is checked against the model type at
  * compile time and becomes the `address.city` prefix of every error code at runtime.
  */
 
@@ -18,13 +18,13 @@ type Terminal =
   | Iterable<unknown>
   | PromiseLike<unknown>;
 
-/** Depth countdown — keeps recursive models from exhausting the type checker. */
+/** Depth countdown: keeps recursive models from exhausting the type checker. */
 type Prev = [never, 0, 1, 2, 3, 4, 5];
 
 /**
  * Every dotted property path of `T` up to five levels deep, e.g.
  * `'name' | 'address' | 'address.city'`. Collections, Dates, functions and primitives
- * are leaves — validate collection items with `forEach`.
+ * are leaves: validate collection items with `forEach`.
  */
 export type PropertyPath<T, D extends number = 5> = [D] extends [never]
   ? never
@@ -53,7 +53,7 @@ export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}
     ? Nullish<T> | NonNullable<T>[P]
     : never;
 
-/** Paths of `T` whose value is a (possibly nullable) non-string iterable — `forEach` targets. */
+/** Paths of `T` whose value is a (possibly nullable) non-string iterable, `forEach` targets. */
 export type CollectionPath<T> = {
   [P in PropertyPath<T>]: NonNullable<PathValue<T, P>> extends string
     ? never
