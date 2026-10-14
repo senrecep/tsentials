@@ -93,7 +93,7 @@ export function retryDelay(backoff: BackoffType, attempt: number, base: number):
 /**
  * @internal Retry strategy. After each attempt:
  * stop when this layer's signal is aborted, when it was the last attempt, or when
- * `shouldHandle` rejects the outcome; otherwise wait the backoff delay (abortable — an abort
+ * `shouldHandle` rejects the outcome; otherwise wait the backoff delay (abortable, an abort
  * during the delay becomes the outcome) and try again.
  */
 export function retryStrategy(

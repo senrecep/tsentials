@@ -12,7 +12,7 @@ import { toResilienceError } from './classifier.js';
 export type DelayFn = (ms: number, signal: AbortSignal) => Promise<void>;
 
 /**
- * Injectable time sources — for deterministic tests.
+ * Injectable time sources: for deterministic tests.
  * Defaults: `SystemDateTimeProvider` and a `setTimeout`-based delay, both of which
  * follow `vi.useFakeTimers()`.
  */

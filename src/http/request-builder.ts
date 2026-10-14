@@ -85,7 +85,7 @@ export class RequestBuilder {
 
   /**
    * Appends query string parameters: either one `name`/`value` pair, or every entry of a
-   * record — `null`/`undefined` record values are skipped.
+   * record: `null`/`undefined` record values are skipped.
    */
   query(name: string, value: QueryValue): this;
   query(params: Readonly<Record<string, QueryValue | null | undefined>>): this;

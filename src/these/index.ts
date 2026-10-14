@@ -1,5 +1,5 @@
 /**
- * These<E, A> — a value that can be a success, a failure, or both.
+ * These<E, A>, a value that can be a success, a failure, or both.
  *
  * Unlike Result<T> (which is either success or failure) or Either<E, A>
  * (which is left or right), These allows for "partial success": a value
@@ -53,21 +53,21 @@ export function both<E, A>(error: E, value: A): These<E, A> {
 
 // ─── Type guards ─────────────────────────────────────────────────────────────
 
-/** Checks if the These is a Left — narrows the type on success. */
+/** Checks if the These is a Left: narrows the type on success. */
 export function isLeft<E, A>(
   these: These<E, A>,
 ): these is { readonly _tag: 'Left'; readonly left: E } {
   return these._tag === 'Left';
 }
 
-/** Checks if the These is a Right — narrows the type on success. */
+/** Checks if the These is a Right: narrows the type on success. */
 export function isRight<E, A>(
   these: These<E, A>,
 ): these is { readonly _tag: 'Right'; readonly right: A } {
   return these._tag === 'Right';
 }
 
-/** Checks if the These is a Both — narrows the type on success. */
+/** Checks if the These is a Both: narrows the type on success. */
 export function isBoth<E, A>(
   these: These<E, A>,
 ): these is { readonly _tag: 'Both'; readonly left: E; readonly right: A } {
@@ -202,7 +202,7 @@ export function toResult<A>(these: These<readonly AppError[], A>): Result<A> {
  * Converts a These<AppError[], T> to a Result<T> preserving partial success.
  * - Right → success
  * - Left → failure
- * - Both → success (value is kept, but errors are discarded — use with care)
+ * - Both → success (value is kept, but errors are discarded, use with care)
  */
 export function toResultLenient<A>(these: These<readonly AppError[], A>): Result<A> {
   switch (these._tag) {

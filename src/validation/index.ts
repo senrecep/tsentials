@@ -1,5 +1,5 @@
 /**
- * `tsentials/validation` — fluent, eager, Result-based model validation
+ * `tsentials/validation`: fluent, eager, Result-based model validation
  *
  * @example
  * import { Validator } from 'tsentials/validation';

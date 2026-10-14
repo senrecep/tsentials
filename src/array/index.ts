@@ -1,11 +1,11 @@
 /**
- * NonEmptyArray<T> — a type-safe array guaranteed to have at least one element.
+ * NonEmptyArray<T>: a type-safe array guaranteed to have at least one element.
  *
  * @example
  * import { NonEmptyArray, asNonEmptyArray, head } from 'tsentials/array';
  *
  * const items: NonEmptyArray<string> = ['a', 'b', 'c'];
- * const first = head(items); // 'a' — no Maybe, no null check needed
+ * const first = head(items); // 'a', no Maybe, no null check needed
  *
  * // Safe conversion from plain array
  * const maybeNonEmpty = asNonEmptyArray([]);        // None
@@ -52,7 +52,7 @@ export function append<T>(init: ReadonlyArray<T>, last: T): NonEmptyArray<T> {
 // ─── Safe extraction ─────────────────────────────────────────────────────────
 
 /**
- * Returns the first element — safe because NonEmptyArray guarantees existence.
+ * Returns the first element: safe because NonEmptyArray guarantees existence.
  */
 export function head<T>(as: NonEmptyArray<T>): T {
   return as[0] as T;
@@ -66,7 +66,7 @@ export function tail<T>(as: NonEmptyArray<T>): Array<T> {
 }
 
 /**
- * Returns the last element — safe because NonEmptyArray guarantees existence.
+ * Returns the last element: safe because NonEmptyArray guarantees existence.
  */
 export function last<T>(as: NonEmptyArray<T>): T {
   return as[as.length - 1] as T;

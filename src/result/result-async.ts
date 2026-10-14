@@ -10,7 +10,7 @@ type ResultLike<T> = Result<T> | ResultAsync<T> | PromiseLike<Result<T>>;
  *
  * Unlike ResultChain whose async methods return Promise<ResultChain<U>> and require
  * await at each step, ResultAsync lets you build the entire pipeline without
- * intermediate awaits — all operations return ResultAsync<U> synchronously, and
+ * intermediate awaits: all operations return ResultAsync<U> synchronously, and
  * the whole chain resolves once at the end.
  *
  * Implements PromiseLike<Result<T>> so it can be awaited directly to get Result<T>.
@@ -84,7 +84,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   }
 
   /**
-   * Wraps an async throwing function — exceptions become Result.failure.
+   * Wraps an async throwing function: exceptions become Result.failure.
    *
    * @example
    * const r = await ResultAsync.try(() => fetch('/api/users').then(r => r.json()))
@@ -99,7 +99,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
 
   /**
    * Creates a reusable wrapper for throwing async functions.
-   * Returns a factory that always yields a ResultAsync — no try/catch at call sites.
+   * Returns a factory that always yields a ResultAsync, no try/catch at call sites.
    *
    * @example
    * const safeGetUser = ResultAsync.fromThrowable(
@@ -118,7 +118,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   // ─── PIPELINE ─────────────────────────────────────────────────────────────
 
   /**
-   * Monadic bind — chains a function returning Result<U>, ResultAsync<U>, or
+   * Monadic bind: chains a function returning Result<U>, ResultAsync<U>, or
    * Promise<Result<U>>. Short-circuits on failure.
    *
    * Named `andThen` (not `then`) to avoid collision with PromiseLike.then.
@@ -168,7 +168,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   }
 
   /**
-   * Fails when the (sync or async) predicate matches the success value — opposite of `ensure`.
+   * Fails when the (sync or async) predicate matches the success value, opposite of `ensure`.
    * An error factory is called only when the predicate matches.
    */
   failWhen(
@@ -272,7 +272,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   /**
    * Resolves to the success value, or computes one from the errors.
    *
-   * @deprecated Resolves to `T`, not a ResultAsync — use {@link ResultAsync.unwrapOrElse}.
+   * @deprecated Resolves to `T`, not a ResultAsync, use {@link ResultAsync.unwrapOrElse}.
    */
   elseWith(factory: (errors: readonly AppError[]) => T | Promise<T>): Promise<T> {
     return this.unwrapOrElse(factory);
@@ -379,7 +379,7 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   }
 
   /**
-   * Exhaustive pattern match — extracts a value from either branch.
+   * Exhaustive pattern match: extracts a value from either branch.
    * This is the primary way to exit the ResultAsync pipeline.
    *
    * @example

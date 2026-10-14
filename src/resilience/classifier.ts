@@ -5,9 +5,9 @@ import type { Result } from '../result/result.js';
 
 /** Error codes produced by the resilience strategies. */
 export const ResilienceErrorCode = {
-  /** The timeout strategy cancelled the operation — `Err.failure('Resilience.Timeout', …)`. */
+  /** The timeout strategy cancelled the operation, `Err.failure('Resilience.Timeout', …)`. */
   Timeout: 'Resilience.Timeout',
-  /** The circuit breaker rejected the call — `Err.failure('Resilience.CircuitBroken', …)`. */
+  /** The circuit breaker rejected the call: `Err.failure('Resilience.CircuitBroken', …)`. */
   CircuitBroken: 'Resilience.CircuitBroken',
 } as const;
 
@@ -16,7 +16,7 @@ export type ResilienceErrorCode = (typeof ResilienceErrorCode)[keyof typeof Resi
 /**
  * Thrown inside the pipeline when the timeout strategy cancels an attempt. Deliberately NOT abort-like (`name` is not `AbortError` /
  * `TimeoutError`), so outer strategies treat it as an ordinary failure. Never escapes
- * the policy — it is mapped to {@link ResilienceErrorCode.Timeout} at the boundary.
+ * the policy: it is mapped to {@link ResilienceErrorCode.Timeout} at the boundary.
  */
 export class TimeoutRejectedError extends Error {
   override readonly name = 'TimeoutRejectedError';

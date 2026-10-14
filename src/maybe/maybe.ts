@@ -5,7 +5,7 @@ import { type AbortOptions, isAbortError, rethrowIfAborted, withAbort } from '..
 import { Result, type VoidResult } from '../result/result.js';
 
 /**
- * Maybe<T> represents an optional value — either Some(value) or None.
+ * Maybe<T> represents an optional value: either Some(value) or None.
  *
  * Design note: While TypeScript's `T | undefined` covers many use cases,
  * an explicit Maybe<T> type provides:
@@ -77,7 +77,7 @@ export const Maybe = {
    * Async version of Maybe.fromTry: awaits `fn` and turns null/undefined or a rejection into None.
    *
    * With `{ signal }`: `fn` receives the signal, and when the caller's signal is aborted the
-   * abort PROPAGATES (the promise rejects with it) instead of becoming None — even if `fn`
+   * abort PROPAGATES (the promise rejects with it) instead of becoming None, even if `fn`
    * ignores the signal. Any other error, including an abort-like error while the caller's
    * signal is not aborted, becomes None (same rule as `Result.tryAsync`).
    *
@@ -165,7 +165,7 @@ export const Maybe = {
   },
 
   /**
-   * Filters a Maybe based on a predicate — becomes None if predicate fails.
+   * Filters a Maybe based on a predicate: becomes None if predicate fails.
    */
   filter<T>(maybe: Maybe<T>, predicate: (value: T) => boolean): Maybe<T> {
     if (!maybe.hasValue) return maybe;
@@ -174,7 +174,7 @@ export const Maybe = {
 
   /**
    * Returns the value, or calls the factory function if None.
-   * Lazy alternative to getOrDefault — factory is only invoked when needed.
+   * Lazy alternative to getOrDefault: factory is only invoked when needed.
    */
   getOrElse<T>(maybe: Maybe<T>, fn: () => T): T {
     return maybe.hasValue ? maybe.value : fn();
@@ -202,7 +202,7 @@ export const Maybe = {
   },
 
   /**
-   * Void-only pattern match — runs side effects without returning a value.
+   * Void-only pattern match, runs side effects without returning a value.
    * Complement of `match` for cases where you only need side effects.
    *
    * @example
@@ -412,7 +412,7 @@ export const Maybe = {
 
   /**
    * Converts a Maybe into a Result: Some(v) → success(v), None → failure(error).
-   * Default error: `NotFound` `Maybe.Result` — "The 'Maybe' has no value.".
+   * Default error: `NotFound` `Maybe.Result`: "The 'Maybe' has no value.".
    * `maybeToResult` (from `tsentials/result`) is an alias of this function.
    */
   toResult<T>(maybe: Maybe<T>, error?: AppError): Result<T> {

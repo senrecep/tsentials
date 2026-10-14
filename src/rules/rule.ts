@@ -2,7 +2,7 @@ import type { Result, VoidResult } from '../result/result.js';
 
 /**
  * A Rule is a function that evaluates a context and returns a Result.
- * In TypeScript, a rule is simply a function — no interface hierarchy needed.
+ * In TypeScript, a rule is simply a function, no interface hierarchy needed.
  */
 export type Rule<TContext> = (context: TContext) => VoidResult;
 

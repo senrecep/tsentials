@@ -13,7 +13,7 @@
 export interface DateTimeProvider {
   /** Current UTC time as a Date object. */
   utcNow(): Date;
-  /** Current UTC date (year, month, day only — time zeroed). */
+  /** Current UTC date (year, month, day only, time zeroed). */
   utcNowDate(): Date;
   /** Current timestamp in milliseconds (Date.now() equivalent). */
   utcNowMs(): number;
@@ -25,7 +25,7 @@ export interface DateTimeProvider {
 }
 
 /**
- * Production implementation — delegates to system clock.
+ * Production implementation: delegates to system clock.
  */
 export const SystemDateTimeProvider: DateTimeProvider = {
   utcNow(): Date {

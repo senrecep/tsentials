@@ -126,11 +126,11 @@ function recursiveClone<T>(value: T, seen: WeakMap<object, unknown>): T {
   // Primitives (immutable)
   if (value === null || typeof value !== 'object') {
     if (typeof value === 'symbol') {
-      // Symbols cannot be cloned — gracefully degrade to undefined
+      // Symbols cannot be cloned: gracefully degrade to undefined
       return undefined as unknown as T;
     }
     if (typeof value === 'function') {
-      // Functions are immutable references — return as-is
+      // Functions are immutable references: return as-is
       return value;
     }
     return value;
@@ -209,13 +209,13 @@ function recursiveClone<T>(value: T, seen: WeakMap<object, unknown>): T {
     return cloned as unknown as T;
   }
   if (is(object, tag, 'WeakMap')) {
-    // WeakMap is non-iterable — return an empty instance of the same type
+    // WeakMap is non-iterable, return an empty instance of the same type
     const cloned = new WeakMap();
     seen.set(object, cloned);
     return cloned as unknown as T;
   }
   if (is(object, tag, 'WeakSet')) {
-    // WeakSet is non-iterable — return an empty instance of the same type
+    // WeakSet is non-iterable, return an empty instance of the same type
     const cloned = new WeakSet();
     seen.set(object, cloned);
     return cloned as unknown as T;
@@ -226,7 +226,7 @@ function recursiveClone<T>(value: T, seen: WeakMap<object, unknown>): T {
     return cloned;
   }
   if (is(object, tag, 'SharedArrayBuffer')) {
-    // SharedArrayBuffer is intentionally shared memory — return the same reference
+    // SharedArrayBuffer is intentionally shared memory, return the same reference
     seen.set(object, object);
     return value;
   }
@@ -251,7 +251,7 @@ function recursiveClone<T>(value: T, seen: WeakMap<object, unknown>): T {
     return cloned;
   }
   if (instanceOfGlobal(object, 'Blob') || instanceOfGlobal(object, 'Promise')) {
-    // Immutable / identity-bound host objects (Blob, File, Promise) — returned by reference
+    // Immutable / identity-bound host objects (Blob, File, Promise), returned by reference
     seen.set(object, object);
     return value;
   }
@@ -260,7 +260,7 @@ function recursiveClone<T>(value: T, seen: WeakMap<object, unknown>): T {
     return cloneError(object, seen) as unknown as T;
   }
 
-  // Plain objects — Object.keys naturally skips symbol keys
+  // Plain objects: Object.keys naturally skips symbol keys
   const original = object as Record<string | number | symbol, unknown>;
   const cloned: Record<string | number | symbol, unknown> = {};
   seen.set(object, cloned);

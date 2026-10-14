@@ -110,10 +110,10 @@ const problemDescription = (body: unknown): string | undefined => {
  * Converts a failed response's status and parsed ProblemDetails (RFC 9457) body to AppErrors.
  *
  * When the body has an `errors` extension, one AppError is produced per entry:
- * - list `[{ code, description, type?, numericType?, metadata? }]` — `type` is used when it
+ * - list `[{ code, description, type?, numericType?, metadata? }]`: `type` is used when it
  *   is a valid ErrorType (name or numeric ordinal), otherwise `Validation`; plain-string
  *   entries use the `Http.{status}` code and `Validation`;
- * - dictionary `{ key: string[] | string }` (the common validation-problem shape) — one error
+ * - dictionary `{ key: string[] | string }` (the common validation-problem shape), one error
  *   per message with `key` as the code and type `Validation`.
  *
  * Entries without a type are `Validation`: an untyped `errors` extension carries only

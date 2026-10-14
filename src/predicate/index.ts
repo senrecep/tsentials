@@ -1,5 +1,5 @@
 /**
- * Predicate<T> — composable, type-safe boolean functions.
+ * Predicate<T>: composable, type-safe boolean functions.
  *
  * @example
  * import { Predicate } from 'tsentials/predicate';

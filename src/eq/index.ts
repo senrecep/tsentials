@@ -1,5 +1,5 @@
 /**
- * Eq<T> — type-safe structural equality.
+ * Eq<T>: type-safe structural equality.
  *
  * Provides a composable way to define and reuse equality checks.
  * Unlike reference equality (`===`), Eq instances can compare deep structure.

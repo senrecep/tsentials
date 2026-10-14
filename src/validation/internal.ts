@@ -7,11 +7,11 @@ import type { ErrorType } from '../errors/error-type.js';
  * Mutable state shared by a root {@link RuleContext} and every chain / child context
  * created from it during one validation run. Not part of the public API.
  *
- * - `errors`  — every recorded error, in the order rules ran.
- * - `pending` — async rules that have started but not finished. A non-zero value when the
+ * - `errors` : every recorded error, in the order rules ran.
+ * - `pending`: async rules that have started but not finished. A non-zero value when the
  *               configure step returns means an async rule was not awaited.
- * - `inflight` — promises of the async rules started in this run.
- * - `signal`  — the caller's abort signal for this run, if any.
+ * - `inflight`: promises of the async rules started in this run.
+ * - `signal` : the caller's abort signal for this run, if any.
  */
 export interface ContextState {
   readonly errors: AppError[];
@@ -134,7 +134,7 @@ export function prefixError(error: AppError, prefix: string): AppError {
 }
 
 /**
- * A nested error code looks like "city.NotEmpty" — the part before the rule suffix is the
+ * A nested error code looks like "city.NotEmpty", the part before the rule suffix is the
  * property name the nested validator quoted in its description ("'city' must not be empty.").
  * Prefix exactly that quoted occurrence so the message matches the fully-qualified code.
  * Messages that do not quote the property name (custom messages) are left untouched.

@@ -19,7 +19,7 @@ import {
  *   for zero-cost type narrowing at compile time
  * - `Result` namespace merging: same identifier works as both type and factory
  * - Sync + async pipeline in one file
- * - No implicit conversions — explicit `Result.success()` / `Result.failure()`
+ * - No implicit conversions, explicit `Result.success()` / `Result.failure()`
  */
 export type Result<T> =
   | { readonly ok: true; readonly value: T }
@@ -122,7 +122,7 @@ export const Result = {
 
   /**
    * Chains a function that returns a new Result (monadic bind).
-   * Short-circuits on failure — the function is not called.
+   * Short-circuits on failure, the function is not called.
    */
   // biome-ignore lint/suspicious/noThenProperty: intentional monadic bind method on Result namespace, not a Promise
   then<T, U>(result: Result<T>, fn: (value: T) => Result<U>): Result<U> {
@@ -186,7 +186,7 @@ export const Result = {
   },
 
   /**
-   * Exhaustive pattern match — extracts a value from either branch.
+   * Exhaustive pattern match: extracts a value from either branch.
    */
   match<T, U>(
     result: Result<T>,
@@ -211,7 +211,7 @@ export const Result = {
   /**
    * Returns the success value, or computes one from the errors.
    *
-   * @deprecated Returns `T`, not a Result — use {@link Result.unwrapOrElse}, which is identical.
+   * @deprecated Returns `T`, not a Result, use {@link Result.unwrapOrElse}, which is identical.
    */
   elseWith<T>(result: Result<T>, factory: (errors: readonly AppError[]) => T): T {
     return Result.unwrapOrElse(result, factory);
@@ -301,7 +301,7 @@ export const Result = {
   // ─── COMBINATION ──────────────────────────────────────────────────────────
 
   /**
-   * Collects multiple Results — succeeds only if ALL succeed.
+   * Collects multiple Results: succeeds only if ALL succeed.
    * Collects ALL errors on failure (does not short-circuit).
    */
   and<T>(results: ReadonlyArray<Result<T>>): Result<T[]> {
@@ -334,7 +334,7 @@ export const Result = {
 
   /**
    * Throws a ResultUnwrapError if the result is a failure.
-   * Use sparingly — prefer match/then for safe pipelines.
+   * Use sparingly: prefer match/then for safe pipelines.
    */
   unwrap<T>(result: Result<T>): T {
     if (!result.ok) {
@@ -370,7 +370,7 @@ export const Result = {
   },
 
   /**
-   * Void-only pattern match — runs side effects without returning a value.
+   * Void-only pattern match, runs side effects without returning a value.
    * Complement of `match` for cases where you only need side effects.
    *
    * @example
@@ -471,7 +471,7 @@ export const Result = {
 
   /**
    * Fails the result if the predicate matches the success value.
-   * Opposite of `ensure` — turns a success into a failure when the predicate is true.
+   * Opposite of `ensure`: turns a success into a failure when the predicate is true.
    * An error factory is called only when the predicate matches (lazy).
    *
    * @example
@@ -612,7 +612,7 @@ export const Result = {
   },
 
   /**
-   * Async version of Result.mapEachError — maps every error one at a time, in order.
+   * Async version of Result.mapEachError: maps every error one at a time, in order.
    * With `{ signal }` the signal is checked before each mapper call (throws `signal.reason`);
    * a running mapper is not abandoned.
    */
@@ -815,7 +815,7 @@ export const Result = {
   },
 
   /**
-   * Applicative apply — applies a function inside a Result to a value inside a Result.
+   * Applicative apply: applies a function inside a Result to a value inside a Result.
    * If both are success, returns success with the applied value.
    * If either is failure, collects all errors.
    *
@@ -849,7 +849,7 @@ export const Result = {
 
   /**
    * Partitions an array of Results into successes and failures.
-   * Unlike `and` or `or`, this does NOT short-circuit — it processes all items.
+   * Unlike `and` or `or`, this does NOT short-circuit, it processes all items.
    *
    * @example
    * const { ok, err } = Result.partition([
@@ -892,11 +892,11 @@ export const Result = {
   /**
    * Async version of traverse; collects ALL errors, in item order.
    *
-   * - Default: sequential — one item at a time.
+   * - Default: sequential, one item at a time.
    * - `concurrency`: at most N items in flight (integer ≥ 1, or `Infinity`); results
    *   are still assembled in item order.
    * - `signal`: checked before each item starts (throws `signal.reason`) and passed to `fn`.
-   *   A running `fn` is not abandoned — pass the signal into it to stop early.
+   *   A running `fn` is not abandoned: pass the signal into it to stop early.
    * - If `fn` throws/rejects, no further items start, in-flight items settle, then the
    *   first exception is rethrown.
    */

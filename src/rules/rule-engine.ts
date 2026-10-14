@@ -8,7 +8,7 @@ import type { AsyncRule, Rule, TypedAsyncRule, TypedRule } from './rule.js';
 /**
  * Composable rule engine for evaluating business rules.
  *
- * Implemented as pure function combinators. Each combinator returns a new Rule — they
+ * Implemented as pure function combinators. Each combinator returns a new Rule, they
  * are composable and nest arbitrarily.
  *
  * A child rule that throws is treated as a failure with code `Rule.EvaluationFailed`
@@ -38,7 +38,7 @@ export const RuleEngine = {
   // ─── COMBINATORS ──────────────────────────────────────────────────────────
 
   /**
-   * Sequential chain — stops on first failure.
+   * Sequential chain: stops on first failure.
    *
    * Use when rules must pass in order and later rules depend on earlier ones.
    */
@@ -54,7 +54,7 @@ export const RuleEngine = {
   },
 
   /**
-   * Async sequential chain — stops on first failure.
+   * Async sequential chain: stops on first failure.
    */
   linearAsync<TContext>(...rules: AsyncRule<TContext>[]): AsyncRule<TContext> {
     return async (context: TContext, signal?: AbortSignal) => {
@@ -69,7 +69,7 @@ export const RuleEngine = {
   },
 
   /**
-   * All rules must pass — stops at the first failure and returns its errors; later rules
+   * All rules must pass: stops at the first failure and returns its errors; later rules
    * are not evaluated. Use {@link RuleEngine.andAll} to collect the errors of every rule.
    */
   and<TContext>(...rules: Rule<TContext>[]): Rule<TContext> {
@@ -84,7 +84,7 @@ export const RuleEngine = {
   },
 
   /**
-   * Async version of and — stops at the first failure.
+   * Async version of and: stops at the first failure.
    */
   andAsync<TContext>(...rules: AsyncRule<TContext>[]): AsyncRule<TContext> {
     return async (context: TContext, signal?: AbortSignal) => {
@@ -99,7 +99,7 @@ export const RuleEngine = {
   },
 
   /**
-   * All rules must pass — evaluates EVERY rule and collects all errors (no short-circuit).
+   * All rules must pass: evaluates EVERY rule and collects all errors (no short-circuit).
    *
    * Use when you want to report all validation failures at once.
    */
@@ -116,7 +116,7 @@ export const RuleEngine = {
   },
 
   /**
-   * Async version of andAll — evaluates every rule in order and collects all errors.
+   * Async version of andAll: evaluates every rule in order and collects all errors.
    */
   andAllAsync<TContext>(...rules: AsyncRule<TContext>[]): AsyncRule<TContext> {
     return async (context: TContext, signal?: AbortSignal) => {
@@ -132,7 +132,7 @@ export const RuleEngine = {
   },
 
   /**
-   * At least one rule must pass — collects all errors if all fail.
+   * At least one rule must pass: collects all errors if all fail.
    */
   or<TContext>(...rules: Rule<TContext>[]): Rule<TContext> {
     return (context: TContext) => {
@@ -167,7 +167,7 @@ export const RuleEngine = {
   // ─── TYPED RULE COMBINATORS ───────────────────────────────────────────────
 
   /**
-   * Sequential chain for typed rules — stops on first failure.
+   * Sequential chain for typed rules: stops on first failure.
    */
   linearTyped<TContext, TResult>(
     ...rules: TypedRule<TContext, TResult>[]
@@ -185,7 +185,7 @@ export const RuleEngine = {
   },
 
   /**
-   * Async sequential chain for typed rules — stops on first failure.
+   * Async sequential chain for typed rules: stops on first failure.
    */
   linearTypedAsync<TContext, TResult>(
     ...rules: TypedAsyncRule<TContext, TResult>[]
@@ -204,7 +204,7 @@ export const RuleEngine = {
   },
 
   /**
-   * All typed rules must pass — evaluates every rule and collects ALL errors (does not
+   * All typed rules must pass: evaluates every rule and collects ALL errors (does not
    * short-circuit). On success the value is the FIRST rule's value.
    */
   andTyped<TContext, TResult>(
@@ -231,7 +231,7 @@ export const RuleEngine = {
   },
 
   /**
-   * Async version of andTyped — collects all errors; on success returns the first rule's value.
+   * Async version of andTyped: collects all errors; on success returns the first rule's value.
    */
   andTypedAsync<TContext, TResult>(
     ...rules: TypedAsyncRule<TContext, TResult>[]
@@ -258,7 +258,7 @@ export const RuleEngine = {
   },
 
   /**
-   * At least one typed rule must pass — collects all errors if all fail.
+   * At least one typed rule must pass: collects all errors if all fail.
    */
   orTyped<TContext, TResult>(
     ...rules: TypedRule<TContext, TResult>[]
@@ -295,7 +295,7 @@ export const RuleEngine = {
   },
 
   /**
-   * Conditional rule — if/then/else branching. The condition is a rule (success = true) or a
+   * Conditional rule: if/then/else branching. The condition is a rule (success = true) or a
    * plain boolean. When the condition is false and no `onFalse` is given, the result is ok.
    *
    * @example
@@ -421,7 +421,7 @@ function evaluationFailed<T>(e: unknown): Result<T> {
 
 /**
  * The failure every combinator built from an empty rule list evaluates to:
- * Validation `EMPTY_RULE_ARRAY` — "The rule array is empty.".
+ * Validation `EMPTY_RULE_ARRAY`: "The rule array is empty.".
  */
 function emptyRuleArray<T = void>(): Result<T> {
   return Result.failure<T>(Err.validation('EMPTY_RULE_ARRAY', 'The rule array is empty.'));
