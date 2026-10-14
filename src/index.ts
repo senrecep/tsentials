@@ -1,9 +1,17 @@
 // Core error and result types
 
 export {
+  append,
+  asNonEmptyArray,
+  head,
+  init,
+  isNonEmpty,
+  last,
   NonEmptyArray,
   type NonEmptyArray as NonEmptyArrayType,
+  prepend,
   type ReadonlyNonEmptyArray,
+  tail,
 } from './array/index.js';
 export type { Cloneable } from './clone/cloneable.js';
 export { cloneArray, deepClone } from './clone/cloneable.js';
@@ -16,14 +24,19 @@ export type { SoftDeletable } from './entity/soft-deletable.js';
 export { createSoftDeletable } from './entity/soft-deletable.js';
 export { Eq, type Eq as EqType } from './eq/index.js';
 export type { AppError } from './errors/app-error.js';
-export { Err } from './errors/app-error.js';
+export { Err, errorTypeToHttpStatus } from './errors/app-error.js';
 export { ErrorMetadata } from './errors/error-metadata.js';
 export { ErrorType } from './errors/error-type.js';
 export { constant, flip, flow, identity, pipe } from './function/index.js';
 export { fetchResult } from './http/fetch-result.js';
-export { RequestBuilder } from './http/request-builder.js';
 // HTTP utilities
-export { httpStatusToError } from './http/status-mapper.js';
+export { HttpCodes } from './http/http-codes.js';
+export { RequestBuilder } from './http/request-builder.js';
+export {
+  httpStatusToError,
+  httpStatusToErrorType,
+  problemDetailsToErrors,
+} from './http/status-mapper.js';
 export type { Json, JsonArray, JsonObject, JsonPrimitive } from './json/index.js';
 // JSON utilities
 export {
@@ -40,6 +53,14 @@ export { asMaybe, choose, Maybe, tryFind, tryFirst, tryLast } from './maybe/inde
 export { Ord, type Ord as OrdType, type Ordering } from './ord/index.js';
 export { Predicate, type Predicate as PredicateType, type Refinement } from './predicate/index.js';
 export { Record } from './record/index.js';
+export type { AbortOptions } from './result/abort.js';
+export {
+  isAbortError,
+  isCallerAbort,
+  rethrowIfAborted,
+  throwIfAborted,
+  withAbort,
+} from './result/abort.js';
 export { maybeToResult, resultToMaybe } from './result/maybe-bridge.js';
 export type { VoidResult } from './result/result.js';
 // Result pattern (railway-oriented programming)
@@ -49,9 +70,19 @@ export { chain, ResultChain } from './result/result-chain.js';
 // Rule engine
 export type { AsyncRule, Rule, TypedAsyncRule, TypedRule } from './rules/rule.js';
 export { RuleEngine } from './rules/rule-engine.js';
+export {
+  toCamelCase,
+  toKebabCase,
+  toMacroCase,
+  toPascalCase,
+  toSnakeCase,
+  toTitleCase,
+  toTrainCase,
+  toUnderscoreCamelCase,
+} from './string/index.js';
 export { These, type These as TheseType } from './these/index.js';
 export type { DateTimeProvider } from './time/date-time-provider.js';
 export { createFakeDateTimeProvider, SystemDateTimeProvider } from './time/date-time-provider.js';
-export { Tree, type Tree as TreeType } from './tree/index.js';
+export { drawTree, Tree, type Tree as TreeType } from './tree/index.js';
 // Utilities
 export { Union } from './union/union.js';

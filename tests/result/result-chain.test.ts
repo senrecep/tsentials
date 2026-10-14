@@ -85,7 +85,7 @@ describe('ResultChain sync API', () => {
   });
 
   it('match extracts error value', () => {
-    const v = chain(Result.failure<number>(err)).match(
+    const v = chain(Result.failure<number>(err)).match<number | string>(
       () => -1,
       (errs) => errs[0]!.code,
     );
@@ -194,7 +194,7 @@ describe('ResultChain sync API', () => {
     const r = chain(Result.success(5))
       .mapError((errs) => {
         called.push(true);
-        return errs;
+        return [...errs];
       })
       .unwrap();
     expect(r.ok).toBe(true);
@@ -217,55 +217,54 @@ describe('ResultChain async API', () => {
   });
 
   it('thenAsync chains async bind', async () => {
-    const c = await chain(Result.success(3)).thenAsync(async (n) => Result.success(n * 10));
-    expect(c.unwrap().ok).toBe(true);
-    if (c.unwrap().ok) expect((c.unwrap() as { ok: true; value: number }).value).toBe(30);
+    const r = await chain(Result.success(3)).thenAsync(async (n) => Result.success(n * 10));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect((r as { ok: true; value: number }).value).toBe(30);
   });
 
   it('thenAsync short-circuits on failure', async () => {
     const called: boolean[] = [];
-    const c = await chain(Result.failure<number>(err)).thenAsync(async (n) => {
+    const r = await chain(Result.failure<number>(err)).thenAsync(async (n) => {
       called.push(true);
       return Result.success(n * 10);
     });
-    expect(c.unwrap().ok).toBe(false);
+    expect(r.ok).toBe(false);
     expect(called).toHaveLength(0);
   });
 
   it('mapAsync transforms async', async () => {
-    const c = await chain(Result.success(4)).mapAsync(async (n) => n * n);
-    const r = c.unwrap();
+    const r = await chain(Result.success(4)).mapAsync(async (n) => n * n);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(16);
   });
 
   it('mapAsync passes through failure', async () => {
     const called: boolean[] = [];
-    const c = await chain(Result.failure<number>(err)).mapAsync(async (n) => {
+    const r = await chain(Result.failure<number>(err)).mapAsync(async (n) => {
       called.push(true);
       return n * n;
     });
-    expect(c.unwrap().ok).toBe(false);
+    expect(r.ok).toBe(false);
     expect(called).toHaveLength(0);
   });
 
   it('ensureAsync passes when async predicate true', async () => {
-    const c = await chain(Result.success(10)).ensureAsync(async (n) => n > 5, err);
-    expect(c.unwrap().ok).toBe(true);
+    const r = await chain(Result.success(10)).ensureAsync(async (n) => n > 5, err);
+    expect(r.ok).toBe(true);
   });
 
   it('ensureAsync fails when async predicate false', async () => {
-    const c = await chain(Result.success(2)).ensureAsync(async (n) => n > 5, err);
-    expect(c.unwrap().ok).toBe(false);
+    const r = await chain(Result.success(2)).ensureAsync(async (n) => n > 5, err);
+    expect(r.ok).toBe(false);
   });
 
   it('tapAsync runs async effect on success', async () => {
     const seen: number[] = [];
-    const c = await chain(Result.success(9)).tapAsync(async (n) => {
+    const r = await chain(Result.success(9)).tapAsync(async (n) => {
       seen.push(n);
     });
     expect(seen).toEqual([9]);
-    expect(c.unwrap().ok).toBe(true);
+    expect(r.ok).toBe(true);
   });
 
   it('tapAsync skips on failure', async () => {
@@ -293,43 +292,40 @@ describe('ResultChain async API', () => {
   });
 
   it('compensateAsync recovers from failure', async () => {
-    const c = await chain(Result.failure<number>(err)).compensateAsync(async () =>
+    const r = await chain(Result.failure<number>(err)).compensateAsync(async () =>
       Result.success(77),
     );
-    expect(c.unwrap().ok).toBe(true);
-    if (c.unwrap().ok) expect((c.unwrap() as { ok: true; value: number }).value).toBe(77);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect((r as { ok: true; value: number }).value).toBe(77);
   });
 
   it('compensateAsync passes through success', async () => {
     const called: boolean[] = [];
-    const c = await chain(Result.success(5)).compensateAsync(async () => {
+    const r = await chain(Result.success(5)).compensateAsync(async () => {
       called.push(true);
       return Result.success(77);
     });
-    expect(c.unwrap().ok).toBe(true);
-    if (c.unwrap().ok) expect((c.unwrap() as { ok: true; value: number }).value).toBe(5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect((r as { ok: true; value: number }).value).toBe(5);
     expect(called).toHaveLength(0);
   });
 
   it('mapErrorAsync transforms errors', async () => {
-    const c = await chain(Result.failure<number>(err)).mapErrorAsync(async (errs) =>
+    const r = await chain(Result.failure<number>(err)).mapErrorAsync(async (errs) =>
       errs.map((e) => ({ ...e, code: `E.${e.code}` })),
     );
-    const r = c.unwrap();
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.code).toBe('E.Test.Invalid');
   });
 
   it('elseAsync returns fallback on failure', async () => {
-    const c = await chain(Result.failure<number>(err)).elseAsync(-1);
-    const r = c.unwrap();
+    const r = await chain(Result.failure<number>(err)).elseAsync(-1);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(-1);
   });
 
   it('elseAsync passes through success', async () => {
-    const c = await chain(Result.success(5)).elseAsync(-1);
-    const r = c.unwrap();
+    const r = await chain(Result.success(5)).elseAsync(-1);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(5);
   });
@@ -506,67 +502,61 @@ describe('ResultChain async API continued', () => {
   });
 
   it('bindIfAsync binds when condition is true', async () => {
-    const c = await chain(Result.success(5)).bindIfAsync(true, async (n) => Result.success(n * 2));
-    const r = c.unwrap();
+    const r = await chain(Result.success(5)).bindIfAsync(true, async (n) => Result.success(n * 2));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(10);
   });
 
   it('bindIfAsync skips when condition is false', async () => {
     const called: boolean[] = [];
-    const c = await chain(Result.success(5)).bindIfAsync(false, async (n) => {
+    const r = await chain(Result.success(5)).bindIfAsync(false, async (n) => {
       called.push(true);
       return Result.success(n * 2);
     });
-    const r = c.unwrap();
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(5);
     expect(called).toHaveLength(0);
   });
 
   it('compensateFirstAsync recovers using first error', async () => {
-    const c = await chain(Result.failure<number>(err)).compensateFirstAsync(async (firstErr) => {
+    const r = await chain(Result.failure<number>(err)).compensateFirstAsync(async (firstErr) => {
       expect(firstErr.code).toBe('Test.Invalid');
       return Result.success(99);
     });
-    const r = c.unwrap();
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(99);
   });
 
   it('compensateFirstAsync passes through success', async () => {
     const called: boolean[] = [];
-    const c = await chain(Result.success(7)).compensateFirstAsync(async () => {
+    const r = await chain(Result.success(7)).compensateFirstAsync(async () => {
       called.push(true);
       return Result.success(0);
     });
-    const r = c.unwrap();
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(7);
     expect(called).toHaveLength(0);
   });
 
   it('recoverAsync recovers matching error', async () => {
-    const c = await chain(Result.failure<number>(err)).recoverAsync(
+    const r = await chain(Result.failure<number>(err)).recoverAsync(
       (e) => e.code === 'Test.Invalid',
       async () => Result.success(42),
     );
-    const r = c.unwrap();
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(42);
   });
 
   it('recoverAsync skips non-matching error', async () => {
-    const c = await chain(Result.failure<number>(err)).recoverAsync(
+    const r = await chain(Result.failure<number>(err)).recoverAsync(
       (e) => e.code === 'Other.Code',
       async () => Result.success(42),
     );
-    expect(c.unwrap().ok).toBe(false);
+    expect(r.ok).toBe(false);
   });
 
   it('elseAsync calls function fallback on failure', async () => {
-    const c = await chain(Result.failure<number>(err)).elseAsync(async (errs) => errs.length * 10);
-    const r = c.unwrap();
+    const r = await chain(Result.failure<number>(err)).elseAsync(async (errs) => errs.length * 10);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(10);
   });

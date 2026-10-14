@@ -262,7 +262,7 @@ describe('ResultAsync.mapError', () => {
   });
 
   it('passes through success', async () => {
-    const r = await fromAsync(okAsync(1)).mapError((errs) => errs);
+    const r = await fromAsync(okAsync(1)).mapError((errs) => [...errs]);
     expect(r.ok).toBe(true);
   });
 });

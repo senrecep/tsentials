@@ -276,12 +276,10 @@ describe('fetchResult.post', () => {
     await fetchResult.post('https://api.example.com/user', { name: 'Alice' });
     expect(fetchSpy).toHaveBeenCalledWith(
       'https://api.example.com/user',
-      expect.objectContaining({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Alice' }),
-      }),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'Alice' }) }),
     );
+    const init = (fetchSpy.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(new Headers(init.headers).get('content-type')).toBe('application/json');
   });
 
   it('merges custom headers', async () => {
@@ -294,12 +292,10 @@ describe('fetchResult.post', () => {
       {},
       { headers: { 'X-Api-Key': 'secret' } },
     );
-    expect(fetchSpy).toHaveBeenCalledWith(
-      'https://api.example.com/user',
-      expect.objectContaining({
-        headers: { 'Content-Type': 'application/json', 'X-Api-Key': 'secret' },
-      }),
-    );
+    const init = (fetchSpy.mock.calls[0] as unknown as [string, RequestInit])[1];
+    const headers = new Headers(init.headers);
+    expect(headers.get('content-type')).toBe('application/json');
+    expect(headers.get('x-api-key')).toBe('secret');
   });
 
   it('returns failure on 400', async () => {
@@ -524,10 +520,12 @@ describe('fetchResult.send', () => {
       headers: { 'Content-Type': 'text/plain' },
       body: 'raw text',
     });
-    expect(fetchSpy).toHaveBeenCalledWith('https://api.example.com/upload', {
+    const init = (fetchSpy.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(init).toEqual({
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: 'raw text',
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -567,5 +565,137 @@ describe('fetchResult.send', () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors[0]!.code).toBe('TypeError');
+  });
+});
+
+describe('fetchResult empty / null 2xx bodies', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const json = { 'content-type': 'application/json' };
+  const emptyBodyDescription = 'Response body was empty or could not be deserialized.';
+  const verbs = [
+    ['get', () => fetchResult.get<unknown>('https://api.example.com/x')],
+    ['post', () => fetchResult.post<unknown>('https://api.example.com/x', {})],
+    ['put', () => fetchResult.put<unknown>('https://api.example.com/x', {})],
+    ['patch', () => fetchResult.patch<unknown>('https://api.example.com/x', {})],
+    ['send', () => fetchResult.send<unknown>('https://api.example.com/x', { method: 'POST' })],
+  ] as const;
+
+  for (const [name, call] of verbs) {
+    it(`${name}: JSON content-type with an empty body is NotFound (not a SyntaxError)`, async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(new Response('', { status: 200, headers: json }))),
+      );
+      const result = await call();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.errors[0]?.type).toBe(ErrorType.NotFound);
+        expect(result.errors[0]?.code).toBe('NotFound');
+        expect(result.errors[0]?.description).toBe(emptyBodyDescription);
+      }
+    });
+
+    it(`${name}: JSON literal null body is NotFound`, async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(new Response('null', { status: 200, headers: json }))),
+      );
+      const result = await call();
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors[0]?.type).toBe(ErrorType.NotFound);
+    });
+
+    it(`${name}: 204 with a JSON content-type stays a void success`, async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(new Response(null, { status: 204, headers: json }))),
+      );
+      const result = await call();
+      expect(result).toEqual({ ok: true, value: undefined });
+    });
+
+    it(`${name}: 205 stays a void success`, async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(new Response(null, { status: 205, headers: json }))),
+      );
+      const result = await call();
+      expect(result).toEqual({ ok: true, value: undefined });
+    });
+  }
+
+  describe('delete accepts any 2xx without requiring a body', () => {
+    const del = () => fetchResult.delete('https://api.example.com/x');
+    const respond = (body: string | null, status = 200) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(new Response(body, { status, headers: json }))),
+      );
+
+    it.each([
+      ['empty body', ''],
+      ['literal null', 'null'],
+      ['whitespace', ' \n'],
+    ])('%s is a void success', async (_name, body) => {
+      respond(body);
+      expect(await del()).toEqual({ ok: true, value: undefined });
+    });
+
+    it.each([204, 205])('%i is a void success', async (status) => {
+      respond(null, status);
+      expect(await del()).toEqual({ ok: true, value: undefined });
+    });
+
+    it('a non-empty JSON body is still parsed', async () => {
+      respond('{"deleted":3}');
+      const result = await fetchResult.delete<{ deleted: number }>('https://api.example.com/x');
+      expect(result).toEqual({ ok: true, value: { deleted: 3 } });
+    });
+
+    it('a malformed JSON body is still a failure', async () => {
+      respond('{oops');
+      const result = await del();
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors[0]?.type).toBe(ErrorType.Unexpected);
+    });
+
+    it('an error status is still a failure', async () => {
+      respond(null, 404);
+      const result = await del();
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors[0]?.type).toBe(ErrorType.NotFound);
+    });
+  });
+
+  it('whitespace-only JSON body is NotFound', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('  \n', { status: 200, headers: json }))),
+    );
+    const result = await fetchResult.get<unknown>('https://api.example.com/x');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]?.type).toBe(ErrorType.NotFound);
+  });
+
+  it('malformed JSON body stays an Unexpected failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('{oops', { status: 200, headers: json }))),
+    );
+    const result = await fetchResult.get<unknown>('https://api.example.com/x');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]?.type).toBe(ErrorType.Unexpected);
+  });
+
+  it('empty body without a JSON content-type stays a void success', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('', { status: 200 }))),
+    );
+    const result = await fetchResult.post<unknown>('https://api.example.com/x', {});
+    expect(result).toEqual({ ok: true, value: undefined });
   });
 });

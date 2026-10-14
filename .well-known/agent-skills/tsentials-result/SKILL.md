@@ -87,7 +87,7 @@ All static functions take `(result, ...)` as first argument. They are NOT currie
 | `Result.successIf(cond, value, error)` | Success if true, failure otherwise |
 | `Result.failIf(cond, value, error)` | Failure if true, success otherwise |
 | `Result.try(fn, onError?)` | Catches thrown exceptions -> `Result<T>` |
-| `Result.tryAsync(fn, onError?)` | Async version of `try` -> `Promise<Result<T>>` |
+| `Result.tryAsync(fn, onError?, { signal }?)` | Async version of `try` -> `Promise<Result<T>>`; `fn` receives the signal |
 
 > **CRITICAL:** `Result.try()` — NOT `Result.trySync()`. `trySync` does not exist.
 
@@ -111,7 +111,9 @@ All static functions take `(result, ...)` as first argument. They are NOT currie
 | `Result.else(r, fallback)` | `(Result<T>, T \| (AppError[]) => T) => Result<T>` | Fallback value on failure |
 | `Result.compensate(r, fn)` | `(Result<T>, (AppError[]) => Result<T>) => Result<T>` | Recover from failure |
 | `Result.compensateFirst(r, fn)` | Recover using first error only |
-| `Result.recover(r, pred, fn)` | Recover only if predicate matches first error |
+| `Result.recover(r, match, fn)` | Recover if ANY error matches (`match`: `ErrorType` or predicate); the first match goes to `fn` |
+| `Result.recoverFirst(r, match, fn)` | Recover only if the FIRST error matches |
+| `Result.mapEachError(r, e => AppError)` | Map every error one by one, in order |
 | `Result.failWhen(r, pred, err)` | Opposite of ensure — fails if predicate true |
 | `Result.ensureNotNull(r, err)` | Guards against null/undefined value |
 | `Result.tryCatch(r, fn, err?)` | Apply fn to value, catch exceptions |
@@ -146,6 +148,9 @@ All static functions take `(result, ...)` as first argument. They are NOT currie
 | `Result.ap(fab, fa)` | Applicative apply |
 | `Result.partition(results)` | Split into `{ ok: T[], err: AppError[] }` |
 | `Result.sequence(promises)` | `Promise<Result<T>>[]` -> `Promise<Result<T[]>>` |
+| `Result.sequenceAsync(promises, { signal })` | Same, abort-aware; collects ALL errors |
+| `Result.traverse(items, fn)` | `A[]` + `(A) => Result<B>` -> `Result<B[]>`, collects ALL errors |
+| `Result.traverseAsync(items, fn, { concurrency, signal })` | Async traverse; sequential by default, results keep item order; `fn(item, signal)` |
 
 ### Async Static Pipeline
 
@@ -321,6 +326,25 @@ const result = maybeToResult(Maybe.from(user), Err.notFound('User.NotFound', 'Us
 // Result -> Maybe (failure becomes None)
 const maybe = resultToMaybe(Result.success(42)); // Maybe.some(42)
 ```
+
+---
+
+## Cancellation (AbortSignal)
+
+`Result.tryAsync`, `Result.traverseAsync` and `Result.sequenceAsync` accept `{ signal }` and follow one rule:
+
+- The **caller's** abort propagates — the promise rejects with `signal.reason`; it never becomes a failure. (`Validator.validateAsync` is the exception: thrown predicate/`configure` errors reject.)
+- Any other error (including an abort-like error while the caller's signal is NOT aborted) becomes a failure.
+
+```typescript
+import { Result, withAbort, isCallerAbort, rethrowIfAborted, throwIfAborted, isAbortError } from 'tsentials/result';
+
+const ctrl = new AbortController();
+await Result.tryAsync((signal) => fetch(url, { signal }), { signal: ctrl.signal });
+// ctrl.abort() -> rejects; a network error -> Result.failure(...)
+```
+
+Helpers (exported from `tsentials/result`): `isAbortError(e)`, `isCallerAbort(e, signal)`, `rethrowIfAborted(e, signal)`, `throwIfAborted(signal)`, `withAbort(promise, signal)`.
 
 ---
 

@@ -539,3 +539,47 @@ describe('Maybe utility methods', () => {
     ).toThrow('domain error');
   });
 });
+
+describe('Maybe null normalisation', () => {
+  it('some(null) and some(undefined) are None', () => {
+    expect(Maybe.some(null).hasValue).toBe(false);
+    expect(Maybe.some(undefined).hasValue).toBe(false);
+  });
+
+  it('some keeps falsy non-null values', () => {
+    expect(Maybe.some(0)).toEqual({ hasValue: true, value: 0 });
+    expect(Maybe.some('')).toEqual({ hasValue: true, value: '' });
+    expect(Maybe.some(false)).toEqual({ hasValue: true, value: false });
+  });
+
+  it('map returning null/undefined gives None', () => {
+    const m = Maybe.some({ name: 'a', nick: null as string | null });
+    expect(Maybe.map(m, (u) => u.nick).hasValue).toBe(false);
+    expect(Maybe.map(Maybe.some(1), () => undefined).hasValue).toBe(false);
+  });
+
+  it('mapIf returning null gives None when the condition holds', () => {
+    expect(Maybe.mapIf(Maybe.some(1), true, () => null).hasValue).toBe(false);
+    expect(Maybe.mapIf(Maybe.some(1), false, () => null)).toEqual(Maybe.some(1));
+  });
+
+  it('bind returning a hand-built Some(null) gives None', () => {
+    const forged = { hasValue: true, value: null } as unknown as Maybe<number>;
+    expect(Maybe.bind(Maybe.some(1), () => forged).hasValue).toBe(false);
+    expect(Maybe.bindIf(Maybe.some(1), true, () => forged).hasValue).toBe(false);
+  });
+
+  it('async map/bind normalise too', async () => {
+    expect((await Maybe.mapAsync(Maybe.some(1), async () => null)).hasValue).toBe(false);
+    const forged = { hasValue: true, value: undefined } as unknown as Maybe<number>;
+    expect((await Maybe.bindAsync(Maybe.some(1), async () => forged)).hasValue).toBe(false);
+  });
+
+  it('Some value is typed as non-nullable', () => {
+    const m: Maybe<string | null> = Maybe.from<string | null>('x');
+    if (Maybe.isSome(m)) {
+      const s: string = m.value;
+      expect(s).toBe('x');
+    }
+  });
+});

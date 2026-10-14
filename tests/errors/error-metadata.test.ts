@@ -40,7 +40,7 @@ describe('ErrorMetadata.fromException', () => {
     const meta = ErrorMetadata.fromException(err);
     expect(meta.get('exceptionType')).toBe('Error');
     expect(meta.get('exceptionMessage')).toBe('Something broke');
-    expect(typeof meta.get('exceptionStack')).toBe('string');
+    expect(typeof meta.get('exceptionStackTrace')).toBe('string');
   });
 
   it('extracts metadata from custom error class', () => {
@@ -84,11 +84,11 @@ describe('ErrorMetadata.fromException', () => {
     expect(meta.get('exceptionMessage')).toBe('obj');
   });
 
-  it('returns empty string for exceptionStack when stack is undefined', () => {
+  it('returns empty string for exceptionStackTrace when stack is undefined', () => {
     const err = new Error('no stack');
     delete err.stack;
     const meta = ErrorMetadata.fromException(err);
-    expect(meta.get('exceptionStack')).toBe('');
+    expect(meta.get('exceptionStackTrace')).toBe('');
   });
 });
 
@@ -99,12 +99,12 @@ describe('ErrorMetadata.combine', () => {
     expect(combined).toBe(base);
   });
 
-  it('merges two metadata maps', () => {
+  it('merges two metadata maps, keeping the base value on key collision (first wins)', () => {
     const base = ErrorMetadata.fromRecord({ a: 1, b: 2 });
     const additional = ErrorMetadata.fromRecord({ b: 3, c: 4 });
     const combined = ErrorMetadata.combine(base, additional);
     expect(combined.get('a')).toBe(1);
-    expect(combined.get('b')).toBe(3);
+    expect(combined.get('b')).toBe(2);
     expect(combined.get('c')).toBe(4);
   });
 
@@ -134,5 +134,91 @@ describe('ErrorMetadata.toRecord', () => {
     const record = ErrorMetadata.toRecord(meta);
     expect(record.flag).toBe(true);
     expect(record.nil).toBeNull();
+  });
+});
+
+describe('ErrorMetadata.fromException — detailed exception keys', () => {
+  it('uses the documented key names in order', () => {
+    const meta = ErrorMetadata.fromException(new Error('boom'));
+    expect([...meta.keys()]).toEqual(['exceptionType', 'exceptionStackTrace', 'exceptionMessage']);
+    expect(meta.has('exceptionStack')).toBe(false);
+  });
+
+  it('adds a nested innerException map from error.cause (recursive)', () => {
+    const root = new TypeError('root cause');
+    const middle = new RangeError('middle', { cause: root });
+    const top = new Error('top', { cause: middle });
+    const meta = ErrorMetadata.fromException(top);
+
+    const inner = meta.get('innerException') as ErrorMetadata;
+    expect(inner).toBeInstanceOf(Map);
+    expect(inner.get('exceptionType')).toBe('RangeError');
+    expect(inner.get('exceptionMessage')).toBe('middle');
+
+    const innermost = inner.get('innerException') as ErrorMetadata;
+    expect(innermost.get('exceptionType')).toBe('TypeError');
+    expect(innermost.get('exceptionMessage')).toBe('root cause');
+    expect(innermost.has('innerException')).toBe(false);
+  });
+
+  it('ignores a non-Error cause', () => {
+    const meta = ErrorMetadata.fromException(new Error('top', { cause: 'just a string' }));
+    expect(meta.has('innerException')).toBe(false);
+  });
+
+  it('stops on a cyclic cause chain', () => {
+    const a = new Error('a');
+    const b = new Error('b', { cause: a });
+    (a as { cause?: unknown }).cause = b;
+    const meta = ErrorMetadata.fromException(a);
+    const inner = meta.get('innerException') as ErrorMetadata;
+    expect(inner.get('exceptionMessage')).toBe('b');
+    expect(inner.has('innerException')).toBe(false);
+  });
+});
+
+describe('ErrorMetadata.combine — first wins', () => {
+  it('returns a new map even when nothing collides', () => {
+    const base = ErrorMetadata.fromRecord({ a: 1 });
+    const combined = ErrorMetadata.combine(base, ErrorMetadata.fromRecord({ b: 2 }));
+    expect(combined).not.toBe(base);
+    expect(ErrorMetadata.toRecord(combined)).toEqual({ a: 1, b: 2 });
+  });
+
+  it('keeps base keys first in iteration order', () => {
+    const combined = ErrorMetadata.combine(
+      ErrorMetadata.fromRecord({ x: 1, y: 2 }),
+      ErrorMetadata.fromRecord({ z: 3, x: 99 }),
+    );
+    expect([...combined.entries()]).toEqual([
+      ['x', 1],
+      ['y', 2],
+      ['z', 3],
+    ]);
+  });
+});
+
+describe('ErrorMetadata.toRecord — nested maps', () => {
+  it('converts nested metadata maps to plain objects recursively', () => {
+    const meta = ErrorMetadata.fromRecord({
+      outer: new Map<string, unknown>([['inner', new Map<string, unknown>([['deep', 1]])]]),
+      list: [1, 2],
+    });
+    expect(ErrorMetadata.toRecord(meta)).toEqual({ outer: { inner: { deep: 1 } }, list: [1, 2] });
+  });
+
+  it('produces a JSON-serializable innerException', () => {
+    const meta = ErrorMetadata.fromException(new Error('top', { cause: new Error('inner') }));
+    const parsed = JSON.parse(JSON.stringify(ErrorMetadata.toRecord(meta)));
+    expect(parsed.innerException.exceptionMessage).toBe('inner');
+    expect(parsed.innerException.exceptionType).toBe('Error');
+  });
+});
+
+describe('ErrorMetadata.fromException with values String() rejects', () => {
+  it('never throws for an object without a prototype', () => {
+    const meta = ErrorMetadata.fromException(Object.create(null));
+    expect(meta.get('exceptionType')).toBe('Error');
+    expect(meta.get('exceptionMessage')).toBe('[object Object]');
   });
 });

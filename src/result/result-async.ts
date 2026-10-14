@@ -1,5 +1,9 @@
 import type { AppError } from '../errors/app-error.js';
-import { Result } from './result.js';
+import type { ErrorType } from '../errors/error-type.js';
+import type { AbortOptions } from './abort.js';
+import { Result, settleInOrder } from './result.js';
+
+type ResultLike<T> = Result<T> | ResultAsync<T> | PromiseLike<Result<T>>;
 
 /**
  * ResultAsync<T> wraps a Promise<Result<T>> and provides a fully pipeable async API.
@@ -85,8 +89,12 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
    * @example
    * const r = await ResultAsync.try(() => fetch('/api/users').then(r => r.json()))
    */
-  static try<T>(fn: () => Promise<T>, onError?: (e: unknown) => AppError): ResultAsync<T> {
-    return new ResultAsync(Result.tryAsync(fn, onError));
+  static try<T>(
+    fn: (signal?: AbortSignal) => PromiseLike<T>,
+    onErrorOrOptions?: ((e: unknown) => AppError) | AbortOptions,
+    options?: AbortOptions,
+  ): ResultAsync<T> {
+    return new ResultAsync(Result.tryAsync(fn, onErrorOrOptions, options));
   }
 
   /**
@@ -153,9 +161,34 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     return new ResultAsync(
       this._promise.then(async (r) => {
         if (!r.ok) return r;
-        const err = typeof error === 'function' ? error(r.value) : error;
-        return (await predicate(r.value)) ? r : Result.failure(err);
+        if (await predicate(r.value)) return r;
+        return Result.failure(typeof error === 'function' ? error(r.value) : error);
       }),
+    );
+  }
+
+  /**
+   * Fails when the (sync or async) predicate matches the success value — opposite of `ensure`.
+   * An error factory is called only when the predicate matches.
+   */
+  failWhen(
+    predicate: (value: T) => boolean | Promise<boolean>,
+    error: AppError | ((value: T) => AppError),
+  ): ResultAsync<T> {
+    return new ResultAsync(
+      this._promise.then(async (r) => {
+        if (!r.ok || !(await predicate(r.value))) return r;
+        return Result.failure(typeof error === 'function' ? error(r.value) : error);
+      }),
+    );
+  }
+
+  /**
+   * Fails with `error` when the success value is null or undefined; narrows the type.
+   */
+  ensureNotNull(this: ResultAsync<T>, error: AppError): ResultAsync<NonNullable<T>> {
+    return new ResultAsync(
+      this._promise.then((r) => Result.ensureNotNull(r as Result<NonNullable<T> | null>, error)),
     );
   }
 
@@ -196,6 +229,14 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   }
 
   /**
+   * Maps every error, one by one and in order, with a sync or async mapper.
+   * Async mappers run sequentially.
+   */
+  mapEachError(fn: (error: AppError) => AppError | PromiseLike<AppError>): ResultAsync<T> {
+    return new ResultAsync(this._promise.then((r) => Result.mapEachErrorAsync(r, fn)));
+  }
+
+  /**
    * Recovers from failure by returning a new Result or ResultAsync.
    */
   compensate(
@@ -229,11 +270,12 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   }
 
   /**
-   * Returns a fallback value on failure using an explicit factory function.
-   * Use instead of `else` when `T` is a function type, to avoid ambiguity.
+   * Resolves to the success value, or computes one from the errors.
+   *
+   * @deprecated Resolves to `T`, not a ResultAsync — use {@link ResultAsync.unwrapOrElse}.
    */
   elseWith(factory: (errors: readonly AppError[]) => T | Promise<T>): Promise<T> {
-    return this._promise.then((r) => (r.ok ? r.value : factory(r.errors)));
+    return this.unwrapOrElse(factory);
   }
 
   bindIf(
@@ -267,6 +309,20 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     );
   }
 
+  tapErrorIf(
+    condition: boolean | ((errors: readonly AppError[]) => boolean),
+    fn: (errors: readonly AppError[]) => void | Promise<void>,
+  ): ResultAsync<T> {
+    return new ResultAsync(
+      this._promise.then(async (r) => {
+        if (r.ok) return r;
+        const cond = typeof condition === 'function' ? condition(r.errors) : condition;
+        if (cond) await fn(r.errors);
+        return r;
+      }),
+    );
+  }
+
   compensateFirst(
     fn: (firstError: AppError) => Result<T> | ResultAsync<T> | Promise<Result<T>>,
   ): ResultAsync<T> {
@@ -282,20 +338,35 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
     );
   }
 
+  /**
+   * Scans ALL errors; the first one matching `match` (ErrorType or predicate) is passed
+   * to `fn`. No match → failure passes through. See {@link ResultAsync.recoverFirst}.
+   */
   recover(
-    predicate: (error: AppError) => boolean,
-    fn: (error: AppError) => Result<T> | ResultAsync<T> | Promise<Result<T>>,
+    match: ErrorType | ((error: AppError) => boolean),
+    fn: (error: AppError) => ResultLike<T>,
   ): ResultAsync<T> {
     return new ResultAsync(
       this._promise.then((r) => {
-        if (r.ok) return Promise.resolve(r);
-        // biome-ignore lint/style/noNonNullAssertion: errors array is non-empty when ok is false
-        if (!predicate(r.errors[0]!)) return Promise.resolve(r);
-        // biome-ignore lint/style/noNonNullAssertion: errors array is non-empty when ok is false
-        const next = fn(r.errors[0]!);
-        if (next instanceof ResultAsync) return (next as ResultAsync<T>)._promise;
-        if (next instanceof Promise) return next;
-        return Promise.resolve(next);
+        if (r.ok) return r;
+        const found = r.errors.find((e) => matchesError(e, match));
+        return found ? toPromise(fn(found)) : r;
+      }),
+    );
+  }
+
+  /**
+   * Recovers only if the FIRST error matches `match` (ErrorType or predicate).
+   */
+  recoverFirst(
+    match: ErrorType | ((error: AppError) => boolean),
+    fn: (error: AppError) => ResultLike<T>,
+  ): ResultAsync<T> {
+    return new ResultAsync(
+      this._promise.then((r) => {
+        if (r.ok) return r;
+        const first = r.errors[0];
+        return first && matchesError(first, match) ? toPromise(fn(first)) : r;
       }),
     );
   }
@@ -323,6 +394,17 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   }
 
   /**
+   * Pattern match using only the first error.
+   */
+  async matchFirst<U>(
+    onSuccess: (value: T) => U | Promise<U>,
+    onFirstError: (error: AppError) => U | Promise<U>,
+  ): Promise<U> {
+    const r = await this._promise;
+    return Result.matchFirst<T, U | Promise<U>>(r, onSuccess, onFirstError);
+  }
+
+  /**
    * Throws ResultUnwrapError if failed. Returns the value on success.
    * Use match() for safe extraction without exceptions.
    */
@@ -338,6 +420,14 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   }
 
   /**
+   * Resolves to the success value, or computes one (sync or async) from the errors.
+   */
+  async unwrapOrElse(fn: (errors: readonly AppError[]) => T | Promise<T>): Promise<T> {
+    const r = await this._promise;
+    return r.ok ? r.value : fn(r.errors);
+  }
+
+  /**
    * Converts the pipeline to a raw Promise<Result<T>>.
    * Use when the callee expects a plain Result.
    */
@@ -348,24 +438,46 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   // ─── STATIC UTILITIES ─────────────────────────────────────────────────────
 
   /**
-   * Awaits an array of ResultAsync<T> and collects them into a single ResultAsync<T[]>.
-   * Succeeds only if ALL succeed; collects ALL errors from failures.
+   * Awaits ResultAsync / pending Results in order and collects them into ResultAsync<T[]>.
+   * Succeeds only if ALL succeed; collects ALL errors. Same settle/abort semantics as
+   * {@link Result.sequenceAsync}: every input is awaited, the first rejection is rethrown
+   * afterwards, and the caller's abort rejects at once.
    */
-  static sequence<T>(results: ReadonlyArray<ResultAsync<T>>): ResultAsync<T[]> {
-    return new ResultAsync(
-      Promise.all(results.map((r) => r._promise)).then((resolved) => Result.and(resolved)),
-    );
+  static sequence<T>(
+    results: ReadonlyArray<ResultAsync<T> | PromiseLike<Result<T>>>,
+    options?: AbortOptions,
+  ): ResultAsync<T[]> {
+    return new ResultAsync(Result.sequenceAsync(results, options));
   }
 
   /**
-   * Partitions an array of ResultAsync into successes and failures.
-   * Processes all items regardless of individual outcomes.
+   * Partitions ResultAsync / pending Results into successes and failures.
+   * Same settle/abort semantics as {@link ResultAsync.sequence}.
    */
   static async partition<T>(
-    results: ReadonlyArray<ResultAsync<T>>,
+    results: ReadonlyArray<ResultAsync<T> | PromiseLike<Result<T>>>,
+    options?: AbortOptions,
   ): Promise<{ ok: Array<T>; err: Array<AppError> }> {
-    const resolved = await Promise.all(results.map((r) => r._promise));
-    return Result.partition(resolved);
+    return Result.partition(await settleInOrder(results, options?.signal));
+  }
+
+  /**
+   * Collects heterogeneous pending Results into a tuple. Succeeds only if ALL succeed;
+   * collects ALL errors otherwise. Inputs settle in order (see {@link ResultAsync.sequence}).
+   *
+   * @example
+   * const [user, orders] = await ResultAsync.combine(getUser(id), getOrders(id)).unwrap();
+   */
+  static combine<const R extends readonly ResultLike<unknown>[]>(
+    ...results: R
+  ): ResultAsync<{ [K in keyof R]: R[K] extends ResultLike<infer V> ? V : never }> {
+    type Values = { [K in keyof R]: R[K] extends ResultLike<infer V> ? V : never };
+    const pending = results.map((r) => toPromise(r));
+    return new ResultAsync(
+      settleInOrder(pending, undefined).then(
+        (settled) => Result.combine(...settled) as Result<Values>,
+      ),
+    );
   }
 }
 
@@ -380,3 +492,21 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
  */
 export const fromAsync = <T>(promise: Promise<Result<T>>): ResultAsync<T> =>
   ResultAsync.from(promise);
+
+function matchesError(error: AppError, match: ErrorType | ((error: AppError) => boolean)): boolean {
+  return typeof match === 'function' ? match(error) : error.type === match;
+}
+
+function toPromise<T>(next: ResultLike<T>): PromiseLike<Result<T>> {
+  if (next instanceof ResultAsync) return next.toResult();
+  if (isPromiseLike(next)) return next;
+  return Promise.resolve(next);
+}
+
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}

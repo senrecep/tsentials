@@ -43,6 +43,10 @@ const name: Maybe<string> = Maybe.from(user.nickname);
 const some: Maybe<string> = Maybe.some('Alice');
 const none: Maybe<string> = Maybe.none();
 
+// A Some never holds null/undefined: some(null) is None, and a null/undefined
+// result from map/mapIf/mapAsync/bind/bindIf/bindAsync also becomes None
+Maybe.isNone(Maybe.some(null)); // true
+
 // From a factory function — thrown errors become None, null/undefined become None
 const parsed: Maybe<Config> = Maybe.fromTry(() => JSON.parse(raw));
 ```
@@ -161,6 +165,11 @@ const [hasVal, val] = Maybe.deconstruct(maybe);
 
 // tryGet — same as deconstruct, atomic extraction
 const [ok, value] = Maybe.tryGet(maybe);
+
+// format — 'Some(value)' / 'None'; nested Maybes are formatted recursively
+Maybe.format(Maybe.some(1));            // 'Some(1)'
+Maybe.format(Maybe.some(Maybe.none())); // 'Some(None)'
+// (named format, not toString: an own toString would break String(Maybe))
 ```
 
 ---
@@ -222,18 +231,23 @@ const result2 = await Maybe.orAsync(maybe, async () => await fetchFallback());
 ```typescript
 import { tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
 
-// tryFirst — first element or None
+// tryFirst — first element (optionally the first matching one) or None
 const first: Maybe<User> = tryFirst(users);
+const firstAdmin: Maybe<User> = tryFirst(users, u => u.role === 'admin');
 
-// tryLast — last element or None
+// tryLast — last element (optionally the last matching one) or None
 const last: Maybe<User> = tryLast(users);
 
-// tryFind — first matching element or None
+// tryFind — first matching element, Map entry or own record key, or None
 const admin: Maybe<User> = tryFind(users, u => u.role === 'admin');
+const cached: Maybe<User> = tryFind(userMap, 42);           // ReadonlyMap<number, User>
+const port: Maybe<number> = tryFind(config, 'port');        // own key of a plain object
+// A found element that is null/undefined gives None
 
-// choose — filter out Nones, unwrap Somes
+// choose — filter out Nones, unwrap Somes; or map each item through a selector
 const values: number[] = choose([Maybe.some(1), Maybe.none(), Maybe.some(3)]);
 // => [1, 3]
+const ids: number[] = choose(users, u => Maybe.from(u.externalId));
 
 // asMaybe — shorthand for Maybe.from()
 const m: Maybe<string> = asMaybe(nullableValue);
@@ -299,6 +313,7 @@ const display = Maybe.getOrElse(
 | | `getOrThrowFactory` | `<T>(m, factory: () => Error) => T` |
 | | `deconstruct` | `<T>(m) => [boolean, T \| undefined]` |
 | | `tryGet` | `<T>(m) => [boolean, T \| undefined]` |
+| **Formatting** | `format` | `<T>(m) => string` — `Some(value)` / `None` |
 | **Fallback** | `or` | `<T>(m, fallback: Maybe<T>) => Maybe<T>` |
 | | `orElse` | `<T>(m, fn: () => Maybe<T>) => Maybe<T>` |
 | **Async** | `mapAsync` | `<T, U>(m, fn) => Promise<Maybe<U>>` |
@@ -307,10 +322,10 @@ const display = Maybe.getOrElse(
 | | `tapAsync` | `<T>(m, fn) => Promise<Maybe<T>>` |
 | | `matchAsync` | `<T, U>(m, onSome, onNone) => Promise<U>` |
 | | `orAsync` | `<T>(m, fn) => Promise<Maybe<T>>` |
-| **Collection** | `tryFirst` | `<T>(arr) => Maybe<T>` |
-| | `tryLast` | `<T>(arr) => Maybe<T>` |
-| | `tryFind` | `<T>(arr, pred) => Maybe<T>` |
-| | `choose` | `<T>(maybes: Maybe<T>[]) => T[]` |
+| **Collection** | `tryFirst` | `<T>(arr, pred?) => Maybe<T>` |
+| | `tryLast` | `<T>(arr, pred?) => Maybe<T>` |
+| | `tryFind` | `<T>(arr, pred) => Maybe<T>`; also `(map, key)` and `(record, key)` |
+| | `choose` | `<T>(maybes: Maybe<T>[]) => T[]`; also `(items, selector) => U[]` |
 | | `asMaybe` | `<T>(value: T \| null \| undefined) => Maybe<T>` |
 
 ---

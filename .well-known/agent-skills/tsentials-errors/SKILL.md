@@ -29,7 +29,7 @@ import type { AppError } from 'tsentials/errors';
 All parameters have defaults — pass only what you need.
 
 ```typescript
-Err.failure('General.Failure',          'A failure has occurred.')
+Err.failure('Order.Rejected',          'The order was rejected.')
 Err.validation('Field.Required',        'Name is required.')
 Err.notFound('User.NotFound',           'User does not exist.')
 Err.unexpected('DB.ConnectionFailed',   'Cannot connect to database.')
@@ -44,7 +44,7 @@ Err.validation('Age.Invalid', 'Must be 18+', ErrorMetadata.fromRecord({ field: '
 try {
   JSON.parse(raw);
 } catch (e) {
-  const err = Err.fromException(e);                                    // ErrorType.Unexpected by default
+  const err = Err.fromException(e);                                    // ErrorType.Failure by default
   const err2 = Err.fromException(e, ErrorType.Validation, 'Json.Invalid'); // override type and code
 }
 
@@ -76,14 +76,14 @@ error.metadata     // ErrorMetadata | undefined  (ReadonlyMap<string, unknown>)
 
 | Method | ErrorType | Default code |
 |--------|-----------|--------------|
-| `Err.failure(code?, desc?, metadata?)` | `Failure` | `'General.Failure'` |
-| `Err.unexpected(code?, desc?, metadata?)` | `Unexpected` | `'General.Unexpected'` |
-| `Err.validation(code?, desc?, metadata?)` | `Validation` | `'General.Validation'` |
-| `Err.conflict(code?, desc?, metadata?)` | `Conflict` | `'General.Conflict'` |
-| `Err.notFound(code?, desc?, metadata?)` | `NotFound` | `'General.NotFound'` |
-| `Err.unauthorized(code?, desc?, metadata?)` | `Unauthorized` | `'General.Unauthorized'` |
-| `Err.forbidden(code?, desc?, metadata?)` | `Forbidden` | `'General.Forbidden'` |
-| `Err.fromException(error, type?, code?, metadata?)` | `Unexpected` (default) | `error.constructor.name` |
+| `Err.failure(code?, desc?, metadata?)` | `Failure` | `'Failure'` |
+| `Err.unexpected(code?, desc?, metadata?)` | `Unexpected` | `'Unexpected'` |
+| `Err.validation(code?, desc?, metadata?)` | `Validation` | `'Validation'` |
+| `Err.conflict(code?, desc?, metadata?)` | `Conflict` | `'Conflict'` |
+| `Err.notFound(code?, desc?, metadata?)` | `NotFound` | `'NotFound'` |
+| `Err.unauthorized(code?, desc?, metadata?)` | `Unauthorized` | `'Unauthorized'` |
+| `Err.forbidden(code?, desc?, metadata?)` | `Forbidden` | `'Forbidden'` |
+| `Err.fromException(error, type?, code?, metadata?)` | `Failure` (default) | `error.constructor.name` |
 | `Err.combine(...errors)` | — | returns `AppError[]` |
 | `Err.equals(a, b)` | — | returns `boolean` |
 
@@ -118,7 +118,7 @@ import { ErrorMetadata } from 'tsentials/errors';
 // Create
 ErrorMetadata.empty()                          // empty map
 ErrorMetadata.fromRecord({ field: 'email', value: 'bad@' })  // from plain object
-ErrorMetadata.fromException(caughtError)       // extracts exceptionType, exceptionMessage, exceptionStack
+ErrorMetadata.fromException(caughtError)       // extracts exceptionType, exceptionMessage, exceptionStackTrace (+ nested innerException when `cause` is an Error)
 
 // Combine (additional overrides base on key conflict)
 ErrorMetadata.combine(base, additional?)

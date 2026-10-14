@@ -195,7 +195,7 @@ describe('Result pipeline', () => {
   });
 
   it('mapError passes through success', () => {
-    const r = Result.mapError(Result.success(42), (errs) => errs);
+    const r = Result.mapError(Result.success(42), (errs) => [...errs]);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(42);
   });
@@ -539,7 +539,7 @@ describe('Result async pipeline', () => {
   });
 
   it('mapErrorAsync passes through success', async () => {
-    const r = await Result.mapErrorAsync(Result.success(42), async (errs) => errs);
+    const r = await Result.mapErrorAsync(Result.success(42), async (errs) => [...errs]);
     expect(r.ok).toBe(true);
   });
 });
@@ -727,7 +727,7 @@ describe('Result new pipeline methods', () => {
     const called: boolean[] = [];
     const r = Result.compensateFirst(Result.success(99), (err) => {
       called.push(true);
-      return Result.success(err.code);
+      return Result.success(err.code.length);
     });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(99);
@@ -747,7 +747,7 @@ describe('Result new pipeline methods', () => {
     const called: boolean[] = [];
     const r = await Result.compensateFirstAsync(Result.success(99), async (err) => {
       called.push(true);
-      return Result.success(err.code);
+      return Result.success(err.code.length);
     });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toBe(99);
@@ -813,7 +813,7 @@ describe('Result new pipeline methods', () => {
     const called: boolean[] = [];
     const r = await Result.recoverAsync(
       Result.success('original'),
-      async () => {
+      () => {
         called.push(true);
         return true;
       },
@@ -1389,5 +1389,23 @@ describe('Result.traverseAsync', () => {
     const r = await Result.traverseAsync([1], async () => Result.failure(validationError));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]!.code).toBe('Test.Invalid');
+  });
+});
+
+describe('Result.try / tryAsync with values String() rejects', () => {
+  it('Result.try turns a thrown prototype-less object into a failure', () => {
+    const r = Result.try(() => {
+      throw Object.create(null);
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]?.description).toBe('[object Object]');
+  });
+
+  it('Result.tryAsync turns a rejected prototype-less object into a failure', async () => {
+    const r = await Result.tryAsync(async () => {
+      throw Object.create(null);
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]?.description).toBe('[object Object]');
   });
 });

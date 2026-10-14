@@ -12,6 +12,7 @@ interface UserContext {
 const ageErr = Err.validation('User.Underage', 'Must be 18 or older');
 const emailErr = Err.validation('User.Email', 'Invalid email');
 const termsErr = Err.validation('User.Terms', 'Must accept terms');
+const emptyErr = Err.validation('EMPTY_RULE_ARRAY', 'The rule array is empty.');
 
 const isAdult = RuleEngine.fromPredicate<UserContext>((u) => u.age >= 18, ageErr);
 const hasEmail = RuleEngine.fromPredicate<UserContext>((u) => u.email.includes('@'), emailErr);
@@ -50,11 +51,19 @@ describe('RuleEngine.and', () => {
     expect(rule(validUser).ok).toBe(true);
   });
 
-  it('collects ALL errors (no short-circuit)', () => {
+  it('stops at the first failure and returns only its errors', () => {
     const rule = RuleEngine.and(isAdult, hasEmail, acceptedTerms);
     const result = rule(invalidUser);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors).toHaveLength(3);
+    expect(result).toEqual({ ok: false, errors: [ageErr] });
+  });
+
+  it('does not evaluate rules after the first failure', () => {
+    const later = vi.fn((_u: UserContext): VoidResult => Result.ok());
+    const rule = RuleEngine.and(isAdult, later);
+    rule(minorUser);
+    expect(later).not.toHaveBeenCalled();
+    rule(validUser);
+    expect(later).toHaveBeenCalledTimes(1);
   });
 
   it('collects partial errors', () => {
@@ -64,9 +73,29 @@ describe('RuleEngine.and', () => {
     if (!result.ok) expect(result.errors).toHaveLength(1);
   });
 
-  it('returns ok for empty rules', () => {
-    const rule = RuleEngine.and<UserContext>();
-    expect(rule(validUser).ok).toBe(true);
+  it('returns EMPTY_RULE_ARRAY for empty rules', () => {
+    expect(RuleEngine.and<UserContext>()(validUser)).toEqual({ ok: false, errors: [emptyErr] });
+  });
+});
+
+describe('RuleEngine.andAll', () => {
+  it('passes when all rules pass', () => {
+    expect(RuleEngine.andAll(isAdult, hasEmail, acceptedTerms)(validUser).ok).toBe(true);
+  });
+
+  it('collects ALL errors (no short-circuit), in rule order', () => {
+    const result = RuleEngine.andAll(isAdult, hasEmail, acceptedTerms)(invalidUser);
+    expect(result).toEqual({ ok: false, errors: [ageErr, emailErr, termsErr] });
+  });
+
+  it('evaluates every rule even after a failure', () => {
+    const later = vi.fn((_u: UserContext): VoidResult => Result.ok());
+    RuleEngine.andAll(isAdult, later)(minorUser);
+    expect(later).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns EMPTY_RULE_ARRAY for empty rules', () => {
+    expect(RuleEngine.andAll<UserContext>()(validUser)).toEqual({ ok: false, errors: [emptyErr] });
   });
 });
 
@@ -94,9 +123,8 @@ describe('RuleEngine.linear', () => {
     expect(called).toHaveLength(0);
   });
 
-  it('returns ok for empty rules', () => {
-    const rule = RuleEngine.linear<UserContext>();
-    expect(rule(validUser).ok).toBe(true);
+  it('returns EMPTY_RULE_ARRAY for empty rules (never throws)', () => {
+    expect(RuleEngine.linear<UserContext>()(validUser)).toEqual({ ok: false, errors: [emptyErr] });
   });
 });
 
@@ -113,9 +141,8 @@ describe('RuleEngine.or', () => {
     if (!result.ok) expect(result.errors).toHaveLength(2);
   });
 
-  it('throws for empty rules (no errors to collect)', () => {
-    const rule = RuleEngine.or<UserContext>();
-    expect(() => rule(validUser)).toThrow('Result.failureFrom requires at least one error');
+  it('returns EMPTY_RULE_ARRAY for empty rules (never throws)', () => {
+    expect(RuleEngine.or<UserContext>()(validUser)).toEqual({ ok: false, errors: [emptyErr] });
   });
 });
 
@@ -143,6 +170,24 @@ describe('RuleEngine.if', () => {
     const result = rule(minorUser);
     expect(result.ok).toBe(true);
   });
+
+  it('accepts a boolean condition: true runs onTrue', () => {
+    expect(RuleEngine.if(true, isAdult, hasEmail)(minorUser)).toEqual({
+      ok: false,
+      errors: [ageErr],
+    });
+  });
+
+  it('accepts a boolean condition: false runs onFalse', () => {
+    const onTrue = vi.fn((_u: UserContext): VoidResult => Result.ok());
+    const result = RuleEngine.if(false, onTrue, acceptedTerms)(invalidUser);
+    expect(result).toEqual({ ok: false, errors: [termsErr] });
+    expect(onTrue).not.toHaveBeenCalled();
+  });
+
+  it('a false boolean condition without onFalse is ok', () => {
+    expect(RuleEngine.if<UserContext>(false, isAdult)(minorUser).ok).toBe(true);
+  });
 });
 
 describe('RuleEngine async', () => {
@@ -165,16 +210,53 @@ describe('RuleEngine async', () => {
     expect(called).toHaveLength(0);
   });
 
-  it('andAsync collects all async errors', async () => {
+  it('andAsync stops at the first async failure', async () => {
+    const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
+    const asyncEmail = vi.fn(
+      RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.email.includes('@'), emailErr),
+    );
+    const rule = RuleEngine.andAsync(asyncAge, asyncEmail);
+    const result = await rule(invalidUser);
+    expect(result).toEqual({ ok: false, errors: [ageErr] });
+    expect(asyncEmail).not.toHaveBeenCalled();
+  });
+
+  it('andAllAsync collects all async errors', async () => {
     const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
     const asyncEmail = RuleEngine.fromPredicateAsync<UserContext>(
       async (u) => u.email.includes('@'),
       emailErr,
     );
-    const rule = RuleEngine.andAsync(asyncAge, asyncEmail);
-    const result = await rule(invalidUser);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors).toHaveLength(2);
+    const result = await RuleEngine.andAllAsync(asyncAge, asyncEmail)(invalidUser);
+    expect(result).toEqual({ ok: false, errors: [ageErr, emailErr] });
+    expect((await RuleEngine.andAllAsync(asyncAge, asyncEmail)(validUser)).ok).toBe(true);
+  });
+
+  it('every async combinator returns EMPTY_RULE_ARRAY for empty rules', async () => {
+    const expected = { ok: false, errors: [emptyErr] };
+    expect(await RuleEngine.andAsync<UserContext>()(validUser)).toEqual(expected);
+    expect(await RuleEngine.andAllAsync<UserContext>()(validUser)).toEqual(expected);
+    expect(await RuleEngine.orAsync<UserContext>()(validUser)).toEqual(expected);
+    expect(await RuleEngine.linearAsync<UserContext>()(validUser)).toEqual(expected);
+    expect(await RuleEngine.andTypedAsync<UserContext, number>()(validUser)).toEqual(expected);
+    expect(await RuleEngine.orTypedAsync<UserContext, number>()(validUser)).toEqual(expected);
+  });
+
+  it('ifAsync accepts a boolean condition', async () => {
+    const asyncAge = RuleEngine.fromPredicateAsync<UserContext>(async (u) => u.age >= 18, ageErr);
+    const asyncTerms = RuleEngine.fromPredicateAsync<UserContext>(
+      async (u) => u.hasAcceptedTerms,
+      termsErr,
+    );
+    expect(await RuleEngine.ifAsync(true, asyncAge, asyncTerms)(invalidUser)).toEqual({
+      ok: false,
+      errors: [ageErr],
+    });
+    expect(await RuleEngine.ifAsync(false, asyncAge, asyncTerms)(invalidUser)).toEqual({
+      ok: false,
+      errors: [termsErr],
+    });
+    expect((await RuleEngine.ifAsync<UserContext>(false, asyncAge)(invalidUser)).ok).toBe(true);
   });
 
   it('andAsync returns ok when all pass', async () => {
@@ -271,11 +353,9 @@ describe('RuleEngine.linearTyped', () => {
     if (result.ok) expect(result.value).toBe(50);
   });
 
-  it('returns RuleEngine.Empty for empty rules', () => {
+  it('returns EMPTY_RULE_ARRAY for empty rules', () => {
     const rule = RuleEngine.linearTyped<UserContext, number>();
-    const result = rule(validUser);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]!.code).toBe('RuleEngine.Empty');
+    expect(rule(validUser)).toEqual({ ok: false, errors: [emptyErr] });
   });
 });
 
@@ -307,11 +387,9 @@ describe('RuleEngine.linearTypedAsync', () => {
     if (result.ok) expect(result.value).toBe(50);
   });
 
-  it('returns RuleEngine.Empty for empty rules', async () => {
+  it('returns EMPTY_RULE_ARRAY for empty rules', async () => {
     const rule = RuleEngine.linearTypedAsync<UserContext, number>();
-    const result = await rule(validUser);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]!.code).toBe('RuleEngine.Empty');
+    expect(await rule(validUser)).toEqual({ ok: false, errors: [emptyErr] });
   });
 });
 
@@ -322,11 +400,23 @@ describe('RuleEngine.andTyped', () => {
   const failB = (_ctx: UserContext): Result<number> =>
     Result.failure(Err.validation('B.Fail', 'b'));
 
-  it('returns last value when all pass', () => {
-    const rule = RuleEngine.andTyped(toAge, toAge);
-    const result = rule(validUser);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toBe(25);
+  it('returns the FIRST value when all pass', () => {
+    const doubleAge = (ctx: UserContext): Result<number> => Result.success(ctx.age * 2);
+    const rule = RuleEngine.andTyped(toAge, doubleAge);
+    expect(rule(validUser)).toEqual({ ok: true, value: 25 });
+  });
+
+  it('evaluates every rule even when an earlier one fails', () => {
+    const later = vi.fn(toAge);
+    RuleEngine.andTyped(failA, later)(validUser);
+    expect(later).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns EMPTY_RULE_ARRAY for empty rules', () => {
+    expect(RuleEngine.andTyped<UserContext, number>()(validUser)).toEqual({
+      ok: false,
+      errors: [emptyErr],
+    });
   });
 
   it('collects ALL errors (no short-circuit)', () => {
@@ -336,7 +426,7 @@ describe('RuleEngine.andTyped', () => {
     if (!result.ok) expect(result.errors).toHaveLength(2);
   });
 
-  it('collects errors while tracking last success value', () => {
+  it('collects errors even when an earlier rule succeeded', () => {
     const rule = RuleEngine.andTyped(toAge, failA);
     const result = rule(validUser);
     expect(result.ok).toBe(false);
@@ -351,11 +441,11 @@ describe('RuleEngine.andTypedAsync', () => {
   const failBAsync = async (_ctx: UserContext): Promise<Result<number>> =>
     Result.failure(Err.validation('B.Fail', 'b'));
 
-  it('returns last value when all pass', async () => {
-    const rule = RuleEngine.andTypedAsync(toAgeAsync);
-    const result = await rule(validUser);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toBe(25);
+  it('returns the FIRST value when all pass', async () => {
+    const doubleAgeAsync = async (ctx: UserContext): Promise<Result<number>> =>
+      Result.success(ctx.age * 2);
+    const rule = RuleEngine.andTypedAsync(toAgeAsync, doubleAgeAsync);
+    expect(await rule(validUser)).toEqual({ ok: true, value: 25 });
   });
 
   it('collects ALL errors', async () => {
@@ -365,7 +455,7 @@ describe('RuleEngine.andTypedAsync', () => {
     if (!result.ok) expect(result.errors).toHaveLength(2);
   });
 
-  it('collects errors while tracking last success value', async () => {
+  it('collects errors even when an earlier rule succeeded', async () => {
     const rule = RuleEngine.andTypedAsync(toAgeAsync, failAAsync);
     const result = await rule(validUser);
     expect(result.ok).toBe(false);
@@ -392,6 +482,13 @@ describe('RuleEngine.orTyped', () => {
     const result = rule(validUser);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors).toHaveLength(2);
+  });
+
+  it('returns EMPTY_RULE_ARRAY for empty rules', () => {
+    expect(RuleEngine.orTyped<UserContext, number>()(validUser)).toEqual({
+      ok: false,
+      errors: [emptyErr],
+    });
   });
 });
 
@@ -459,5 +556,25 @@ describe('RuleEngine.evaluate', () => {
     expect(Result.isFailure(result)).toBe(true);
     expect(Result.firstError(result)?.code).toBe('Rule.EvaluationFailed');
     expect(Result.firstError(result)?.description).toBe('string error');
+  });
+});
+
+describe('RuleEngine.evaluate with values String() rejects', () => {
+  it('a rule throwing a prototype-less object becomes Rule.EvaluationFailed', () => {
+    const r = RuleEngine.evaluate<number>(() => {
+      throw Object.create(null);
+    }, 1);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errors[0]?.code).toBe('Rule.EvaluationFailed');
+      expect(r.errors[0]?.description).toBe('[object Object]');
+    }
+  });
+
+  it('evaluateAsync does the same', async () => {
+    const r = await RuleEngine.evaluateAsync<number>(async () => {
+      throw Object.create(null);
+    }, 1);
+    expect(r.ok || r.errors[0]?.description).toBe('[object Object]');
   });
 });
