@@ -1,11 +1,15 @@
 import type { AppError } from '../errors/app-error.js';
+import type { ErrorType } from '../errors/error-type.js';
 import { Result } from './result.js';
+import { ResultAsync } from './result-async.js';
 
 /**
  * Fluent chainable wrapper around Result<T>.
  *
  * Provides a fluent method-chaining API for Result<T>,
  * while internally using the pure-function Result utilities.
+ * Async methods (`*Async`) return a {@link ResultAsync}, so the pipeline stays fluent
+ * and is awaited once at the end (`await` yields a plain `Result<T>`).
  *
  * @example
  * const profile = await chain(Result.success(userId))
@@ -56,17 +60,22 @@ export class ResultChain<T> {
     return new ResultChain(Result.mapError(this._result, fn));
   }
 
+  /** Maps every error, in order. See {@link Result.mapEachError}. */
+  mapEachError(fn: (error: AppError) => AppError): ResultChain<T> {
+    return new ResultChain(Result.mapEachError(this._result, fn));
+  }
+
   else(fallback: T | ((errors: readonly AppError[]) => T)): ResultChain<T> {
     return new ResultChain(Result.else(this._result, fallback));
   }
 
   /**
-   * Returns a fallback value on failure using an explicit factory function.
-   * Use instead of `else` when `T` is a function type, to avoid ambiguity.
+   * Returns the success value, or computes one from the errors.
+   *
+   * @deprecated Returns `T`, not a ResultChain — use {@link ResultChain.unwrapOrElse}.
    */
   elseWith(factory: (errors: readonly AppError[]) => T): T {
-    const r = this._result;
-    return r.ok ? r.value : factory(r.errors);
+    return this.unwrapOrElse(factory);
   }
 
   compensate(fn: (errors: readonly AppError[]) => Result<T>): ResultChain<T> {
@@ -95,11 +104,20 @@ export class ResultChain<T> {
     return new ResultChain(Result.compensateFirst(this._result, fn));
   }
 
+  /** Scans all errors for a match. See {@link Result.recover}. */
   recover(
-    predicate: (error: AppError) => boolean,
+    match: ErrorType | ((error: AppError) => boolean),
     fn: (error: AppError) => Result<T>,
   ): ResultChain<T> {
-    return new ResultChain(Result.recover(this._result, predicate, fn));
+    return new ResultChain(Result.recover(this._result, match, fn));
+  }
+
+  /** Recovers only if the first error matches. See {@link Result.recoverFirst}. */
+  recoverFirst(
+    match: ErrorType | ((error: AppError) => boolean),
+    fn: (error: AppError) => Result<T>,
+  ): ResultChain<T> {
+    return new ResultChain(Result.recoverFirst(this._result, match, fn));
   }
 
   always<U>(fn: (result: Result<T>) => U): U {
@@ -110,76 +128,80 @@ export class ResultChain<T> {
     return Result.alwaysAsync(this._result, fn);
   }
 
-  async bindIfAsync(
+  bindIfAsync(
     condition: boolean | ((value: T) => boolean),
     fn: (value: T) => Promise<Result<T>>,
-  ): Promise<ResultChain<T>> {
-    return new ResultChain(await Result.bindIfAsync(this._result, condition, fn));
+  ): ResultAsync<T> {
+    return ResultAsync.from(Result.bindIfAsync(this._result, condition, fn));
   }
 
-  async compensateFirstAsync(
-    fn: (firstError: AppError) => Promise<Result<T>>,
-  ): Promise<ResultChain<T>> {
-    return new ResultChain(await Result.compensateFirstAsync(this._result, fn));
+  compensateFirstAsync(fn: (firstError: AppError) => Promise<Result<T>>): ResultAsync<T> {
+    return ResultAsync.from(Result.compensateFirstAsync(this._result, fn));
   }
 
-  async recoverAsync(
-    predicate: (error: AppError) => boolean,
+  recoverAsync(
+    match: ErrorType | ((error: AppError) => boolean),
     fn: (error: AppError) => Promise<Result<T>>,
-  ): Promise<ResultChain<T>> {
-    return new ResultChain(await Result.recoverAsync(this._result, predicate, fn));
+  ): ResultAsync<T> {
+    return ResultAsync.from(Result.recoverAsync(this._result, match, fn));
+  }
+
+  recoverFirstAsync(
+    match: ErrorType | ((error: AppError) => boolean),
+    fn: (error: AppError) => Promise<Result<T>>,
+  ): ResultAsync<T> {
+    return ResultAsync.from(Result.recoverFirstAsync(this._result, match, fn));
   }
 
   match<U>(onSuccess: (value: T) => U, onError: (errors: readonly AppError[]) => U): U {
     return Result.match(this._result, onSuccess, onError);
   }
 
-  // ── Async ─────────────────────────────────────────────────────────────────
+  // ── Async (return ResultAsync for a fluent, single-await pipeline) ─────────
 
-  async thenAsync<U>(fn: (value: T) => Promise<Result<U>>): Promise<ResultChain<U>> {
-    return new ResultChain(await Result.thenAsync(this._result, fn));
+  /** Lifts this chain into a {@link ResultAsync} pipeline. */
+  toAsync(): ResultAsync<T> {
+    return ResultAsync.fromResult(this._result);
   }
 
-  async mapAsync<U>(fn: (value: T) => Promise<U>): Promise<ResultChain<U>> {
-    return new ResultChain(await Result.mapAsync(this._result, fn));
+  thenAsync<U>(fn: (value: T) => Promise<Result<U>>): ResultAsync<U> {
+    return ResultAsync.from(Result.thenAsync(this._result, fn));
   }
 
-  async ensureAsync(
+  mapAsync<U>(fn: (value: T) => Promise<U>): ResultAsync<U> {
+    return ResultAsync.from(Result.mapAsync(this._result, fn));
+  }
+
+  ensureAsync(
     predicate: (value: T) => Promise<boolean>,
     error: AppError | ((value: T) => AppError),
-  ): Promise<ResultChain<T>> {
-    return new ResultChain(await Result.ensureAsync(this._result, predicate, error));
+  ): ResultAsync<T> {
+    return ResultAsync.from(Result.ensureAsync(this._result, predicate, error));
   }
 
-  async tapAsync(fn: (value: T) => Promise<void>): Promise<ResultChain<T>> {
-    return new ResultChain(await Result.tapAsync(this._result, fn));
+  tapAsync(fn: (value: T) => Promise<void>): ResultAsync<T> {
+    return ResultAsync.from(Result.tapAsync(this._result, fn));
   }
 
-  async tapErrorAsync(fn: (errors: readonly AppError[]) => Promise<void>): Promise<ResultChain<T>> {
-    return new ResultChain(await Result.tapErrorAsync(this._result, fn));
+  tapErrorAsync(fn: (errors: readonly AppError[]) => Promise<void>): ResultAsync<T> {
+    return ResultAsync.from(Result.tapErrorAsync(this._result, fn));
   }
 
-  async compensateAsync(
-    fn: (errors: readonly AppError[]) => Promise<Result<T>>,
-  ): Promise<ResultChain<T>> {
-    return new ResultChain(await Result.compensateAsync(this._result, fn));
+  compensateAsync(fn: (errors: readonly AppError[]) => Promise<Result<T>>): ResultAsync<T> {
+    return ResultAsync.from(Result.compensateAsync(this._result, fn));
   }
 
-  async mapErrorAsync(
-    fn: (errors: readonly AppError[]) => Promise<AppError[]>,
-  ): Promise<ResultChain<T>> {
-    return new ResultChain(await Result.mapErrorAsync(this._result, fn));
+  mapErrorAsync(fn: (errors: readonly AppError[]) => Promise<AppError[]>): ResultAsync<T> {
+    return ResultAsync.from(Result.mapErrorAsync(this._result, fn));
   }
 
-  async elseAsync(
-    fallback: T | ((errors: readonly AppError[]) => Promise<T>),
-  ): Promise<ResultChain<T>> {
-    if (this._result.ok) return new ResultChain(this._result);
-    const value =
-      typeof fallback === 'function'
-        ? await (fallback as (errors: readonly AppError[]) => Promise<T>)(this._result.errors)
-        : fallback;
-    return new ResultChain(Result.success(value));
+  /** Maps every error with an async mapper, sequentially and in order. */
+  mapEachErrorAsync(fn: (error: AppError) => Promise<AppError>): ResultAsync<T> {
+    return ResultAsync.from(Result.mapEachErrorAsync(this._result, fn));
+  }
+
+  elseAsync(fallback: T | ((errors: readonly AppError[]) => Promise<T>)): ResultAsync<T> {
+    return ResultAsync.fromResult(this._result).else(fallback);
   }
 
   async matchAsync<U>(

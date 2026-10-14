@@ -17,6 +17,11 @@ export interface DateTimeProvider {
   utcNowDate(): Date;
   /** Current timestamp in milliseconds (Date.now() equivalent). */
   utcNowMs(): number;
+  /**
+   * IANA time zone of the provider's local calendar, used by
+   * calendar helpers such as `getAge`. When absent, those helpers fall back to `'UTC'`.
+   */
+  readonly timeZone?: string;
 }
 
 /**
@@ -32,6 +37,10 @@ export const SystemDateTimeProvider: DateTimeProvider = {
   },
   utcNowMs(): number {
     return Date.now();
+  },
+  /** The host's local time zone. */
+  get timeZone(): string {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
   },
 };
 
@@ -49,6 +58,8 @@ export function createFakeDateTimeProvider(fixed: Date): DateTimeProvider & {
   let current = new Date(fixed.getTime());
 
   return {
+    /** UTC. */
+    timeZone: 'UTC',
     utcNow(): Date {
       return new Date(current.getTime());
     },

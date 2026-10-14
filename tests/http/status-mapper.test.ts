@@ -1,5 +1,10 @@
 import { ErrorType } from '../../src/errors/error-type.js';
-import { extractErrorDescription, httpStatusToError } from '../../src/http/status-mapper.js';
+import {
+  extractErrorDescription,
+  httpStatusToError,
+  httpStatusToErrorType,
+  problemDetailsToErrors,
+} from '../../src/http/status-mapper.js';
 
 describe('httpStatusToError', () => {
   it('maps 400 to Validation', () => {
@@ -200,5 +205,170 @@ describe('extractErrorDescription', () => {
     });
     const desc = await extractErrorDescription(response);
     expect(desc).toBeUndefined();
+  });
+});
+
+describe('httpStatusToErrorType — full status table', () => {
+  it.each([
+    [400, ErrorType.Validation],
+    [411, ErrorType.Validation],
+    [413, ErrorType.Validation],
+    [414, ErrorType.Validation],
+    [415, ErrorType.Validation],
+    [416, ErrorType.Validation],
+    [417, ErrorType.Validation],
+    [422, ErrorType.Validation],
+    [401, ErrorType.Unauthorized],
+    [407, ErrorType.Unauthorized],
+    [402, ErrorType.Failure],
+    [405, ErrorType.Failure],
+    [406, ErrorType.Failure],
+    [403, ErrorType.Forbidden],
+    [404, ErrorType.NotFound],
+    [410, ErrorType.NotFound],
+    [408, ErrorType.Unexpected],
+    [409, ErrorType.Conflict],
+    [412, ErrorType.Conflict],
+    [429, ErrorType.Conflict],
+    [418, ErrorType.Failure],
+    [451, ErrorType.Failure],
+    [500, ErrorType.Unexpected],
+    [504, ErrorType.Unexpected],
+    [200, ErrorType.Failure],
+    [302, ErrorType.Failure],
+    [100, ErrorType.Failure],
+  ])('%i → %s', (status, type) => {
+    expect(httpStatusToErrorType(status)).toBe(type);
+    const err = httpStatusToError(status);
+    expect(err.type).toBe(type);
+    expect(err.code).toBe(`Http.${status}`);
+  });
+});
+
+describe('problemDetailsToErrors', () => {
+  it('parses the list shape [{ code, description }] with the status type', () => {
+    const errors = problemDetailsToErrors(400, {
+      title: 'Bad Request',
+      errors: [
+        { code: 'User.Email', description: 'Email is invalid' },
+        { code: 'User.Name', description: 'Name is required' },
+      ],
+    });
+    expect(errors).toEqual([
+      {
+        code: 'User.Email',
+        description: 'Email is invalid',
+        type: ErrorType.Validation,
+        metadata: undefined,
+      },
+      {
+        code: 'User.Name',
+        description: 'Name is required',
+        type: ErrorType.Validation,
+        metadata: undefined,
+      },
+    ]);
+  });
+
+  it('parses the AllErrors shape using type, numericType and metadata', () => {
+    const errors = problemDetailsToErrors(400, {
+      errors: [
+        { code: 'A', description: 'by name', type: 'Conflict', numericType: 3 },
+        { code: 'B', description: 'by ordinal', numericType: 4 },
+        { code: 'C', description: 'numeric type field', type: 5 },
+        { code: 'D', description: 'with meta', type: 'Forbidden', metadata: { field: 'x', n: 1 } },
+        { code: 'E', description: 'invalid type falls back', type: 'Nope', numericType: 99 },
+      ],
+    });
+    expect(errors.map((e) => [e.code, e.type])).toEqual([
+      ['A', ErrorType.Conflict],
+      ['B', ErrorType.NotFound],
+      ['C', ErrorType.Unauthorized],
+      ['D', ErrorType.Forbidden],
+      ['E', ErrorType.Validation],
+    ]);
+    const d = errors[3]!;
+    expect(d.metadata).toBeInstanceOf(Map);
+    expect(Object.fromEntries(d.metadata!)).toEqual({ field: 'x', n: 1 });
+    expect(errors[0]!.metadata).toBeUndefined();
+  });
+
+  it('parses the dictionary validation-problem shape { key: string[] }', () => {
+    const errors = problemDetailsToErrors(422, {
+      errors: { Email: ['Required', 'Invalid format'], Name: 'Too short' },
+    });
+    expect(errors.map((e) => [e.code, e.description, e.type])).toEqual([
+      ['Email', 'Required', ErrorType.Validation],
+      ['Email', 'Invalid format', ErrorType.Validation],
+      ['Name', 'Too short', ErrorType.Validation],
+    ]);
+  });
+
+  it('maps plain-string list items to Http.{status} Validation errors', () => {
+    const errors = problemDetailsToErrors(409, { errors: ['Already exists'] });
+    expect(errors).toEqual([
+      {
+        code: 'Http.409',
+        description: 'Already exists',
+        type: ErrorType.Validation,
+        metadata: undefined,
+      },
+    ]);
+  });
+
+  it('untyped entries are Validation regardless of the status', () => {
+    const list = problemDetailsToErrors(404, {
+      errors: [
+        { code: 'A', description: 'no type' },
+        { code: 'B', description: 'bad type', type: 'Bogus' },
+        { code: 'C', description: 'typed', type: 'NotFound' },
+      ],
+    });
+    expect(list.map((e) => [e.code, e.type])).toEqual([
+      ['A', ErrorType.Validation],
+      ['B', ErrorType.Validation],
+      ['C', ErrorType.NotFound],
+    ]);
+    const dict = problemDetailsToErrors(409, { errors: { Name: ['Required'] } });
+    expect(dict.map((e) => [e.code, e.type])).toEqual([['Name', ErrorType.Validation]]);
+  });
+
+  it('without parsable errors the status error keeps the status type', () => {
+    const [err] = problemDetailsToErrors(409, { title: 'Conflict!' });
+    expect(err?.type).toBe(ErrorType.Conflict);
+  });
+
+  it('skips malformed entries but keeps valid ones', () => {
+    const errors = problemDetailsToErrors(400, {
+      errors: [
+        null,
+        42,
+        { code: 'X' },
+        { description: 'no code' },
+        { code: 'OK', description: 'kept' },
+      ],
+    });
+    expect(errors.map((e) => e.code)).toEqual(['OK']);
+  });
+
+  it('falls back to the status error using detail, then title', () => {
+    expect(problemDetailsToErrors(404, { title: 'Not Found', detail: 'User 42 missing' })).toEqual([
+      httpStatusToError(404, 'User 42 missing'),
+    ]);
+    expect(problemDetailsToErrors(404, { title: 'Not Found' })).toEqual([
+      httpStatusToError(404, 'Not Found'),
+    ]);
+  });
+
+  it.each([
+    ['no body', undefined],
+    ['non-object body', 'oops'],
+    ['array body', [1, 2]],
+    ['empty errors list', { errors: [] }],
+    ['empty errors dictionary', { errors: {} }],
+    ['only malformed entries', { errors: [{ foo: 1 }] }],
+    ['non-string dictionary values', { errors: { Email: [1, 2] } }],
+  ])('falls back to the single status error for %s', (_label, body) => {
+    expect(problemDetailsToErrors(500, body)).toEqual([httpStatusToError(500)]);
   });
 });

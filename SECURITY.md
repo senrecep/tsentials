@@ -6,10 +6,10 @@ The tsentials project maintains security updates for the latest minor version of
 
 | Version | Supported          |
 |---------|--------------------|
-| 0.1.x   | Yes (current)      |
-| < 0.1   | No                 |
+| 1.x     | Yes (current)      |
+| < 1.0   | No                 |
 
-Security patches are released as patch versions (e.g., 0.1.5 → 0.1.6) on the npm registry.
+Security patches are released as patch versions (e.g., 1.0.1 → 1.0.2) on the npm registry.
 
 ## Reporting a Vulnerability
 

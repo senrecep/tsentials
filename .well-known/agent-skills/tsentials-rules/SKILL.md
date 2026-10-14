@@ -130,13 +130,22 @@ if (!result.ok) {
 
 All sync combinators accept `Rule<TContext>` and return `Rule<TContext>`.
 
-### `RuleEngine.and` — all must pass, collects ALL failures
+Every combinator built from an empty rule list evaluates to the Validation failure `EMPTY_RULE_ARRAY` ("The rule array is empty."); it never throws and never returns ok.
+
+### `RuleEngine.and` — all must pass, stops at first failure
 
 ```typescript
 const canRegister = RuleEngine.and(isAdult, hasEmail, isAllowedRegion);
 
 const result = RuleEngine.evaluate(canRegister, user);
-// If multiple rules fail, result.errors contains errors from all failing rules
+// Returns the errors of the first failing rule; later rules are not evaluated
+```
+
+### `RuleEngine.andAll` — all must pass, collects ALL failures
+
+```typescript
+const canRegister = RuleEngine.andAll(isAdult, hasEmail, isAllowedRegion);
+// Every rule runs; result.errors contains errors from all failing rules
 ```
 
 ### `RuleEngine.linear` — all must pass, stops at first failure
@@ -160,13 +169,16 @@ const canAccess = RuleEngine.or(isAdmin, isPremiumUser);
 ```typescript
 // Build a conditional rule
 const accessRule = RuleEngine.if(
-  isAdult,      // condition rule
+  isAdult,      // condition rule (or a plain boolean)
   grantAccess,  // onTrue branch
   denyAccess,   // onFalse branch (optional)
 );
 
 // Evaluate the composed rule
 const result = RuleEngine.evaluate(accessRule, user);
+
+// A boolean condition: false takes onFalse, or is ok when there is no onFalse
+const featureRule = RuleEngine.if(config.strictMode, strictRule);
 ```
 
 ---
@@ -176,10 +188,11 @@ const result = RuleEngine.evaluate(accessRule, user);
 All async combinators accept `AsyncRule<TContext>` and return `AsyncRule<TContext>`.
 
 ```typescript
-RuleEngine.andAsync(...rules)       // all must pass, collects ALL failures
+RuleEngine.andAsync(...rules)       // all must pass, stops on first failure
+RuleEngine.andAllAsync(...rules)    // all must pass, collects ALL failures
 RuleEngine.linearAsync(...rules)    // stops on first failure
 RuleEngine.orAsync(...rules)        // at least one must pass
-RuleEngine.ifAsync(cond, onTrue, onFalse?)  // conditional, returns AsyncRule<TContext>
+RuleEngine.ifAsync(cond, onTrue, onFalse?)  // cond: AsyncRule | boolean, returns AsyncRule<TContext>
 ```
 
 ```typescript
@@ -205,7 +218,7 @@ RuleEngine.andTypedAsync<TContext, TResult>(...rules: TypedAsyncRule<TContext, T
 RuleEngine.orTypedAsync<TContext, TResult>(...rules: TypedAsyncRule<TContext, TResult>[])
 ```
 
-All three typed combinators return `Result.success(value)` when their rules pass: `andTyped`/`andTypedAsync` carry the *last passing* rule's value, `orTyped`/`orTypedAsync` carry the value of the *first passing* rule, and `linearTyped`/`linearTypedAsync` carry the *last* rule's value once the whole sequence passes. Zero rules is a special case per combinator: `linearTyped`/`linearTypedAsync` return a `RuleEngine.Empty` failure; `andTyped`/`andTypedAsync` return `Result.success(undefined)` (no errors to collect); `orTyped`/`orTypedAsync` **throw** `Error('Result.failureFrom requires at least one error.')` — same as the untyped `or` — because there are no errors to report and no success to return.
+All three typed combinators return `Result.success(value)` when their rules pass: `andTyped`/`andTypedAsync` run every rule, collect all errors and on success carry the *first* rule's value, `orTyped`/`orTypedAsync` carry the value of the *first passing* rule, and `linearTyped`/`linearTypedAsync` carry the *last* rule's value once the whole sequence passes. With zero rules every typed combinator returns the Validation failure `EMPTY_RULE_ARRAY`, like the untyped ones.
 
 ---
 
@@ -227,8 +240,8 @@ const hasEmail: Rule<ApplicantContext> = ctx =>
 const isAllowedRegion: Rule<ApplicantContext> = ctx =>
   ctx.isAllowedRegion ? Result.ok() : Result.failure(RegistrationErrors.regionBlocked);
 
-// Compose — collects all failures
-const canRegister = RuleEngine.and(isAdult, hasEmail, isAllowedRegion);
+// Compose — andAll collects all failures
+const canRegister = RuleEngine.andAll(isAdult, hasEmail, isAllowedRegion);
 
 const result = RuleEngine.evaluate(canRegister, applicant);
 
@@ -258,7 +271,7 @@ const response = await fromAsync(fetchUser(userId))
 ## Best Practices
 
 - `Rule<T>` is sync only — never annotate an `async` function as `Rule<T>`, use `AsyncRule<T>`
-- `RuleEngine.and()` collects **all** failures; `RuleEngine.linear()` stops at the **first** failure
+- `RuleEngine.andAll()` collects **all** failures; `RuleEngine.and()` and `RuleEngine.linear()` stop at the **first** failure
 - Prefer `RuleEngine.linear()` for sequential guards where later checks depend on earlier ones passing
 - `RuleEngine.if()` returns a `Rule<TContext>` — evaluate it with `RuleEngine.evaluate(rule, ctx)`
 - `RuleEngine.evaluate()` is sync and returns `VoidResult` directly — no `await` needed

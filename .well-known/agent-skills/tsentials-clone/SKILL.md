@@ -1,11 +1,11 @@
 ---
 name: tsentials-clone
-description: Use when objects need deep-copy semantics — implement Cloneable<T> on domain objects with custom clone logic, use deepClone() for any value (plain objects, Date, Map, Set, TypedArrays, Error, circular refs — never throws, React Native / Hermes compatible), and cloneArray() to call .clone() on every element in a Cloneable collection.
+description: Use when objects need deep-copy semantics — implement Cloneable<T> on domain objects with custom clone logic, use deepClone() for any value (plain objects, Date, Map, Set, TypedArrays, Error subclasses, URL, circular and shared refs — identical on every runtime, React Native / Hermes compatible), and cloneArray() to call .clone() on every element in a Cloneable collection.
 ---
 
 # tsentials/clone
 
-Typed deep-copy utilities. Two strategies: `Cloneable<T>` for custom clone logic on class-based models, and `deepClone()` for any value — hybrid native/recursive implementation, never throws, works in React Native.
+Typed deep-copy utilities. Two strategies: `Cloneable<T>` for custom clone logic on class-based models, and `deepClone()` for any value — a self-contained recursive implementation (never calls native `structuredClone`), identical on every runtime including React Native.
 
 ## Import
 
@@ -52,7 +52,7 @@ class Tag implements Cloneable<Tag> {
 
 ## deepClone — any value
 
-Hybrid implementation: tries native `structuredClone()` first; if unavailable (React Native / Hermes) or if the value contains unsupported types (functions, symbols), falls back to a robust recursive clone. **Never throws.**
+Self-contained recursive implementation. It never delegates to the native `structuredClone`, so the result is identical on Node, browsers and React Native / Hermes. It does not throw on functions or symbols; it throws `RangeError` only on extremely deep nesting (recursive traversal).
 
 ### Supported types
 
@@ -68,14 +68,17 @@ Hybrid implementation: tries native `structuredClone()` first; if unavailable (R
 | ArrayBuffer | `buffer.slice(0)` |
 | DataView | Buffer + byteOffset + byteLength |
 | TypedArray (Uint8Array, Float64Array, BigInt64Array, …) | Buffer cloned separately |
-| Error (built-in: `Error`, `TypeError`, `RangeError`, …) | message, name, cause preserved; subclass identity kept |
-| Boolean / Number / String wrapper objects | `Object(valueOf())` |
-| Circular reference | Tracked via WeakMap — preserved correctly |
-| SharedArrayBuffer | **Native `structuredClone` (default in Node ≥ 17 / modern browsers):** returns a *new* `SharedArrayBuffer` instance backed by the same shared memory — not the same reference. **Recursive fallback only** (no native `structuredClone`): returns the exact same reference |
+| Error and subclasses (incl. `AggregateError`) | Prototype, `name`, `stack`, `cause` and custom own properties (`code`, `statusCode`, ...) preserved; constructor is not called |
+| Boolean / Number / String / BigInt wrapper objects | `Object(valueOf())` |
+| URL, URLSearchParams | Cloned |
+| Circular and shared references | Tracked via WeakMap — preserved correctly |
+| ArrayBuffer views over one buffer | Keep sharing one cloned buffer |
+| Array extra properties | Non-index own enumerable properties (e.g. regex match `index`) copied |
+| SharedArrayBuffer, Blob, File, Promise | Same reference returned |
 
-> **Important caveat — custom Error subclasses and custom properties:** `deepClone` tries native `structuredClone` first, and it does **not** throw for `Error` objects — so the recursive fallback (which is the part of this library that copies custom properties and preserves user-defined subclasses) is *not* reached for a standalone `Error` in Node.js or a browser. Under native `structuredClone`, a **user-defined** `Error` subclass becomes a plain `Error` (its class identity and any custom `name` are lost), and **any custom enumerable properties** (`code`, `statusCode`, etc.) are silently dropped. Only in environments without native `structuredClone` (e.g. some React Native/Hermes builds) does the recursive fallback run and actually preserve subclass identity and custom properties. Verified empirically — see the corrected example below.
->
-> **Custom prototypes:** for the same reason, cloning a class instance (not a plain object literal) with `deepClone` produces a plain object — it does **not** remain `instanceof YourClass` and loses its methods. Use `Cloneable<T>` (see below) for class instances that must retain their type/methods.
+Dispatch uses brand checks (`Array.isArray`, `ArrayBuffer.isView`, internal-slot getters), so an object spoofing `Symbol.toStringTag` (e.g. `'Map'`) or built from `Object.create(Map.prototype)` is cloned as a plain object, and built-ins from another realm are still recognised. A `__proto__` own key (e.g. from `JSON.parse`) is dropped.
+
+> **Custom prototypes:** cloning a class instance (not a plain object literal) with `deepClone` produces a plain object — it does **not** remain `instanceof YourClass` and loses its methods. Use `Cloneable<T>` (see below) for class instances that must retain their type/methods. Error subclasses are the exception: they keep their prototype.
 
 ### Graceful degradation
 
@@ -111,15 +114,14 @@ deepClone({ createdAt: new Date(), tags: new Set(['a', 'b']) });
 const buf = new Uint8Array([1, 2, 3]);
 const bufClone = deepClone(buf);
 
-// Error — under native structuredClone (default in Node/browsers), only
-// message/name/cause survive; custom own properties are dropped
+// Error — subclass, name, custom properties and cause are preserved
 const err = Object.assign(new Error('fail'), { code: 'ERR_X', statusCode: 500 });
 const errClone = deepClone(err);
 errClone.message;        // 'fail'
 errClone instanceof Error; // true
-errClone.code;            // undefined — custom properties are NOT preserved here
+errClone.code;            // 'ERR_X'
 
-// Graceful degradation — never throws
+// Graceful degradation — no throw on unsupported values
 deepClone({ fn: () => 42 });      // { fn: () => 42 } — same reference
 deepClone({ sym: Symbol('x') });  // { sym: undefined }
 deepClone(new WeakMap());          // WeakMap {} (empty)
@@ -147,7 +149,7 @@ await repo.updateAll(working);
 
 | Function | Mechanism | Use Case |
 |----------|-----------|----------|
-| `deepClone(value)` | native `structuredClone` → recursive fallback | Any value; all environments including React Native |
+| `deepClone(value)` | own recursive implementation | Any value; all environments including React Native |
 | `cloneArray(items)` | `item.clone()` on each | Arrays of class instances implementing `Cloneable<T>` |
 | `obj.clone()` | Custom logic | Single class instance with custom clone behavior |
 
@@ -178,19 +180,19 @@ const changed = working.filter((p, i) => p.price !== entities[i]?.price);
 | Export | Type | Description |
 |--------|------|-------------|
 | `Cloneable<T>` | Interface | Contract: `clone(): T` — custom clone logic |
-| `deepClone<T>(value)` | Function | Hybrid deep-clone: structuredClone → recursive fallback; never throws |
+| `deepClone<T>(value)` | Function | Deep-clone with the built-in recursive implementation (never uses native `structuredClone`) |
 | `cloneArray<T extends Cloneable<T>>(items)` | Function | Calls `.clone()` on each element |
 
 ---
 
 ## Best Practices
 
-- `deepClone()` never throws — unsupported types degrade gracefully instead of erroring
-- In environments without `structuredClone` (React Native / Hermes), the recursive fallback activates automatically
-- Circular reference support works in both native and fallback modes
+- `deepClone()` does not throw on unsupported types — they degrade gracefully (functions by reference, symbols to `undefined`); only extremely deep nesting throws `RangeError`
+- Behaviour is identical on every runtime, including React Native / Hermes
+- Circular and shared reference support is always active
 - `Function` values are returned by reference (closures cannot be copied)
 - `WeakMap` / `WeakSet` cannot be cloned — use `Map` / `Set` if you need copyable contents
-- Error custom properties (`code`, `statusCode`, etc.) and custom Error subclasses are **not** preserved under native `structuredClone` (the default in Node.js/browsers) — they only survive via the recursive fallback (no native `structuredClone` available). Do not rely on custom Error properties surviving `deepClone()` in Node
+- Error custom properties and subclasses are preserved
 - Class instances lose their custom prototype/methods through `deepClone()` — they come back as plain objects; use `Cloneable<T>` instead if type/methods must be retained
 - `cloneArray()` calls `.clone()` on each item — items must implement `Cloneable<T>`
 - Always deep-copy nested collections inside `clone()` — a shallow copy defeats the purpose

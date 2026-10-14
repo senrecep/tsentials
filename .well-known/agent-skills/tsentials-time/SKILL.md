@@ -1,6 +1,6 @@
 ---
 name: tsentials-time
-description: Use when you need testable time — DateTimeProvider interface with utcNow()/utcNowDate()/utcNowMs() so production code uses the SystemDateTimeProvider const object while tests use createFakeDateTimeProvider to freeze, advance, or set the clock without touching Date.now().
+description: Use when you need testable time — DateTimeProvider interface with utcNow()/utcNowDate()/utcNowMs() so production code uses the SystemDateTimeProvider const object while tests use createFakeDateTimeProvider to freeze, advance, or set the clock without touching Date.now(). Also date helpers nextDayOfWeek/previousDayOfWeek, getAge, toDateOnly, toTimeOnly, msToDate.
 ---
 
 # tsentials/time
@@ -18,6 +18,8 @@ npm install tsentials
 ```typescript
 import { SystemDateTimeProvider, createFakeDateTimeProvider } from 'tsentials/time';
 import type { DateTimeProvider } from 'tsentials/time';
+import { nextDayOfWeek, previousDayOfWeek, DayOfWeek, getAge, toDateOnly, toTimeOnly, msToDate } from 'tsentials/time';
+import type { TimeOnly } from 'tsentials/time';
 ```
 
 ---
@@ -102,6 +104,41 @@ expect(fakeTime.utcNow()).toEqual(new Date('2025-06-01T00:00:00Z'));
 fakeTime.setTime(new Date('2025-03-15T14:30:00Z'));
 expect(fakeTime.utcNowDate()).toEqual(new Date('2025-03-15T00:00:00Z'));
 ```
+
+---
+
+## Date Extensions
+
+Pure helpers on `Date`. Weekdays and dates are read in **UTC**; each returns a new value (inputs are never mutated). These are exported from `tsentials/time` only (not the root entry).
+
+```typescript
+import { nextDayOfWeek, previousDayOfWeek, DayOfWeek, getAge, toDateOnly, toTimeOnly, msToDate } from 'tsentials/time';
+
+// DayOfWeek: Sunday = 0 ... Saturday = 6
+nextDayOfWeek(new Date('2024-06-15T10:00:00Z'), DayOfWeek.Monday);   // 2024-06-17T10:00:00Z (time of day kept)
+nextDayOfWeek(date, DayOfWeek.Monday, true);                         // includeCurrent: same day returns date itself
+previousDayOfWeek(new Date('2024-06-15T10:00:00Z'), DayOfWeek.Friday); // 2024-06-14T10:00:00Z
+
+getAge(new Date('2000-06-15'), new Date('2024-06-14'));   // 23
+getAge(birthDate, SystemDateTimeProvider);                // 2nd arg may be a DateTimeProvider
+// throws RangeError when birthDate is after the reference date
+
+toDateOnly(new Date('2024-06-15T10:30:00Z'));             // 2024-06-15T00:00:00Z
+toTimeOnly(new Date('2024-06-15T10:30:15.250Z'));         // { hour: 10, minute: 30, second: 15, millisecond: 250 }
+
+msToDate(1609459200000);                                  // Maybe<Date> — Some(2021-01-01T00:00:00Z)
+msToDate(null);                                           // None
+msToDate(undefined, new Date(0));                         // Some(1970-01-01) — default as Some
+```
+
+| Function | Signature |
+|----------|-----------|
+| `nextDayOfWeek` | `(date, dayOfWeek, includeCurrent = false) => Date` — same weekday returns `date + 7 days` unless `includeCurrent` |
+| `previousDayOfWeek` | `(date, dayOfWeek, includeCurrent = false) => Date` |
+| `getAge` | `(birthDate, today: Date \| DateTimeProvider) => number` |
+| `toDateOnly` | `(date) => Date` — UTC midnight |
+| `toTimeOnly` | `(date) => TimeOnly` |
+| `msToDate` | `(ms: number \| null \| undefined, defaultValue?) => Maybe<Date>` |
 
 ---
 

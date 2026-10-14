@@ -1,5 +1,14 @@
 import type { AppError } from '../errors/app-error.js';
 import { Err } from '../errors/app-error.js';
+import type { ErrorType } from '../errors/error-type.js';
+import {
+  type AbortOptions,
+  isCallerAbort,
+  observe,
+  rethrowIfAborted,
+  throwIfAborted,
+  withAbort,
+} from './abort.js';
 
 /**
  * Result<T> represents either a successful value or one or more errors.
@@ -129,6 +138,7 @@ export const Result = {
 
   /**
    * Guards the success value with a predicate.
+   * An error factory is called only when the predicate fails (lazy).
    */
   ensure<T>(
     result: Result<T>,
@@ -136,8 +146,7 @@ export const Result = {
     error: AppError | ((value: T) => AppError),
   ): Result<T> {
     if (!result.ok) return result;
-    const err = typeof error === 'function' ? error(result.value) : error;
-    return predicate(result.value) ? result : Result.failure(err);
+    return predicate(result.value) ? result : Result.failure(resolveError(error, result.value));
   },
 
   /**
@@ -165,6 +174,18 @@ export const Result = {
   },
 
   /**
+   * Maps every error of a failed Result, one by one and in order.
+   * On success the mapper is never called.
+   *
+   * @example
+   * Result.mapEachError(r, e => ({ ...e, code: `Api.${e.code}` }));
+   */
+  mapEachError<T>(result: Result<T>, fn: (error: AppError) => AppError): Result<T> {
+    if (result.ok) return result;
+    return Result.failureFrom<T>(result.errors.map((e) => fn(e)));
+  },
+
+  /**
    * Exhaustive pattern match — extracts a value from either branch.
    */
   match<T, U>(
@@ -188,12 +209,12 @@ export const Result = {
   },
 
   /**
-   * Returns a fallback value on failure using an explicit factory function.
-   * Use instead of `else` when `T` is a function type, to avoid ambiguity.
+   * Returns the success value, or computes one from the errors.
+   *
+   * @deprecated Returns `T`, not a Result — use {@link Result.unwrapOrElse}, which is identical.
    */
   elseWith<T>(result: Result<T>, factory: (errors: readonly AppError[]) => T): T {
-    if (result.ok) return result.value;
-    return factory(result.errors);
+    return Result.unwrapOrElse(result, factory);
   },
 
   /**
@@ -216,14 +237,28 @@ export const Result = {
 
   /**
    * Async version of Result.try.
+   *
+   * With `{ signal }`: `fn` receives the signal, and when the caller's signal is aborted
+   * the abort PROPAGATES (the promise rejects with it) instead of becoming a failure —
+   * even if `fn` ignores the signal. An abort-like error while the signal is not aborted
+   * (another source) still becomes a failure. `fn` is invoked even when the signal is
+   * already aborted; the call then rejects with `signal.reason`.
+   *
+   * @example
+   * await Result.tryAsync((signal) => fetch(url, { signal }), { signal });
+   * await Result.tryAsync(() => load(), e => Err.unexpected('Load.Failed', String(e)), { signal });
    */
   async tryAsync<T>(
-    fn: () => Promise<T>,
-    onError?: (error: unknown) => AppError,
+    fn: (signal?: AbortSignal) => PromiseLike<T>,
+    onErrorOrOptions?: ((error: unknown) => AppError) | AbortOptions,
+    options?: AbortOptions,
   ): Promise<Result<T>> {
+    const onError = typeof onErrorOrOptions === 'function' ? onErrorOrOptions : undefined;
+    const signal = (typeof onErrorOrOptions === 'object' ? onErrorOrOptions : options)?.signal;
     try {
-      return Result.success(await fn());
+      return Result.success(await withAbort(fn(signal), signal));
     } catch (e) {
+      rethrowIfAborted(e, signal);
       return Result.failure(onError ? onError(e) : Err.fromException(e));
     }
   },
@@ -250,7 +285,7 @@ export const Result = {
   },
 
   /**
-   * Async version of Result.ensure.
+   * Async version of Result.ensure. The error factory is called only when the predicate fails.
    */
   async ensureAsync<T>(
     result: Result<T>,
@@ -258,8 +293,9 @@ export const Result = {
     error: AppError | ((value: T) => AppError),
   ): Promise<Result<T>> {
     if (!result.ok) return result;
-    const err = typeof error === 'function' ? error(result.value) : error;
-    return (await predicate(result.value)) ? result : Result.failure(err);
+    return (await predicate(result.value))
+      ? result
+      : Result.failure(resolveError(error, result.value));
   },
 
   // ─── COMBINATION ──────────────────────────────────────────────────────────
@@ -436,9 +472,10 @@ export const Result = {
   /**
    * Fails the result if the predicate matches the success value.
    * Opposite of `ensure` — turns a success into a failure when the predicate is true.
+   * An error factory is called only when the predicate matches (lazy).
    *
    * @example
-   * Result.failIf(result, n => n < 0, Err.validation('Value.Negative', 'Must be non-negative'));
+   * Result.failWhen(result, n => n < 0, Err.validation('Value.Negative', 'Must be non-negative'));
    */
   failWhen<T>(
     result: Result<T>,
@@ -446,8 +483,7 @@ export const Result = {
     error: AppError | ((value: T) => AppError),
   ): Result<T> {
     if (!result.ok) return result;
-    const err = typeof error === 'function' ? error(result.value) : error;
-    return predicate(result.value) ? Result.failure(err) : result;
+    return predicate(result.value) ? Result.failure(resolveError(error, result.value)) : result;
   },
 
   /**
@@ -477,7 +513,6 @@ export const Result = {
 
   /**
    * Creates a Result from a plain value (success).
-   * Equivalent to C# implicit operator `Result<T>(TValue)`.
    */
   fromValue<T>(value: T): Result<T> {
     return Result.success(value);
@@ -506,7 +541,6 @@ export const Result = {
 
   /**
    * Creates a failed Result from an error.
-   * Equivalent to C# implicit operator `Result<T>(Error)`.
    */
   fromError<T = never>(error: AppError): Result<T> {
     return Result.failure(error);
@@ -575,6 +609,25 @@ export const Result = {
   ): Promise<Result<T>> {
     if (result.ok) return result;
     return Result.failureFrom<T>(await fn(result.errors));
+  },
+
+  /**
+   * Async version of Result.mapEachError — maps every error one at a time, in order.
+   * With `{ signal }` the signal is checked before each mapper call (throws `signal.reason`);
+   * a running mapper is not abandoned.
+   */
+  async mapEachErrorAsync<T>(
+    result: Result<T>,
+    fn: (error: AppError) => PromiseLike<AppError> | AppError,
+    options?: AbortOptions,
+  ): Promise<Result<T>> {
+    if (result.ok) return result;
+    const mapped: AppError[] = [];
+    for (const e of result.errors) {
+      throwIfAborted(options?.signal);
+      mapped.push(await fn(e));
+    }
+    return Result.failureFrom<T>(mapped);
   },
 
   // ─── CONDITIONAL PIPELINE ─────────────────────────────────────────────────
@@ -664,33 +717,64 @@ export const Result = {
   },
 
   /**
-   * Predicate-based single-error recovery.
-   * If result is failure AND predicate matches the first error, calls fn for recovery.
-   * Otherwise passes through unchanged.
+   * Targeted recovery. Scans ALL errors in order; the first error matching `match`
+   * (an `ErrorType` or a predicate) is passed to `fn`. If none matches, the failure
+   * passes through unchanged.
+   *
+   * Use {@link Result.recoverFirst} to look at the first error only.
+   *
+   * @example
+   * Result.recover(r, ErrorType.NotFound, () => Result.success(defaultUser));
+   * Result.recover(r, e => e.code === 'Cache.Miss', () => loadFromDb());
    */
   recover<T>(
     result: Result<T>,
-    predicate: (error: AppError) => boolean,
+    match: ErrorType | ((error: AppError) => boolean),
     fn: (error: AppError) => Result<T>,
   ): Result<T> {
     if (result.ok) return result;
-    const firstError = result.errors[0];
-    if (!firstError || !predicate(firstError)) return result;
-    return fn(firstError);
+    const found = findError(result.errors, match);
+    return found ? fn(found) : result;
   },
 
   /**
-   * Async version of recover.
+   * Async version of recover (scans all errors).
    */
   async recoverAsync<T>(
     result: Result<T>,
-    predicate: (error: AppError) => boolean,
+    match: ErrorType | ((error: AppError) => boolean),
     fn: (error: AppError) => Promise<Result<T>>,
   ): Promise<Result<T>> {
     if (result.ok) return result;
-    const firstError = result.errors[0];
-    if (!firstError || !predicate(firstError)) return result;
-    return fn(firstError);
+    const found = findError(result.errors, match);
+    return found ? fn(found) : result;
+  },
+
+  /**
+   * Recovers only if the FIRST error matches `match` (an `ErrorType` or a predicate).
+   * Otherwise passes through unchanged.
+   */
+  recoverFirst<T>(
+    result: Result<T>,
+    match: ErrorType | ((error: AppError) => boolean),
+    fn: (error: AppError) => Result<T>,
+  ): Result<T> {
+    if (result.ok) return result;
+    const first = result.errors[0];
+    return first && matches(first, match) ? fn(first) : result;
+  },
+
+  /**
+   * Async version of recoverFirst.
+   */
+  async recoverFirstAsync<T>(
+    result: Result<T>,
+    match: ErrorType | ((error: AppError) => boolean),
+    fn: (error: AppError) => Promise<Result<T>>,
+  ): Promise<Result<T>> {
+    if (result.ok) return result;
+    const first = result.errors[0];
+    return first && matches(first, match) ? fn(first) : result;
   },
 
   // ─── TERMINAL / FINALIZATION ──────────────────────────────────────────────
@@ -751,6 +835,19 @@ export const Result = {
   // ─── PARTITION ─────────────────────────────────────────────────────────────
 
   /**
+   * Returns the errors of the first failed Result, or success with all values when
+   * none failed. Stops at the first failure (unlike `and`, which collects all errors).
+   */
+  firstFailureOrSuccesses<T>(results: Iterable<Result<T>>): Result<T[]> {
+    const values: T[] = [];
+    for (const r of results) {
+      if (!r.ok) return Result.failureFrom<T[]>(r.errors);
+      values.push(r.value);
+    }
+    return Result.success(values);
+  },
+
+  /**
    * Partitions an array of Results into successes and failures.
    * Unlike `and` or `or`, this does NOT short-circuit — it processes all items.
    *
@@ -793,42 +890,143 @@ export const Result = {
   },
 
   /**
-   * Async version of traverse.
-   * Processes items sequentially; collects ALL errors.
+   * Async version of traverse; collects ALL errors, in item order.
+   *
+   * - Default: sequential — one item at a time.
+   * - `concurrency`: at most N items in flight (integer ≥ 1, or `Infinity`); results
+   *   are still assembled in item order.
+   * - `signal`: checked before each item starts (throws `signal.reason`) and passed to `fn`.
+   *   A running `fn` is not abandoned — pass the signal into it to stop early.
+   * - If `fn` throws/rejects, no further items start, in-flight items settle, then the
+   *   first exception is rethrown.
    */
-  traverseAsync<A, B>(
+  async traverseAsync<A, B>(
     items: readonly A[],
-    fn: (item: A) => Promise<Result<B>>,
+    fn: (item: A, signal?: AbortSignal) => PromiseLike<Result<B>>,
+    options?: TraverseOptions,
   ): Promise<Result<B[]>> {
-    return (async () => {
-      const values: B[] = [];
-      const errors: AppError[] = [];
-      for (const item of items) {
-        const r = await fn(item);
-        if (r.ok) values.push(r.value);
-        else errors.push(...r.errors);
+    const signal = options?.signal;
+    const concurrency = options?.concurrency ?? 1;
+    if (
+      !(
+        concurrency === Number.POSITIVE_INFINITY ||
+        (Number.isInteger(concurrency) && concurrency >= 1)
+      )
+    ) {
+      throw new RangeError(
+        `concurrency must be a positive integer or Infinity, got ${concurrency}`,
+      );
+    }
+    const results: Result<B>[] = new Array(items.length);
+    let next = 0;
+    let failed = false;
+    let firstError: unknown;
+    const worker = async (): Promise<void> => {
+      while (!failed && next < items.length) {
+        const index = next++;
+        try {
+          throwIfAborted(signal);
+          results[index] = await fn(items[index] as A, signal);
+        } catch (e) {
+          if (!failed) {
+            failed = true;
+            firstError = e;
+          }
+        }
       }
-      return errors.length > 0 ? Result.failureFrom<B[]>(errors) : Result.success(values);
-    })();
+    };
+    const workers = Math.min(concurrency, items.length);
+    await Promise.all(Array.from({ length: workers }, worker));
+    if (failed) throw firstError;
+    return Result.and(results);
   },
 
   // ─── ASYNC SEQUENCE ────────────────────────────────────────────────────────
 
   /**
-   * Awaits an array of Promise<Result<T>> and collects them into a single Result<T[]>.
+   * Awaits pending Results in order and collects them into a single Result<T[]>.
    * Succeeds only if ALL succeed; collects ALL errors from failures.
    *
+   * - Every promise is awaited (allSettled semantics). If any REJECTS, the remaining ones
+   *   are still awaited and the first rejection (in input order) is rethrown afterwards.
+   * - `signal`: when the caller's signal aborts, rejects with `signal.reason` at once;
+   *   the remaining promises are observed so their rejections are never unhandled.
+   *
    * @example
-   * const results = await Result.sequence([
-   *   fetchUser(1),
-   *   fetchUser(2),
-   * ]);
+   * const users = await Result.sequenceAsync([fetchUser(1), fetchUser(2)], { signal });
    */
-  async sequence<T>(promises: ReadonlyArray<Promise<Result<T>>>): Promise<Result<T[]>> {
-    const results = await Promise.all(promises);
-    return Result.and(results);
+  async sequenceAsync<T>(
+    promises: ReadonlyArray<PromiseLike<Result<T>>>,
+    options?: AbortOptions,
+  ): Promise<Result<T[]>> {
+    return Result.and(await settleInOrder(promises, options?.signal));
+  },
+
+  /**
+   * Same as {@link Result.sequenceAsync}.
+   */
+  async sequence<T>(
+    promises: ReadonlyArray<PromiseLike<Result<T>>>,
+    options?: AbortOptions,
+  ): Promise<Result<T[]>> {
+    return Result.sequenceAsync(promises, options);
   },
 } as const;
+
+/** Options for {@link Result.traverseAsync}. */
+export interface TraverseOptions extends AbortOptions {
+  /** Maximum items in flight. Integer ≥ 1 or `Infinity`. Default: 1 (sequential). */
+  readonly concurrency?: number | undefined;
+}
+
+function resolveError<T>(error: AppError | ((value: T) => AppError), value: T): AppError {
+  return typeof error === 'function' ? error(value) : error;
+}
+
+function matches(error: AppError, match: ErrorType | ((error: AppError) => boolean)): boolean {
+  return typeof match === 'function' ? match(error) : error.type === match;
+}
+
+function findError(
+  errors: readonly AppError[],
+  match: ErrorType | ((error: AppError) => boolean),
+): AppError | undefined {
+  for (const e of errors) if (matches(e, match)) return e;
+  return undefined;
+}
+
+/**
+ * Awaits pending Results one by one, in input order.
+ * A rejection is remembered and the loop continues; the first rejection is rethrown
+ * after every promise settled. The caller's abort rejects immediately; the remaining
+ * promises are observed. All inputs are observed up front so a later rejection never
+ * surfaces as unhandled while an earlier item is still pending.
+ *
+ * @internal Shared by Result and ResultAsync collection helpers.
+ */
+export async function settleInOrder<T>(
+  promises: ReadonlyArray<PromiseLike<Result<T>>>,
+  signal: AbortSignal | undefined,
+): Promise<Result<T>[]> {
+  for (const p of promises) observe(p);
+  const results: Result<T>[] = [];
+  let faulted = false;
+  let fault: unknown;
+  for (const p of promises) {
+    throwIfAborted(signal);
+    try {
+      results.push(await withAbort(p, signal));
+    } catch (e) {
+      if (isCallerAbort(e, signal)) throw e;
+      if (!faulted) {
+        faulted = true;
+        fault = e;
+      }
+    }
+  }
+  if (faulted) throw fault;
+  return results;
+}
 
 /**
  * Error thrown when calling Result.unwrap() on a failed Result.

@@ -30,11 +30,18 @@ describe('maybeToResult', () => {
     if (result.ok) expect(result.value).toBe(obj);
   });
 
-  it('converts Some with null value correctly (null is a valid value)', () => {
-    // Note: Maybe.some(null) is possible even if unusual
+  it('Maybe.some(null) is None, so it converts to the failure', () => {
     const result = maybeToResult(Maybe.some(null), notFoundError);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toBeNull();
+    expect(result).toEqual({ ok: false, errors: [notFoundError] });
+  });
+
+  it('gives the same result as Maybe.toResult', () => {
+    expect(maybeToResult(Maybe.some(3), notFoundError)).toEqual(
+      Maybe.toResult(Maybe.some(3), notFoundError),
+    );
+    expect(maybeToResult(Maybe.none<number>(), notFoundError)).toEqual(
+      Maybe.toResult(Maybe.none<number>(), notFoundError),
+    );
   });
 
   it('converts Some with false value correctly', () => {
@@ -88,11 +95,12 @@ describe('resultToMaybe', () => {
     expect(maybe.hasValue).toBe(false);
   });
 
-  it('converts void success to Some(undefined)', () => {
-    const result = Result.ok();
-    const maybe = resultToMaybe(result);
-    expect(maybe.hasValue).toBe(true);
-    if (maybe.hasValue) expect(maybe.value).toBeUndefined();
+  it('converts void success to None (undefined is never a Some value)', () => {
+    expect(resultToMaybe(Result.ok()).hasValue).toBe(false);
+  });
+
+  it('converts a null success value to None', () => {
+    expect(resultToMaybe(Result.success<string | null>(null)).hasValue).toBe(false);
   });
 
   it('converts success with object to Some', () => {

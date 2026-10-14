@@ -96,8 +96,33 @@
       "files": ["SKILL.md"]
     },
     {
+      "name": "tsentials-validation",
+      "description": "Use when validating a model with fluent, eager, Result-based rules — Validator.validate with rules.for('path') chains, nested paths and forEach for collections, cascade modes, subclassable Validator<T>, validateAsync with mustAsync and AbortSignal, validateWith as a railway step. Subpath-only import.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-resilience",
+      "description": "Use when an operation returning Result<T> needs retry, circuit breaker, timeout or fallback — immutable ResiliencePolicy built with withRetry/withCircuitBreaker/withTimeout/withFallback and run via execute, plus retryIfFailed; failures never throw, only the caller's abort rejects. Subpath-only import.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-pagination",
+      "description": "Use when paging collections — paginate() for offset paging with PaginationResponse, keysetOrdering + keysetPaginate for stable cursor paging, and planKeysetPage/createKeysetPageResponse with cursor helpers for database-backed queries. Subpath-only import.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-enums",
+      "description": "Use when you need enums with wire names, aliases and safe parsing — defineEnum() with derived or explicit wire names, aliases and a fallback member; parse/parseNumber return Result<T>, format converts back to wire text or number. Subpath-only import.",
+      "files": ["SKILL.md"]
+    },
+    {
+      "name": "tsentials-mediator",
+      "description": "Use when you need typed in-process request/response dispatch — createMediator<RequestMap>() with register/send, handlers returning Result<T>, and pipeline behaviors for exception handling, validation, logging, caching, locking and transactions. Subpath-only import.",
+      "files": ["SKILL.md"]
+    },
+    {
       "name": "tsentials-meta",
-      "description": "Use when deciding which tsentials module to use — overview of all 19 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.",
+      "description": "Use when deciding which tsentials module to use — overview of all 24 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.",
       "files": ["SKILL.md"]
     }
   ]

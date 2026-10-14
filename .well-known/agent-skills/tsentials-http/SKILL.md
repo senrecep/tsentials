@@ -63,6 +63,8 @@ fetchResult.delete<T = void>(url: string | URL, init?: RequestInit): Promise<Res
 
 POST, PUT, and PATCH automatically set `Content-Type: application/json` and stringify the body.
 
+A 2xx JSON response with an empty or `null` body is a NotFound failure (code `NotFound`), except for `fetchResult.delete`, which succeeds with `undefined`. 204/205 and non-JSON responses are void successes.
+
 ---
 
 ## RequestBuilder — fluent request construction
@@ -98,10 +100,11 @@ const patched = await RequestBuilder.patch(`https://api.example.com/users/${id}`
   .json(partial)
   .send<User>();
 
-// DELETE
+// DELETE — send<T>() expects a value: an empty/null JSON body is a NotFound failure
+// (use fetchResult.delete for a DELETE that may answer with an empty body)
 const deleted = await RequestBuilder.delete(`https://api.example.com/users/${id}`)
   .header('Authorization', `Bearer ${token}`)
-  .send<void>();
+  .send<DeleteReceipt>();
 
 // Raw (non-JSON) body on POST/PUT/PATCH — .body() bypasses JSON serialization entirely
 const uploaded = await RequestBuilder.post('https://api.example.com/upload')
@@ -124,11 +127,32 @@ const uploaded = await RequestBuilder.post('https://api.example.com/upload')
 
 | Builder Method | Description |
 |----------------|-------------|
-| `.header(name, value)` | Add a request header |
+| `.header(name, value)` | Add a request header; the same name again adds another value (`Content-Type` is replaced) |
 | `.query(name, value)` | Append a query string parameter |
 | `.json(body)` | Set body as JSON + Content-Type header |
 | `.body(body: BodyInit)` | Set raw body |
 | `.send<T>()` | Send request, returns `Promise<Result<T>>` |
+
+---
+
+## Cancellation and timeout
+
+`fetchResult` and `RequestBuilder` accept an `AbortSignal` and a request timeout.
+
+```typescript
+const ctrl = new AbortController();
+
+await fetchResult.get<User>('/users/42', { signal: ctrl.signal, timeout: 5_000 });
+
+await RequestBuilder.get('/users')
+  .query({ limit: 10, q: undefined })   // record form; null/undefined values are skipped
+  .timeout(5_000)
+  .signal(ctrl.signal)
+  .send<User[]>();
+```
+
+- **AbortSignal convention:** the caller's abort rejects the promise with `signal.reason`; it never becomes a `Result`. Network, HTTP and body-parse errors become failures.
+- Default timeout is 30 s (`timeout` in ms; `0` or `Infinity` disables it). On expiry the result is a failure with code `Http.Timeout` (`Unexpected`).
 
 ---
 

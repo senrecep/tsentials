@@ -18,7 +18,6 @@ export interface EntityBase extends FullAudit {
 
 /**
  * EntityBase with a strongly-typed identifier.
- * Mirrors C# Essential's EntityBase<TId> design.
  */
 export interface EntityBaseWithId<TId> extends EntityBase {
   readonly id: TId;

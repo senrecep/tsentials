@@ -31,6 +31,15 @@ import { NonEmptyArray, head, asNonEmptyArray } from 'tsentials/array';
 import { These } from 'tsentials/these';
 import { Tree } from 'tsentials/tree';
 import { Record } from 'tsentials/record';
+import { nextDayOfWeek, previousDayOfWeek, DayOfWeek, getAge, toDateOnly, toTimeOnly, msToDate } from 'tsentials/time';
+// Subpath-only (NOT re-exported from the root 'tsentials' entry)
+import { Validator, CascadeMode } from 'tsentials/validation';
+import type { RuleContext } from 'tsentials/validation';
+import { ResiliencePolicy, retryIfFailed } from 'tsentials/resilience';
+import { paginate, keysetOrdering, keysetPaginate } from 'tsentials/pagination';
+import { defineEnum } from 'tsentials/enums';
+import type { EnumMember } from 'tsentials/enums';
+import { createMediator, exceptionHandlingBehavior, validationBehavior } from 'tsentials/mediator';
 import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
 ```
 
@@ -143,7 +152,7 @@ const r = chain(Result.success(5))
 import { Maybe } from 'tsentials/maybe';
 
 // Factory
-Maybe.some(value)
+Maybe.some(value)                 // some(null/undefined) → None; map/bind null results → None
 Maybe.none<T>()
 Maybe.from(nullable)              // null/undefined → None
 Maybe.fromTry(() => expr)         // thrown → None
@@ -170,6 +179,7 @@ Maybe.getOrElse(m, factory)
 Maybe.getOrUndefined(m)           // T | undefined
 Maybe.getOrThrow(m, message)      // throws if None
 Maybe.deconstruct(m)              // [true, T] | [false, undefined]
+Maybe.format(m)                   // 'Some(value)' / 'None' (nested Maybes recursive)
 
 // Fallback chain
 Maybe.or(m, fallbackMaybe)
@@ -184,10 +194,11 @@ await Maybe.matchAsync(m, async onSome, async onNone)
 await Maybe.orAsync(m, async () => fallbackMaybe)
 
 // Collection utilities
-tryFirst(items)                   // Maybe<T>
-tryLast(items)                    // Maybe<T>
-tryFind(items, pred)              // Maybe<T>
+tryFirst(items, pred?)            // Maybe<T>
+tryLast(items, pred?)             // Maybe<T>
+tryFind(items, pred)              // Maybe<T>; also tryFind(map, key) / tryFind(record, key)
 choose([Maybe.some(1), Maybe.none(), Maybe.some(3)])  // [1, 3] — unwraps Somes
+choose(items, item => maybe)      // selector form
 asMaybe(nullableValue)            // Maybe<T>
 ```
 
@@ -244,20 +255,23 @@ const hasBalance = RuleEngine.fromPredicate<Account>(
 );
 
 // Combinators
-RuleEngine.and(r1, r2)         // ALL must pass — collects ALL errors
+RuleEngine.and(r1, r2)         // ALL must pass — stops at first failure
+RuleEngine.andAll(r1, r2)      // ALL must pass — collects ALL errors
 RuleEngine.linear(r1, r2)      // ALL must pass — stops at first failure
 RuleEngine.or(r1, r2)          // AT LEAST ONE must pass
-RuleEngine.if(cond, then, else?)  // conditional branching
+RuleEngine.if(cond, then, else?)  // conditional branching; cond: Rule<T> | boolean
+// An empty rule list → Validation failure 'EMPTY_RULE_ARRAY' (every combinator)
 
 // Async
 RuleEngine.fromPredicateAsync<T>(async pred, err)
 RuleEngine.andAsync(r1, r2)
+RuleEngine.andAllAsync(r1, r2)
 RuleEngine.linearAsync(r1, r2)
 RuleEngine.orAsync(r1, r2)
 RuleEngine.ifAsync(cond, then, else?)
 
 // Evaluation
-RuleEngine.evaluate(rule, ctx)              // Promise<VoidResult>
+RuleEngine.evaluate(rule, ctx)              // VoidResult (sync, never throws)
 RuleEngine.evaluateAsync(asyncRule, ctx)    // Promise<VoidResult>
 ```
 
@@ -354,7 +368,7 @@ Union.groupBy(items)                           // { [tag]?: value[] }
 import { deepClone, cloneArray } from 'tsentials/clone';
 import type { Cloneable } from 'tsentials/clone';
 
-// Hybrid: native structuredClone + recursive fallback, never throws, Hermes compatible
+// Self-contained recursive clone (never native structuredClone), identical on every runtime, Hermes compatible
 const copy = deepClone({ user: { id: 1, tags: ['a', 'b'] } });
 deepClone({ createdAt: new Date(), lookup: new Map([['key', 'value']]) });
 deepClone(new Uint8Array([1, 2, 3]));  // TypedArrays supported
@@ -389,6 +403,14 @@ SystemDateTimeProvider.utcNowMs()    // ms timestamp
 const fake = createFakeDateTimeProvider(new Date('2024-06-01T12:00:00Z'));
 fake.advance(1000)        // +1 second
 fake.setTime(newDate)     // jump to any time
+
+// Date extensions (UTC-based, return new Dates)
+nextDayOfWeek(date, DayOfWeek.Monday)      // same day → +7 days unless includeCurrent (3rd arg)
+previousDayOfWeek(date, DayOfWeek.Friday)
+getAge(birthDate, new Date())              // 2nd arg: Date or DateTimeProvider; RangeError if birth > reference
+toDateOnly(date)                           // UTC midnight
+toTimeOnly(date)                           // { hour, minute, second, millisecond }
+msToDate(1609459200000)                    // Maybe<Date>; msToDate(null) → None
 ```
 
 ### JSON — never use JSON.parse directly
@@ -526,6 +548,101 @@ toUnderscoreCamelCase('helloWorld')  // '_helloWorld'
 // Handles spaces, hyphens, underscores, camelCase, PascalCase, and mixed input
 ```
 
+### Validation — fluent model rules (subpath-only)
+
+```typescript
+import { Validator, CascadeMode, type RuleContext } from 'tsentials/validation';
+
+const r = Validator.validate(user, (rules) => {
+  rules.for('name').notEmpty().maxLength(50);
+  rules.for('address.city').notEmpty();
+  rules.forEach('items', (item) => { item.for('sku').notEmpty(); });
+});
+// Result<User>; codes: 'name.NotEmpty', 'address.city.NotEmpty', 'items[0].sku.NotEmpty'
+
+class UserValidator extends Validator<User> {
+  protected configure(rules: RuleContext<User>) {
+    rules.for('name').notEmpty().cascade(CascadeMode.Continue).minLength(3);
+  }
+}
+new UserValidator().validate(user);          // Result<User>; .toRule() → Rule<User>
+
+await Validator.validateAsync(user, async (rules, _m, signal) => {
+  await rules.for('email').mustAsync(async (e) => await isFree(e, signal), 'Email.Taken', 'Already used');
+}, { signal });
+Validator.validateWith(Result.success(user), (rules) => { rules.for('name').notEmpty(); });
+```
+
+Default cascade is `Stop`. `null`/`undefined` are skipped by every rule except `notNull`, `notEmpty`, `equal`. Await every async rule inside `validateAsync`.
+
+### Resilience — retry / circuit breaker / timeout / fallback (subpath-only)
+
+```typescript
+import { ResiliencePolicy, retryIfFailed } from 'tsentials/resilience';
+
+const policy = ResiliencePolicy.create()
+  .withRetry({ maxAttempts: 3, delay: 200 })   // maxAttempts counts RETRIES (max runs = n + 1)
+  .withCircuitBreaker()
+  .withTimeout(5_000);                         // per attempt → failure 'Resilience.Timeout'
+const user = await policy.execute((signal) => fetchResult.get<User>('/users/42', { signal }), { signal });
+// open circuit → failure 'Resilience.CircuitBroken'
+ResiliencePolicy.create<string>().withFallback(() => 'cached');   // fallback is always outermost
+await retryIfFailed((signal) => loadOrder(id, signal), { maxAttempts: 2, delay: 100 });
+```
+
+Each `with…` returns a new policy (first added = outermost). Not retried: failures whose first error is Validation/NotFound/Unauthorized/Forbidden.
+
+### Pagination — offset and keyset (subpath-only)
+
+```typescript
+import { paginate, keysetOrdering, keysetPaginate } from 'tsentials/pagination';
+
+const page = paginate(items, { pageNumber: 2, pageSize: 10 });   // items, totalCount, totalPages, hasNextPage
+const byNewest = keysetOrdering<Order>('Order').descending('createdAt', 'date').ascending('id', 'number');
+const first = keysetPaginate(orders, { limit: 10 }, byNewest);   // Result<KeysetPaginationResponse<Order>>
+if (first.ok) keysetPaginate(orders, { limit: 10, after: first.value.nextCursor }, byNewest);
+```
+
+`pageSize` is clamped (max 100). Last keyset key must be unique. Failures: `KeysetPagination.InvalidCursor`, `KeysetPagination.AfterAndBefore`. For databases use `planKeysetPage` + `createKeysetPageResponse`.
+
+### Enums — wire names and safe parsing (subpath-only)
+
+```typescript
+import { defineEnum, type EnumMember } from 'tsentials/enums';
+
+const Status = defineEnum('Status', {
+  Pending: {},                      // wire name 'pending', value 0
+  Active: 'on',                     // explicit wire name
+  Disabled: { aliases: ['off'] },
+  Unknown: { fallback: true },
+});
+type Status = EnumMember<typeof Status>;
+Status.parse('on')                      // Result<Status> → success('Active')
+Status.parse('nope')                    // failure 'Enum.InvalidValue'
+Status.parse('nope', { mode: 'data' })  // success('Unknown')
+Status.format('Active')                 // 'on'; format('Active', 'number') → '1'
+```
+
+### Mediator — typed request/response with behaviors (subpath-only)
+
+```typescript
+import { createMediator, exceptionHandlingBehavior, validationBehavior } from 'tsentials/mediator';
+
+type Requests = { GetUser: { request: { id: number }; response: User } };
+const mediator = createMediator<Requests>({ behaviors: [exceptionHandlingBehavior()] })
+  .register('GetUser',
+    ({ id }) => id > 0 ? Result.success(loadUser(id)) : Result.failure(Err.notFound('User.NotFound', 'No user')),
+    validationBehavior<{ id: number }>([(req) => (req.id > 0 ? Result.ok() : Result.failure(Err.validation('Id.Invalid', 'bad')))]),
+  );
+const result = await mediator.send('GetUser', { id: 1 }, { signal });   // Promise<Result<User>>
+```
+
+`send` rejects when no handler is registered; `register` throws on a duplicate name. Other behaviors: `loggingBehavior`, `cachingBehavior`, `lockBehavior`, `transactionBehavior`.
+
+### Cancellation — AbortSignal convention
+
+Operations accepting `{ signal }` (`Result.tryAsync`, `traverseAsync`, `sequenceAsync`, `Maybe.fromTryAsync`, `RuleEngine.evaluateAsync`, `fetchResult`, `ResiliencePolicy.execute`): the caller's abort rejects with `signal.reason`; any other error becomes a failure. `Validator.validateAsync` differs: a caller abort rejects with `signal.reason`, and an exception thrown by an async rule predicate or by `configure` rejects too (it is never turned into a failure). Use `mustAsync` predicates that return `false` for validation failures. Helpers: `isAbortError`, `isCallerAbort`, `rethrowIfAborted`, `throwIfAborted`, `withAbort` (from `tsentials/result`).
+
 ---
 
 ## Important: Naming Pitfalls
@@ -542,6 +659,7 @@ toUnderscoreCamelCase('helloWorld')  // '_helloWorld'
 | `const u: Shape = { tag, value }` then `Union.match(u, ...)` | `const u = { tag, value } as Shape` | Assignment narrowing breaks exhaustive match |
 | `These<AppError, T>` with `These.toResult` | `These<AppError[], T>` | `toResult` expects an error array |
 | `fromAsync(promiseOfT)` | `fromAsync(promiseOfResultT)` | Takes `Promise<Result<T>>`, not `Promise<T>` |
+| `import { Validator } from 'tsentials'` | `import { Validator } from 'tsentials/validation'` | `validation`, `resilience`, `pagination`, `enums`, `mediator` are subpath-only |
 
 ---
 
@@ -549,7 +667,7 @@ toUnderscoreCamelCase('helloWorld')  // '_helloWorld'
 
 ```bash
 npm run build      # tsc compile
-npm test           # vitest run (1079 tests)
+npm test           # vitest run (2498 tests)
 npm run check      # biome lint + format check
 npm run lint:fix   # auto-fix lint
 ```

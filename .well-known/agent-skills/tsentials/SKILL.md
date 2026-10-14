@@ -1,6 +1,6 @@
 ---
 name: tsentials
-description: Master skill for tsentials — railway-oriented programming library for TypeScript. Load this skill first when working with any tsentials module. Contains critical naming rules, API patterns, decision trees for module selection, and references to all 19 module-specific skills.
+description: Master skill for tsentials — railway-oriented programming library for TypeScript. Load this skill first when working with any tsentials module. Contains critical naming rules, API patterns, decision trees for module selection, and references to all 24 module-specific skills.
 ---
 
 # tsentials — Master Skill
@@ -31,8 +31,10 @@ These naming rules MUST be followed. Getting them wrong causes runtime bugs.
 | Time methods | `.now()` / `.nowMs()` | `.utcNow()` / `.utcNowMs()` | All time methods are UTC-prefixed |
 | fetchResult usage | `fetchResult<T>(url)` | `fetchResult.get<T>(url)` | Const object with method per HTTP verb |
 | RequestBuilder terminal | `.fetchResult<T>()` | `.send<T>()` | Terminal method is `send`, not `fetchResult` |
-| deepClone mechanism | "calls .clone()" | uses `structuredClone()` | `cloneArray` calls `.clone()`, `deepClone` uses structuredClone |
+| deepClone mechanism | "calls .clone()" | self-contained recursive copy | `cloneArray` calls `.clone()`; `deepClone` is its own recursive implementation (never native `structuredClone`) |
 | Predicate.and arity | `Predicate.and(a, b, c)` | `Predicate.and(Predicate.and(a, b), c)` | `and`/`or` take exactly 2 args. Use `all`/`any` for variadic |
+| Subpath-only modules | `import { Validator } from 'tsentials'` | `from 'tsentials/validation'` | `validation`, `resilience`, `pagination`, `enums`, `mediator` are not re-exported from the root entry |
+| AbortSignal | caller abort becomes a failure | caller abort rejects with `signal.reason` | Any other error (incl. abort-like while the caller's signal is not aborted) becomes a failure |
 | String case functions | `toCamelCase(str, opts)` | `toCamelCase(str)` | Single-argument, no options object — normalization is automatic |
 
 ## Core API Patterns
@@ -107,10 +109,12 @@ const rule = RuleEngine.fromPredicate<User>(
   Err.validation('Age', 'Must be 18+')  // or: u => Err.validation(...)
 );
 
-RuleEngine.and(r1, r2, r3)     // all must pass, collects ALL errors
+RuleEngine.and(r1, r2, r3)     // all must pass, stops at first failure
+RuleEngine.andAll(r1, r2, r3)  // all must pass, collects ALL errors
 RuleEngine.linear(r1, r2)      // sequential, stops at first failure
 RuleEngine.or(r1, r2)          // at least one
-RuleEngine.if(cond, then, else?) // conditional — returns Rule<T>
+RuleEngine.if(cond, then, else?) // cond: Rule<T> | boolean — returns Rule<T>
+// An empty rule list → Validation failure 'EMPTY_RULE_ARRAY'
 
 RuleEngine.evaluate(rule, ctx)       // sync → VoidResult
 RuleEngine.evaluateAsync(rule, ctx)  // async → Promise<VoidResult>
@@ -139,6 +143,12 @@ RuleEngine.evaluateAsync(rule, ctx)  // async → Promise<VoidResult>
 | Type-safe ordering/sorting | `ord` | `tsentials-ord` |
 | Composable boolean predicates | `predicate` | `tsentials-predicate` |
 | Convert between naming conventions | `string` | `tsentials-string` |
+| Fluent model validation (Result-based) | `validation` (subpath-only) | `tsentials-validation` |
+| Retry / circuit breaker / timeout / fallback | `resilience` (subpath-only) | `tsentials-resilience` |
+| Offset and keyset (cursor) paging | `pagination` (subpath-only) | `tsentials-pagination` |
+| Enums with wire names, aliases, safe parse | `enums` (subpath-only) | `tsentials-enums` |
+| Typed request/response mediator with behaviors | `mediator` (subpath-only) | `tsentials-mediator` |
+| Date helpers (next weekday, age, date-only) | `time` | `tsentials-time` |
 | Module overview / all imports | — | `tsentials-meta` |
 
 ## Design Principles
@@ -175,4 +185,12 @@ import type { DateTimeProvider } from 'tsentials/time';
 import { deepClone, cloneArray } from 'tsentials/clone';
 import { safeJsonParse, parseAndValidate } from 'tsentials/json';
 import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase } from 'tsentials/string';
+import { nextDayOfWeek, previousDayOfWeek, DayOfWeek, getAge, toDateOnly, toTimeOnly, msToDate } from 'tsentials/time';
+
+// Subpath-only (not in the root entry)
+import { Validator, CascadeMode } from 'tsentials/validation';
+import { ResiliencePolicy, retryIfFailed } from 'tsentials/resilience';
+import { paginate, keysetOrdering, keysetPaginate } from 'tsentials/pagination';
+import { defineEnum } from 'tsentials/enums';
+import { createMediator, exceptionHandlingBehavior, validationBehavior } from 'tsentials/mediator';
 ```

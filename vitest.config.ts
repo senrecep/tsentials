@@ -1,5 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
+const FULL_COVERAGE = { statements: 100, branches: 100, functions: 100, lines: 100 };
+
 export default defineConfig({
   test: {
     globals: true,
@@ -13,6 +15,14 @@ export default defineConfig({
       reporter: ['text', 'json', 'html', 'cobertura'],
       include: ['src/**/*.ts'],
       exclude: ['src/**/index.ts'],
+      thresholds: {
+        'src/validation/**': FULL_COVERAGE,
+        'src/resilience/**': FULL_COVERAGE,
+        'src/pagination/**': FULL_COVERAGE,
+        'src/enums/**': FULL_COVERAGE,
+        'src/mediator/**': FULL_COVERAGE,
+        'src/time/extensions.ts': FULL_COVERAGE,
+      },
     },
   },
   resolve: {
