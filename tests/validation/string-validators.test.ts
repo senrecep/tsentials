@@ -153,6 +153,10 @@ describe('string validators', () => {
       '@nodomain.com',
       'a b@c.d',
       'a@b',
+      'a@b.',
+      'a@.b',
+      'a@@b.c',
+      `${'a'.repeat(250)}@b.cd`,
     ])('fails for %j', (value) => {
       const error = first(validate(value, (c) => c.emailAddress()));
       expect(error?.code).toBe('value.EmailAddress');
@@ -163,10 +167,17 @@ describe('string validators', () => {
       expect(validate(null, (c) => c.emailAddress()).ok).toBe(true);
     });
 
+    it('rejects hostile input quickly', () => {
+      const start = Date.now();
+      expect(validate(`a@${'.'.repeat(100_000)} `, (c) => c.emailAddress()).ok).toBe(false);
+      expect(Date.now() - start).toBeLessThan(200);
+    });
+
     it.each([
       'user@example.com',
       'USER@EXAMPLE.COM',
       'user+tag@domain.co.uk',
+      'a@..b',
     ])('passes for %j', (value) => {
       expect(validate(value, (c) => c.emailAddress()).ok).toBe(true);
     });

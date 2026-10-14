@@ -61,7 +61,7 @@ mediator.has('GetUser');                                               // true
 | `exceptionHandlingBehavior()` | thrown handler error becomes `Err.fromException(e)` (type `Failure`) |
 | `validationBehavior(validators, { defaultMode, observers })` | run validators before the handler; modes `'enforce' \| 'logOnly' \| 'off'` (from `request.validationMode`); a `Rule<T>` is a valid validator |
 | `loggingBehavior({ logger })` | log request/response via a `MediatorLogger` |
-| `cachingBehavior({ cache })` | cache results by `request.cacheKey` (`CacheStore` get/set of strings) |
+| `cachingBehavior({ cache })` | cache results by `request.cacheKey` (`CacheStore` get/set of strings); the key is caller-supplied, so include tenant/user in it for per-user data |
 | `lockBehavior(new InProcessResourceLock())` | serialize requests with the same `request.lockKey` |
 | `transactionBehavior(runner)` | run requests with `transactional: true` in a `TransactionRunner`; commits unless the result fails |
 

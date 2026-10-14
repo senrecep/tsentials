@@ -37,7 +37,17 @@ export interface MustOptions {
   readonly expression?: string;
 }
 
-const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/i;
+const MAX_EMAIL_LENGTH = 254;
+const WHITESPACE = /\s/;
+
+// Linear-time `local@domain.tld` check (no backtracking regex, safe on hostile input).
+function isEmailShaped(value: string): boolean {
+  if (value.length > MAX_EMAIL_LENGTH || WHITESPACE.test(value)) return false;
+  const at = value.indexOf('@');
+  if (at < 1 || value.indexOf('@', at + 1) !== -1) return false;
+  const lastDot = value.lastIndexOf('.');
+  return lastDot > at + 1 && lastDot < value.length - 1;
+}
 
 // Unbounded — only pass a known, finite set of string patterns.
 const regexCache = new Map<string, RegExp>();
@@ -385,7 +395,7 @@ export class RuleChain<TProp> {
     message?: ValidationMessage,
   ): RuleChain<S> {
     const value = this.value;
-    if (!this.hasFailed && !isNullish(value) && !isMatch(EMAIL_REGEX, value)) {
+    if (!this.hasFailed && !isNullish(value) && !isEmailShaped(value)) {
       this.#fail(
         'EmailAddress',
         message,

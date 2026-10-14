@@ -673,7 +673,7 @@ const result = await mediator.send('GetUser', { id: 1 }, { signal }); // Promise
 - `"sideEffects": false` in package.json for full tree-shaking
 
 ## Testing
-Vitest. `npm test` runs all 2498 tests across 65 test files.
+Vitest. `npm test` runs all 2504 tests across 65 test files.
 Test files mirror src/ structure under `tests/`.
 
 ## Publishing
