@@ -58,6 +58,12 @@ export {
   DEFAULT_SERVER_ERROR_RETENTION_MS,
   MAX_LEASE_MS,
 } from './options.js';
+export {
+  RedisIdempotencyScripts,
+  RedisIdempotencyStore,
+  type RedisIdempotencyStoreOptions,
+  type RedisLike,
+} from './redis-store.js';
 export { idempotencyScopes } from './scopes.js';
 export type {
   IdempotencyRecordKey,
