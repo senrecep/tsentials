@@ -100,7 +100,7 @@ Errors are `application/problem+json` with a `code`. Guards POST and PATCH by de
 
 ```typescript
 await idempotencyKeys.for('refund', orderId, refundId);      // deterministic, from business identity
-await idempotencyKeys.fromMessage(messageId, 'billing');     // UUID per (message, consumer)
+await idempotencyKeys.fromMessage(messageId, 'billing');     // for('message', consumer, id): one key per (message, consumer)
 idempotencyScopes.user(id) / .tenant(id) / .userAndTenant(u, t) / .client(id) / .custom('kind', id) / .global
 ```
 
@@ -132,6 +132,6 @@ await ResiliencePolicy.create()
 - One key per logical operation: create it when the user starts the operation, reuse it on every retry, never reuse it for another payload (422 `KeyReused` is final).
 - **Cloudflare KV (and any store without atomic insert) is not safe** as an idempotency store or lock.
 - Webhooks: key `idempotencyKeys.fromMessage(event.id, 'stripe-webhook')`, scope = provider account, constant fingerprint; verify signature → claim → work → commit; duplicates get 2xx, errors roll back and return 5xx.
-- Roll out `observe` before `enforce`: observe answers like `off` and reports `Idempotency.Observe.Would…` events. A resolver that throws in `observe` runs the call without idempotency (`Idempotency.Observe.ResolutionFailed`).
+- Roll out `observe` before `enforce`: observe answers like `off` and does not prevent duplicates; with the SQL store, observe uses the pool (own short statements), not the business transaction. It reports `Idempotency.Observe.Would…` events. A resolver that throws in `observe` runs the call without idempotency (`Idempotency.Observe.ResolutionFailed`).
 - `withIdempotency` buffers the request body to fingerprint it; limit body size before it. Do not wrap streaming routes.
 - Events carry `keyHash` (16 hex), never the raw key.

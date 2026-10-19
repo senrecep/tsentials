@@ -32,3 +32,17 @@ try {
   client.release();
 }
 ```
+
+## Observe mode
+
+In `observe` every call runs and nothing may wait. Create the store with the pool, not the
+transaction's client: each `reserve` and `complete` autocommits in its own short statement, so a
+duplicate sees the claim at once instead of blocking on an uncommitted row. This is not atomic
+with the business work, which is fine while observing because `observe` never replays. Switch to
+the transactional store when you move to `enforce`.
+
+```js
+const store = mode === 'enforce'
+  ? new PostgresIdempotencyStore(client) // inside BEGIN ... COMMIT with the business work
+  : new PostgresIdempotencyStore(pool);  // observe: own short statements
+```

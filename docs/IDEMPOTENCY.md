@@ -172,7 +172,7 @@ A record is identified by `(namespace, scope, key)`. The same key under another 
 ```ts
 await idempotencyKeys.for('capture', orderId);               // '7:capture|8:order-42'
 await idempotencyKeys.for('refund', orderId, refundId);
-await idempotencyKeys.fromMessage(messageId, 'billing');     // a UUID; another consumer gets another key
+await idempotencyKeys.fromMessage(messageId, 'billing');     // '7:message|7:billing|5:evt_1'; another consumer gets another key
 ```
 
 `idempotencyKeys` hashes with Web Crypto and is async. `createIdempotencyKeys({ sha256, sha1 })` gives a synchronous variant with injected hash functions, for example from `node:crypto`. A key is valid when `isValidIdempotencyKey(key)` holds; `normalizeIdempotencyKey(raw)` trims a header value and unquotes a structured-field string.
@@ -404,7 +404,15 @@ export async function stripeWebhook(request: Request): Promise<Response> {
 }
 ```
 
-A parallel duplicate waits on the row lock of the first delivery's uncommitted insert. After the first commits, it sees the completed record and gets the stored result. If the first rolls back, the duplicate claims the key and does the work.
+In `enforce`, a parallel duplicate waits on the row lock of the first delivery's uncommitted insert. After the first commits, it sees the completed record and gets the stored result. If the first rolls back, the duplicate claims the key and does the work.
+
+**Observe with this store.** In `observe` every call must run and nothing may wait, so do not give the store the business transaction: a duplicate would block on the uncommitted row. Create the store with the pool instead. Each `reserve` and `complete` then autocommits in its own short statement, a duplicate sees the claim at once and is only reported, and the record is completed after the handler returns. This is not atomic with the business change: a rollback after the handler leaves a stored record behind. That is acceptable while observing, because `observe` never replays; switch to the transactional store when you move to `enforce`.
+
+```ts
+const store = flags.get('idempotency-mode') === 'enforce'
+  ? new PostgresIdempotencyStore(client) // same transaction as the business work
+  : new PostgresIdempotencyStore(pool);  // observe: own short statements, never waits
+```
 
 ## Rolling out: off, observe, enforce
 
@@ -417,6 +425,8 @@ Turning idempotency on in front of live traffic changes answers: retries that us
    - `Idempotency.Observe.WouldRejectInFlight`
    - `Idempotency.Observe.WouldRejectScopeRequired`
 
+   **`observe` does not prevent duplicates.** A retry still runs the operation again; the mode only reports what `enforce` would do.
+
    A key, scope or fingerprint resolver that throws does not block the call in `observe`: the call runs without idempotency and the logger gets `Idempotency.Observe.ResolutionFailed` (the same error rejects the call in `enforce`).
 3. Watch these events. `WouldRejectKeyReused` usually means a client reuses keys across operations; `WouldRejectScopeRequired` means the scope resolver misses some callers. Fix the clients and resolvers first.
 4. **`enforce`**: replays and rejections take effect. Records written in `observe` are used, so a key completed during `observe` is replayed right away.
@@ -428,6 +438,17 @@ const idem = createIdempotency({ store, mode: () => flags.get('idempotency-mode'
 ```
 
 Events report a `keyHash` (16 hex characters of the key's SHA-256), never the key itself.
+
+`onDecision` fits any metrics library. With OpenTelemetry (`@opentelemetry/api`, installed by your application):
+
+```ts
+const decisions = metrics.getMeter('orders').createCounter('idempotency.decisions');
+const idem = createIdempotency({
+  store,
+  mode: () => flags.get('idempotency-mode'),
+  onDecision: (e) => decisions.add(1, { name: e.name, decision: e.decision, mode: e.mode, source: e.source }),
+});
+```
 
 ## Error codes and events
 
