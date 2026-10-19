@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { ErrorType } from '../../src/errors/error-type.js';
 import type { FetchResultInit } from '../../src/http/fetch-result.js';
 import { fetchResult } from '../../src/http/fetch-result.js';
+import { idempotentRetryClassifier } from '../../src/http/idempotency-client.js';
 import { RequestBuilder } from '../../src/http/request-builder.js';
 import { HttpErrorMetadataKeys } from '../../src/http/response-metadata.js';
 import type { Result } from '../../src/result/result.js';
@@ -223,6 +224,17 @@ describe('timeout while reading the body', () => {
       expect(result.errors[0]!.code).toBe('Http.Timeout');
       expect(result.errors[0]!.metadata?.get(HttpErrorMetadataKeys.HttpStatus)).toBe(400);
     }
+  });
+
+  it('does not retry a 409 whose body stalls: the problem code is never read', async () => {
+    vi.stubGlobal('fetch', stalledBodyFetch(409));
+    const result = await fetchResult.post(URL_, {}, { timeout: 20 });
+    if (result.ok) throw new Error('expected failure');
+    const error = result.errors[0]!;
+    expect(error.code).toBe('Http.Timeout');
+    expect(error.metadata?.get(HttpErrorMetadataKeys.HttpStatus)).toBe(409);
+    expect(error.metadata?.has(HttpErrorMetadataKeys.ProblemCode)).toBe(false);
+    expect(idempotentRetryClassifier('POST', true)(error)).toBe(false);
   });
 
   it('rejects when the caller aborts while the body is being read', async () => {

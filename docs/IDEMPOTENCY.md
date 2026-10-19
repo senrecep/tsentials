@@ -219,7 +219,7 @@ const builder = RequestBuilder.post('/orders').json(order).idempotencyKey();
 await policy.execute((signal) => builder.signal(signal).send<Order>());
 ```
 
-`idempotentRetryClassifier(method, hasKey)` never retries a POST or PATCH without a key, never retries a replayed response, retries network errors and timeouts before a response, never retries a received response whose body cannot be read or parsed (2xx included), retries 409 `Idempotency.InFlight`, 408, 429, 503 and 504, and nothing else. `withRetry` waits at least the server's `Retry-After` (capped by `maxRetryAfterMs`). A failed response's first error, including a body parse failure, carries the metadata `httpStatus`, `retryAfterMs`, `idempotencyReplayed` and `problemCode` (`HttpErrorMetadataKeys`).
+`idempotentRetryClassifier(method, hasKey)` never retries a POST or PATCH without a key, never retries a replayed response, retries network errors and timeouts before a response, never retries a received response whose body cannot be read or parsed (2xx included), retries 409 `Idempotency.InFlight`, 408, 429, 503 and 504, and nothing else. `withRetry` waits at least the server's `Retry-After` (capped by `maxRetryAfterMs`). A failed response's first error, including a body parse failure, carries the metadata `httpStatus`, `retryAfterMs`, `idempotencyReplayed` and `problemCode` (`HttpErrorMetadataKeys`). A timeout while reading the body keeps `httpStatus` but has no `problemCode`, so a 409 whose body stalls is not retried.
 
 ## Lease, retention and the retry budget
 
