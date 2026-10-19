@@ -52,10 +52,12 @@ export const idempotencyStorePolicies = {
 export interface WithIdempotencyOptions extends IdempotencySettings {
   /**
    * Whose key it is, normally the authenticated principal (`idempotencyScopes.user(id)`).
-   * `undefined` applies `unscopedKeyBehavior`.
+   * `null` or `undefined` applies `unscopedKeyBehavior`.
    */
   readonly scope?:
-    | ((request: Request) => IdempotencyScope | undefined | Promise<IdempotencyScope | undefined>)
+    | ((
+        request: Request,
+      ) => IdempotencyScope | null | undefined | Promise<IdempotencyScope | null | undefined>)
     | undefined;
   /** Default: `'http'`. Also the `target` of decision events. */
   readonly namespace?: string | undefined;

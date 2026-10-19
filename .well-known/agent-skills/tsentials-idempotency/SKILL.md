@@ -104,7 +104,7 @@ await idempotencyKeys.fromMessage(messageId, 'billing');     // UUID per (messag
 idempotencyScopes.user(id) / .tenant(id) / .userAndTenant(u, t) / .client(id) / .custom('kind', id) / .global
 ```
 
-Scope builders return `undefined` for a missing id. A scope is an `IdempotencyScope` that only these builders create; a raw string (`'global'`, `'user:42'`) is a compile error and throws (enforce) or runs without idempotency (observe). `String(scope)` is the storage form; `toJSON()` / `idempotencyScopes.fromJSON(json)` carry it through JSON, and the mediator's default reader calls `fromJSON` (a custom `settings` must call it itself). Storage key: `idem:v3:{len}:{namespace}|{len}:{scope}|{len}:{key}` (`idempotencyStorageKey`).
+Scope builders return `undefined` for a missing id. A scope is an `IdempotencyScope` that only these builders create; a raw string (`'global'`, `'user:42'`) is a compile error and throws (enforce) or runs without idempotency (observe). `String(scope)` is the storage form; `toJSON()` / `idempotencyScopes.fromJSON(json)` carry it through JSON; the mediator's default reader calls `fromJSON` only with `reviveScopeJson: true` (behavior-wide or per request type), and a custom `settings` must call it itself. `custom(kind, id)` rejects `user`/`tenant`/`client`/`global`, kinds with `:` or `/`, and all-digit kinds. A resolver may return `null` for no scope. Storage key: `idem:v3:{len}:{namespace}|{len}:{scope}|{len}:{key}` (`idempotencyStorageKey`).
 
 ## Stores
 

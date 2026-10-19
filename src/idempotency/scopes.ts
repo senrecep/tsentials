@@ -51,7 +51,14 @@ export class IdempotencyScope {
   static isScope(value: unknown): value is IdempotencyScope {
     return typeof value === 'object' && value !== null && #storage in value;
   }
+
+  /** @internal Storage form read from the private field, so a patched `toString` is ignored. */
+  static storageOf(scope: IdempotencyScope): string {
+    return scope.#storage;
+  }
 }
+Object.freeze(IdempotencyScope.prototype);
+Object.freeze(IdempotencyScope);
 
 /**
  * Storage form of a resolved scope. Anything other than an {@link IdempotencyScope} throws
@@ -59,7 +66,7 @@ export class IdempotencyScope {
  * another owner's records.
  */
 export function scopeStorageValue(scope: unknown): string {
-  if (IdempotencyScope.isScope(scope)) return scope.toString();
+  if (IdempotencyScope.isScope(scope)) return IdempotencyScope.storageOf(scope);
   throw new TypeError(
     typeof scope === 'string'
       ? 'A raw string is not an idempotency scope: build it with idempotencyScopes, for example idempotencyScopes.tenant(id).'
@@ -101,8 +108,13 @@ export const idempotencyScopes = {
   /** Per machine client, for API keys and client credentials. */
   client: (clientId: string | null | undefined): IdempotencyScope | undefined =>
     single('client', clientId),
-  /** Any other kind of owner, stored as `kind:value`. */
+  /**
+   * Any other kind of owner, stored as `kind:value`. `kind` must not be a built-in kind
+   * (`user`, `tenant`, `client`, `global`), contain `:` or `/`, or be all digits, so a custom
+   * scope never shares the storage form of a built-in one; otherwise it throws `TypeError`.
+   */
   custom(kind: string, value: string | null | undefined): IdempotencyScope | undefined {
+    assertCustomKind(kind);
     if (isMissing(value)) return undefined;
     return new IdempotencyScope(CONSTRUCT, `${kind}:${value}`, {
       kind: 'custom',
@@ -120,8 +132,10 @@ export const idempotencyScopes = {
     if (typeof json !== 'object' || json === null || Array.isArray(json)) {
       return invalidJson(typeof json === 'string' ? 'a raw string' : typeof json);
     }
+    const proto = Object.getPrototypeOf(json);
+    if (proto !== Object.prototype && proto !== null) return invalidJson('not a plain object');
     const j = json as Record<string, unknown>;
-    const { kind } = j;
+    const kind = own(j, 'kind');
     switch (kind) {
       case 'global':
         return GLOBAL;
@@ -145,8 +159,29 @@ export const idempotencyScopes = {
   },
 } as const;
 
+const BUILT_IN_KINDS: ReadonlySet<string> = new Set(['user', 'tenant', 'client', 'global']);
+
+/** `null`, `undefined` and `''` are missing; any other non-string throws. */
 function isMissing(value: string | null | undefined): value is null | undefined | '' {
-  return value == null || value === '';
+  if (value == null || value === '') return true;
+  if (typeof value !== 'string') {
+    throw new TypeError(`An idempotency scope value must be a string (got ${typeof value}).`);
+  }
+  return false;
+}
+
+function assertCustomKind(kind: string): void {
+  if (
+    typeof kind !== 'string' ||
+    kind === '' ||
+    BUILT_IN_KINDS.has(kind) ||
+    /[:/]/.test(kind) ||
+    /^[0-9]+$/.test(kind)
+  ) {
+    throw new TypeError(
+      `${JSON.stringify(kind)} is not a custom idempotency scope kind: use a non-empty name that is not user, tenant, client or global, has no ':' or '/', and is not all digits.`,
+    );
+  }
 }
 
 function single(
@@ -159,11 +194,16 @@ function single(
 }
 
 function field(json: Record<string, unknown>, name: string): string {
-  const value = json[name];
+  const value = own(json, name);
   if (typeof value !== 'string' || value === '') {
     return invalidJson(`${name} is not a non-empty string`);
   }
   return value;
+}
+
+/** An own field only, so a polluted `Object.prototype` cannot fill in a missing one. */
+function own(json: Record<string, unknown>, name: string): unknown {
+  return Object.hasOwn(json, name) ? json[name] : undefined;
 }
 
 function invalidJson(what: string): never {

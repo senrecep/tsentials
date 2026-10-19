@@ -20,8 +20,8 @@ import { type IdempotencyScope, idempotencyScopes } from './scopes.js';
 export interface IdempotencyRequestSettings {
   /** The key; `undefined` runs the request without idempotency. */
   readonly key: string | undefined;
-  /** Whose key it is; `undefined` applies `unscopedKeyBehavior`. */
-  readonly scope?: IdempotencyScope | undefined;
+  /** Whose key it is; `null` or `undefined` applies `unscopedKeyBehavior`. */
+  readonly scope?: IdempotencyScope | null | undefined;
   /** Overrides the retention of this request. */
   readonly retentionMs?: number | undefined;
   /** Overrides the lease of this request. */
@@ -39,6 +39,8 @@ export interface IdempotencyRequestTypeSettings extends IdempotencySettings {
   readonly unscopedKeyBehavior?: UnscopedKeyBehavior | undefined;
   /** Releases failures of this request type instead of storing them. */
   readonly releaseFailures?: boolean | undefined;
+  /** Replaces the behavior's `reviveScopeJson` for this request type. */
+  readonly reviveScopeJson?: boolean | undefined;
 }
 
 /** Options of {@link idempotencyBehavior}. */
@@ -66,6 +68,14 @@ export interface IdempotencyBehaviorOptions extends IdempotencySettings {
   readonly releaseFailures?: ((request: unknown, context: RequestContext) => boolean) | undefined;
   /** Default: `jsonResultSerializer`. */
   readonly serializer?: ResultSerializer | undefined;
+  /**
+   * Lets the default reader rebuild `idempotencyScope` from its JSON form
+   * (`idempotencyScopes.fromJSON`), for requests that were queued or sent across processes.
+   * Default: `false`, so only an `IdempotencyScope` is accepted and a plain object copied from
+   * client input cannot select another owner's records. Enable it only for request types whose
+   * serialized form comes from your own code. A custom `settings` function ignores it.
+   */
+  readonly reviveScopeJson?: boolean | undefined;
 }
 
 function defaultRequestSettings(request: unknown): IdempotencyRequestSettings | undefined {
@@ -79,9 +89,9 @@ function defaultRequestSettings(request: unknown): IdempotencyRequestSettings | 
   if (typeof r.idempotencyKey !== 'string') return undefined;
   return {
     key: r.idempotencyKey,
-    // Checked when the call resolves (idempotencyScopes.fromJSON), so a raw string or a
-    // malformed value is rejected instead of being treated as "no scope".
-    scope: r.idempotencyScope == null ? undefined : (r.idempotencyScope as IdempotencyScope),
+    // Checked when the call resolves, so a raw string or a malformed value is rejected
+    // instead of being treated as "no scope".
+    scope: r.idempotencyScope as IdempotencyScope | null | undefined,
     retentionMs:
       typeof r.idempotencyRetentionMs === 'number' ? r.idempotencyRetentionMs : undefined,
     leaseMs: typeof r.idempotencyLeaseMs === 'number' ? r.idempotencyLeaseMs : undefined,
@@ -142,6 +152,9 @@ export function makeIdempotencyBehavior(
       retentionMs === undefined && leaseMs === undefined
         ? typeResolved
         : resolveSettings([{ retentionMs, leaseMs }, ...layersOf(typeSettings)]);
+    const revive =
+      options.settings === undefined &&
+      (typeSettings?.reviveScopeJson ?? options.reviveScopeJson ?? false);
     const policy = {
       releaseFailures: typeSettings?.releaseFailures ?? releaseFailuresOf(request, context),
       serializer,
@@ -156,11 +169,7 @@ export function makeIdempotencyBehavior(
         typeSettings?.unscopedKeyBehavior ?? options.unscopedKeyBehavior ?? 'reject',
       signal: context.signal,
       key: () => key,
-      // The default reader also accepts the JSON form of a scope (a queued request).
-      scope: () =>
-        options.settings === undefined && scope !== undefined
-          ? idempotencyScopes.fromJSON(scope)
-          : scope,
+      scope: () => (revive && scope != null ? idempotencyScopes.fromJSON(scope) : scope),
       fingerprint: () =>
         fingerprintOf('fingerprint' in requestSettings ? requestSettings.fingerprint : request),
       run: () => next(),

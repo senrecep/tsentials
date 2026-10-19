@@ -475,6 +475,18 @@ describe('withIdempotency', () => {
       });
     });
 
+    it('treats a null scope as no scope', async () => {
+      const s = setup((_req, run) => created(run), {
+        scope: () => null,
+        unscopedKeyBehavior: 'reject',
+      });
+      expect((await s.handler(post('k'))).status).toBe(400);
+      const skipped = setup((_req, run) => created(run), { scope: async () => null });
+      await skipped.handler(post('k'));
+      await skipped.handler(post('k'));
+      expect(skipped.runs()).toBe(2);
+    });
+
     it('isolates scopes and namespaces', async () => {
       let tenant = 'a';
       const s = setup((_req, run) => created(run), {

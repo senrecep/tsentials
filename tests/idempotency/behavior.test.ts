@@ -339,9 +339,9 @@ describe('idempotencyBehavior', () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
-  it('replays a request whose scope went through JSON', async () => {
+  it('replays a request whose scope went through JSON when reviveScopeJson is on', async () => {
     const { mediator, fn } = setup(
-      idempotencyBehavior({ store: new InMemoryIdempotencyStore() }),
+      idempotencyBehavior({ store: new InMemoryIdempotencyStore(), reviveScopeJson: true }),
       charge,
     );
     const request = capture({ idempotencyScope: idempotencyScopes.user('42') });
@@ -362,7 +362,7 @@ describe('idempotencyBehavior', () => {
       complete: async () => true,
       release: async () => true,
     };
-    const { mediator, fn } = setup(idempotencyBehavior({ store }), charge);
+    const { mediator, fn } = setup(idempotencyBehavior({ store, reviveScopeJson: true }), charge);
     const json = { kind: 'tenant', value: 'user:42' } as unknown as IdempotencyScope;
     await mediator.send('Capture', capture({ idempotencyScope: json }));
     expect(reserve.mock.calls[0]?.[0]).toEqual({
@@ -409,10 +409,101 @@ describe('idempotencyBehavior', () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
+  it('refuses a JSON scope unless reviveScopeJson is on', async () => {
+    const reserve = vi.fn<IdempotencyStore['reserve']>();
+    const store: IdempotencyStore = {
+      reserve,
+      complete: async () => true,
+      release: async () => true,
+    };
+    const { mediator, fn } = setup(idempotencyBehavior({ store }), charge);
+    const json = JSON.parse(JSON.stringify(idempotencyScopes.global)) as IdempotencyScope;
+    await expect(mediator.send('Capture', capture({ idempotencyScope: json }))).rejects.toThrow(
+      'An idempotency scope must come from idempotencyScopes (got object)',
+    );
+    expect(reserve).not.toHaveBeenCalled();
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('revives JSON scopes only for the request types that opt in', async () => {
+    const { mediator, fn } = setup(
+      idempotencyBehavior({
+        store: new InMemoryIdempotencyStore(),
+        reviveScopeJson: true,
+        forRequest: { Refund: { reviveScopeJson: false } },
+      }),
+      charge,
+    );
+    const json = { kind: 'user', value: '42' } as unknown as IdempotencyScope;
+    expect((await mediator.send('Capture', capture({ idempotencyScope: json }))).ok).toBe(true);
+    await expect(mediator.send('Refund', capture({ idempotencyScope: json }))).rejects.toThrow(
+      TypeError,
+    );
+
+    const perType = setup(
+      idempotencyBehavior({
+        store: new InMemoryIdempotencyStore(),
+        forRequest: { Refund: { reviveScopeJson: true } },
+      }),
+      charge,
+    );
+    expect((await perType.mediator.send('Refund', capture({ idempotencyScope: json }))).ok).toBe(
+      true,
+    );
+    await expect(
+      perType.mediator.send('Capture', capture({ idempotencyScope: json })),
+    ).rejects.toThrow(TypeError);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(perType.fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a malformed JSON scope without idempotency in observe mode', async () => {
+    const log = vi.fn();
+    const reserve = vi.fn<IdempotencyStore['reserve']>();
+    const store: IdempotencyStore = {
+      reserve,
+      complete: async () => true,
+      release: async () => true,
+    };
+    const { mediator, fn } = setup(
+      idempotencyBehavior({
+        store,
+        mode: 'observe',
+        reviveScopeJson: true,
+        logger: { log },
+      }),
+      charge,
+    );
+    const bad = { kind: 'user' } as unknown as IdempotencyScope;
+    expect(await mediator.send('Capture', capture({ idempotencyScope: bad }))).toEqual(
+      Result.success({ charged: 10 }),
+    );
+    expect(reserve).not.toHaveBeenCalled();
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls[0]?.[2]).toMatchObject({
+      EventName: 'Idempotency.Observe.ResolutionFailed',
+    });
+  });
+
+  it('treats a null scope from a custom settings as no scope', async () => {
+    const { mediator, fn } = setup(
+      idempotencyBehavior({
+        store: new InMemoryIdempotencyStore(),
+        unscopedKeyBehavior: 'skip',
+        settings: () => ({ key: 'k1', scope: null }),
+      }),
+      charge,
+    );
+    await mediator.send('Capture', capture());
+    await mediator.send('Capture', capture());
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
   it('passes a custom settings scope to the engine without reading JSON', async () => {
     const { mediator, fn } = setup(
       idempotencyBehavior({
         store: new InMemoryIdempotencyStore(),
+        reviveScopeJson: true,
         settings: () => ({ key: 'k1', scope: { kind: 'global' } as never }),
       }),
       charge,

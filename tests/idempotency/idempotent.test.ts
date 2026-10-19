@@ -86,6 +86,25 @@ describe('idempotent', () => {
     expect(!r.ok && r.errors[0]?.code).toBe(IdempotencyErrorCodes.ScopeRequired);
   });
 
+  it('treats a null scope as no scope', async () => {
+    const store = new InMemoryIdempotencyStore();
+    const rejected = idempotent((_: Cmd) => Result.success(1), {
+      ...options(store),
+      scope: () => null,
+    });
+    const r = await rejected({ orderId: 'o1', amount: 1 });
+    expect(!r.ok && r.errors[0]?.code).toBe(IdempotencyErrorCodes.ScopeRequired);
+    const fn = vi.fn((_: Cmd) => Result.success(1));
+    const shared = idempotent(fn, {
+      ...options(store),
+      scope: async () => null,
+      unscopedKeyBehavior: 'global',
+    });
+    await shared({ orderId: 'o1', amount: 1 });
+    await shared({ orderId: 'o1', amount: 1 });
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('stores failures: Unexpected for the server error retention, others for retention', async () => {
     const clock = createFakeDateTimeProvider(new Date('2026-01-01T00:00:00Z'));
     const store = new InMemoryIdempotencyStore({ clock });

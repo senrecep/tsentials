@@ -48,8 +48,12 @@ export interface IdempotencyCall<O> {
     | undefined
     | IdempotencyKeyRejection
     | Promise<string | undefined | IdempotencyKeyRejection>;
-  /** The scope; `undefined` applies `unscopedKeyBehavior`. */
-  readonly scope: () => IdempotencyScope | undefined | Promise<IdempotencyScope | undefined>;
+  /** The scope; `null` or `undefined` applies `unscopedKeyBehavior`. */
+  readonly scope: () =>
+    | IdempotencyScope
+    | null
+    | undefined
+    | Promise<IdempotencyScope | null | undefined>;
   readonly fingerprint: () => string | Promise<string>;
   /** Runs the handler. Calling it marks the handler as started. */
   readonly run: () => Promise<O>;
@@ -159,7 +163,7 @@ async function resolve(
   const reporter = new Reporter(call, mode, keyHash);
 
   let scope = await call.scope();
-  if (scope === undefined) {
+  if (scope == null) {
     if (call.unscopedKeyBehavior === 'global') {
       scope = idempotencyScopes.global;
     } else if (call.unscopedKeyBehavior === 'skip') {

@@ -29,7 +29,36 @@ describe('idempotencyScopes', () => {
     expect(String(s.global)).toBe('global');
     expect(s.global.kind).toBe('global');
     expect(scopeStorageValue(s.global)).toBe('global');
-    expect(String(s.custom('global', 'x'))).toBe('global:x');
+  });
+
+  it('rejects custom kinds that could share a built-in storage form', () => {
+    for (const kind of ['user', 'tenant', 'client', 'global', '', '12', 'a:b', 'a/b', 3 as never]) {
+      expect(() => s.custom(kind, 'x')).toThrow('is not a custom idempotency scope kind');
+    }
+    expect(String(s.custom('account', 'b:c'))).toBe('account:b:c');
+    expect(String(s.custom('v2', 'x'))).toBe('v2:x');
+  });
+
+  it('rejects scope values that are not strings', () => {
+    expect(() => s.user(42 as never)).toThrow('must be a string (got number)');
+    expect(() => s.userAndTenant('u', {} as never)).toThrow(TypeError);
+    expect(() => s.custom('account', true as never)).toThrow(TypeError);
+  });
+
+  it('reads the storage form from the scope itself, not from a lookalike', () => {
+    const real = s.user('42') as IdempotencyScope;
+    expect(Object.isFrozen(IdempotencyScope.prototype)).toBe(true);
+    expect(Object.isFrozen(IdempotencyScope)).toBe(true);
+    expect(() => {
+      (IdempotencyScope.prototype as { toString: () => string }).toString = () => 'global';
+    }).toThrow(TypeError);
+    expect(scopeStorageValue(real)).toBe('user:42');
+    expect(() => scopeStorageValue(Object.create(real))).toThrow(TypeError);
+    expect(() => scopeStorageValue(new Proxy(real, {}))).toThrow(TypeError);
+    expect(() => scopeStorageValue(structuredClone(real))).toThrow(TypeError);
+    expect(() => scopeStorageValue({ toString: () => 'user:42' })).toThrow(TypeError);
+    class Fake extends (IdempotencyScope as unknown as new () => object) {}
+    expect(() => new Fake()).toThrow('Create an IdempotencyScope with idempotencyScopes.');
   });
 
   it('rejects anything that is not a built scope', () => {
@@ -122,6 +151,27 @@ describe('idempotencyScopes.fromJSON', () => {
     expect(() => s.fromJSON({ kind: 'client', value: 1 })).toThrow('value is not');
     expect(() => s.fromJSON({ kind: 'custom', value: 'x' })).toThrow('customKind is not');
     expect(() => s.fromJSON({ kind: 'userAndTenant', userId: 'u' })).toThrow('tenantId is not');
+    expect(() => s.fromJSON({ kind: 'custom', customKind: 'user', value: '42' })).toThrow(
+      'is not a custom idempotency scope kind',
+    );
+  });
+
+  it('reads only own fields of a plain object', () => {
+    expect(
+      String(s.fromJSON(Object.assign(Object.create(null), { kind: 'user', value: '1' }))),
+    ).toBe('user:1');
+    expect(() => s.fromJSON(Object.create({ kind: 'global' }))).toThrow('(not a plain object)');
+    expect(() => s.fromJSON(new Date())).toThrow('(not a plain object)');
+    const proto = Object.prototype as { kind?: string; tenantId?: string };
+    proto.kind = 'global';
+    proto.tenantId = 't1';
+    try {
+      expect(() => s.fromJSON({})).toThrow('(kind undefined)');
+      expect(() => s.fromJSON({ kind: 'userAndTenant', userId: 'u' })).toThrow('tenantId is not');
+    } finally {
+      delete proto.kind;
+      delete proto.tenantId;
+    }
   });
 });
 

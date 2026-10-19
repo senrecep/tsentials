@@ -26,7 +26,7 @@ export interface IdempotentOptions<A extends readonly unknown[]> extends Idempot
   /** Whose key it is. Use `idempotencyScopes.global` explicitly for a shared scope. */
   readonly scope: (
     ...args: A
-  ) => IdempotencyScope | undefined | Promise<IdempotencyScope | undefined>;
+  ) => IdempotencyScope | null | undefined | Promise<IdempotencyScope | null | undefined>;
   /** Value whose hash detects a reused key. Default: the arguments. */
   readonly fingerprint?: ((...args: A) => unknown) | undefined;
   /** Abort signal passed to the store's `reserve`. */
