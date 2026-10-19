@@ -406,12 +406,20 @@ export async function stripeWebhook(request: Request): Promise<Response> {
 
 In `enforce`, a parallel duplicate waits on the row lock of the first delivery's uncommitted insert. After the first commits, it sees the completed record and gets the stored result. If the first rolls back, the duplicate claims the key and does the work.
 
-**Observe with this store.** In `observe` every call must run and nothing may wait, so do not give the store the business transaction: a duplicate would block on the uncommitted row. Create the store with the pool instead. Each `reserve` and `complete` then autocommits in its own short statement, a duplicate sees the claim at once and is only reported, and the record is completed after the handler returns. This is not atomic with the business change: a rollback after the handler leaves a stored record behind. That is acceptable while observing, because `observe` never replays; switch to the transactional store when you move to `enforce`.
+**Observe with this store.** In `observe` every call must run, so do not give the store the business transaction: a duplicate would block on the uncommitted row. Create the store with the pool instead. Each `reserve` and `complete` then autocommits in its own short statement, so a duplicate does not wait on a business transaction; it sees the claim at once and is only reported. (While other instances still run `enforce` with the transactional store, an observe reserve can wait on their uncommitted row.)
+
+This is not atomic with the business change: a rollback after the handler leaves a completed record behind, and `enforce` replays completed records. Keep observe records out of `enforce` by giving them their own namespace, and read the flag once per call so the store, the namespace and the mode always agree:
 
 ```ts
-const store = flags.get('idempotency-mode') === 'enforce'
-  ? new PostgresIdempotencyStore(client) // same transaction as the business work
-  : new PostgresIdempotencyStore(pool);  // observe: own short statements, never waits
+const mode = flags.get('idempotency-mode');            // read once per call
+const handle = idempotent((e: StripeEvent) => applyEvent(client, e), {
+  store: mode === 'enforce'
+    ? new PostgresIdempotencyStore(client)             // same transaction as the business work
+    : new PostgresIdempotencyStore(pool),              // observe: own short statements
+  namespace: mode === 'enforce' ? 'stripe-webhook' : 'stripe-webhook.observe',
+  mode: () => mode,
+  // key, scope, fingerprint, storeFailures as above
+});
 ```
 
 ## Rolling out: off, observe, enforce
@@ -429,7 +437,7 @@ Turning idempotency on in front of live traffic changes answers: retries that us
 
    A key, scope or fingerprint resolver that throws does not block the call in `observe`: the call runs without idempotency and the logger gets `Idempotency.Observe.ResolutionFailed` (the same error rejects the call in `enforce`).
 3. Watch these events. `WouldRejectKeyReused` usually means a client reuses keys across operations; `WouldRejectScopeRequired` means the scope resolver misses some callers. Fix the clients and resolvers first.
-4. **`enforce`**: replays and rejections take effect. Records written in `observe` are used, so a key completed during `observe` is replayed right away.
+4. **`enforce`**: replays and rejections take effect. Records written in `observe` are used, so a key completed during `observe` is replayed right away. (The transactional SQL store above is the exception: there observe writes to its own namespace.)
 
 `mode` accepts a function that is read on every call, so a feature flag can switch modes without a restart:
 
@@ -442,6 +450,8 @@ Events report a `keyHash` (16 hex characters of the key's SHA-256), never the ke
 `onDecision` fits any metrics library. With OpenTelemetry (`@opentelemetry/api`, installed by your application):
 
 ```ts
+import { metrics } from '@opentelemetry/api';
+
 const decisions = metrics.getMeter('orders').createCounter('idempotency.decisions');
 const idem = createIdempotency({
   store,

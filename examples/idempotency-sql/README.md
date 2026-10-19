@@ -35,14 +35,19 @@ try {
 
 ## Observe mode
 
-In `observe` every call runs and nothing may wait. Create the store with the pool, not the
-transaction's client: each `reserve` and `complete` autocommits in its own short statement, so a
-duplicate sees the claim at once instead of blocking on an uncommitted row. This is not atomic
-with the business work, which is fine while observing because `observe` never replays. Switch to
-the transactional store when you move to `enforce`.
+In `observe` every call runs. Create the store with the pool, not the transaction's client: each
+`reserve` and `complete` autocommits in its own short statement, so a duplicate does not wait on a
+business transaction. This is not atomic with the business work: a rollback after the handler
+leaves a completed record, and `enforce` replays completed records. So give observe its own
+namespace, and read the mode once per call so the store, the namespace and the mode agree.
 
 ```js
-const store = mode === 'enforce'
-  ? new PostgresIdempotencyStore(client) // inside BEGIN ... COMMIT with the business work
-  : new PostgresIdempotencyStore(pool);  // observe: own short statements
+const mode = flags.get('idempotency-mode'); // read once per call
+const options = {
+  store: mode === 'enforce'
+    ? new PostgresIdempotencyStore(client) // inside BEGIN ... COMMIT with the business work
+    : new PostgresIdempotencyStore(pool),  // observe: own short statements
+  namespace: mode === 'enforce' ? 'orders' : 'orders.observe',
+  mode: () => mode,
+};
 ```
