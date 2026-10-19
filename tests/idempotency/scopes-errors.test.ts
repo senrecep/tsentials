@@ -53,6 +53,15 @@ describe('idempotencyScopes', () => {
     expect(String(s.custom('v2', 'x'))).toBe('v2:x');
   });
 
+  it('keeps an all-digit custom kind from forging a userAndTenant scope', () => {
+    expect(String(s.userAndTenant('u1', 't1'))).toBe('9:tenant:t1/user:u1');
+    expect(() => s.custom('9', 'tenant:t1/user:u1')).toThrow(
+      'is not a custom idempotency scope kind',
+    );
+    expect(() => s.custom('', 'x')).toThrow('is not a custom idempotency scope kind');
+    expect(() => s.custom('a:b', 'c')).toThrow('is not a custom idempotency scope kind');
+  });
+
   it('rejects scope values that are not strings', () => {
     expect(() => s.user(42 as never)).toThrow('must be a string (got number)');
     expect(() => s.userAndTenant('u', {} as never)).toThrow(TypeError);
