@@ -185,7 +185,7 @@ function assertCustomKind(kind: string): void {
     /^[0-9]+$/.test(kind)
   ) {
     throw new TypeError(
-      `${JSON.stringify(kind)} is not a custom idempotency scope kind: use a non-empty name that is not user, tenant, client or global, has no ':' or '/', and is not all digits.`,
+      `${JSON.stringify(kind)} is not a custom idempotency scope kind: use a non-empty, well-formed name that is not user, tenant, client or global in any case, has no ':' or '/', and is not all digits.`,
     );
   }
 }
