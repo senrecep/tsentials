@@ -327,7 +327,9 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  * - a body over `maxResponseBodyBytes`, a `Content-Encoding` or an event stream → released;
  * - the handler throws → kept in flight until the lease ends.
  *
- * The body is buffered before the response is returned, so do not wrap streaming routes.
+ * The request body is buffered to hash it (Web Crypto has no streaming digest), so enforce a
+ * request body size limit before this wrapper. The response body is buffered before the
+ * response is returned, so do not wrap streaming routes.
  * Rate limiting, timeouts and load shedding belong outside this wrapper: their rejections
  * must not be stored. Throws at setup when no store is given or a setting is out of range.
  */
