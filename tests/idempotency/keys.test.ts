@@ -3,8 +3,11 @@ import { readFileSync } from 'node:fs';
 import { sha1 } from '../../src/idempotency/encoding.js';
 import {
   createIdempotencyKeys,
+  IDEMPOTENCY_STORAGE_PREFIX,
   IDEMPOTENCY_UUID_NAMESPACE,
   idempotencyKeys,
+  idempotencyScopes,
+  idempotencyStorageKey,
   isValidIdempotencyKey,
   normalizeIdempotencyKey,
 } from '../../src/idempotency/index.js';
@@ -31,7 +34,47 @@ interface Vectors {
     canonical: string;
     key: string;
   }[];
+  storagePrefix: string;
+  scopes: (
+    | { name: string; kind: 'user' | 'tenant' | 'client'; id: string | null; scope: string | null }
+    | {
+        name: string;
+        kind: 'custom';
+        customKind: string;
+        value: string | null;
+        scope: string | null;
+      }
+    | { name: string; kind: 'global'; scope: string }
+    | {
+        name: string;
+        kind: 'userAndTenant';
+        tenantId: string | null;
+        userId: string | null;
+        scope: string | null;
+      }
+  )[];
+  storageKeys: {
+    name: string;
+    prefix: string;
+    namespace: string;
+    scope: string;
+    key: string;
+    storageKey: string;
+  }[];
   invalid: { name: string; operation: string | null; ids: (string | null)[] }[];
+}
+
+function scopeOf(v: Vectors['scopes'][number]): string | undefined {
+  switch (v.kind) {
+    case 'global':
+      return idempotencyScopes.global;
+    case 'custom':
+      return idempotencyScopes.custom(v.customKind, v.value);
+    case 'userAndTenant':
+      return idempotencyScopes.userAndTenant(v.userId, v.tenantId);
+    default:
+      return idempotencyScopes[v.kind](v.id);
+  }
 }
 
 const raw = readFileSync(new URL('./fixtures/key-vectors.json', import.meta.url));
@@ -43,9 +86,12 @@ const syncKeys = createIdempotencyKeys({
 });
 
 describe('key vectors', () => {
-  it('is the vendored version 1 file, byte for byte', () => {
-    expect(vectors.version).toBe(1);
-    expect(createHash('sha256').update(raw).digest('hex')).toMatch(/^637471/);
+  it('is the vendored version 2 file, byte for byte', () => {
+    expect(vectors.version).toBe(2);
+    expect(createHash('sha256').update(raw).digest('hex')).toBe(
+      '2ac049fba14b89654c331ef723c7ebd1575e402f16b1f008c3089121606db5e6',
+    );
+    expect(vectors.storagePrefix).toBe(IDEMPOTENCY_STORAGE_PREFIX);
     expect(vectors.namespaceUuid).toBe(IDEMPOTENCY_UUID_NAMESPACE);
     expect(vectors.maxKeyLength).toBe(255);
     expect(vectors.messageOperation).toBe('message');
@@ -73,6 +119,20 @@ describe('key vectors', () => {
       expect(await idempotencyKeys.fromMessage(v.messageId, v.consumer)).toBe(v.key);
       expect(syncKeys.fromMessage(v.messageId, v.consumer)).toBe(v.key);
       expect(idempotencyKeys.canonical('message', v.consumer, v.messageId)).toBe(v.canonical);
+    });
+  }
+
+  for (const v of vectors.scopes) {
+    it(`scope: ${v.name}`, () => {
+      expect(scopeOf(v) ?? null).toBe(v.scope);
+    });
+  }
+
+  for (const v of vectors.storageKeys) {
+    it(`storage key: ${v.name}`, () => {
+      const recordKey = { namespace: v.namespace, scope: v.scope, key: v.key };
+      expect(idempotencyStorageKey(recordKey, v.prefix)).toBe(v.storageKey);
+      expect(idempotencyStorageKey(recordKey)).toBe(v.storageKey);
     });
   }
 

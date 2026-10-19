@@ -104,7 +104,7 @@ await idempotencyKeys.fromMessage(messageId, 'billing');     // UUID per (messag
 idempotencyScopes.user(id) / .tenant(id) / .userAndTenant(u, t) / .client(id) / .custom('kind', id) / .global
 ```
 
-Scope builders return `undefined` for a missing id. Storage key: `idem:v1:{len}:{namespace}|{len}:{scope}|{len}:{key}` (`idempotencyStorageKey`).
+Scope builders return `undefined` for a missing id. Storage key: `idem:v3:{len}:{namespace}|{len}:{scope}|{len}:{key}` (`idempotencyStorageKey`).
 
 ## Stores
 

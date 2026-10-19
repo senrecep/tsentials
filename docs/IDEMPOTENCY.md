@@ -190,7 +190,7 @@ idempotencyScopes.global                      // shared by everyone; use it on p
 
 Every builder returns `undefined` for a missing id, which counts as "no scope". Take the scope from the authenticated principal, never from the request body.
 
-**Storage key.** Stores that need one string use `idempotencyStorageKey(recordKey)`: `idem:v1:` followed by the length-prefixed parts `{utf8ByteLength}:{value}` joined with `|`, for example `idem:v1:6:orders|8:tenant:1|3:abc`. Parts that contain `|` or `:` cannot collide.
+**Storage key.** Stores that need one string use `idempotencyStorageKey(recordKey)`: `idem:v3:` followed by the length-prefixed parts `{utf8ByteLength}:{value}` joined with `|`, for example `idem:v3:6:orders|8:tenant:1|3:abc`. Parts that contain `|` or `:` cannot collide.
 
 ## Client side: sending keys and retrying
 
@@ -255,7 +255,7 @@ const redis: RedisLike = { eval: (s, keys, args) => client.eval(s, keys.length, 
 // node-redis
 const redis: RedisLike = { eval: (s, keys, args) => client.eval(s, { keys, arguments: args }) };
 
-const store = new RedisIdempotencyStore(redis, { prefix: 'idem:v1:' });
+const store = new RedisIdempotencyStore(redis, { prefix: 'idem:v3:' });
 ```
 
 A record is a hash with the fields `t` (token), `f` (fingerprint) and `p` (payload, set once completed). Its TTL is the lease or the retention, so Redis cleans up by itself. The scripts are exported as `RedisIdempotencyScripts`. [`examples/idempotency-redis`](../examples/idempotency-redis) runs the contract suite against a real Redis.

@@ -23,10 +23,10 @@ const key = { namespace: 'orders', scope: 'tenant:1', key: 'k' };
 
 describe('idempotencyStorageKey', () => {
   it('length-prefixes each part with its UTF-8 byte length', () => {
-    expect(idempotencyStorageKey(key)).toBe('idem:v1:6:orders|8:tenant:1|1:k');
-    expect(idempotencyStorageKey({ ...key, key: 'é' })).toBe('idem:v1:6:orders|8:tenant:1|2:é');
+    expect(idempotencyStorageKey(key)).toBe('idem:v3:6:orders|8:tenant:1|1:k');
+    expect(idempotencyStorageKey({ ...key, key: 'é' })).toBe('idem:v3:6:orders|8:tenant:1|2:é');
     expect(idempotencyStorageKey(key, 'app:')).toBe('app:6:orders|8:tenant:1|1:k');
-    expect(IDEMPOTENCY_STORAGE_PREFIX).toBe('idem:v1:');
+    expect(IDEMPOTENCY_STORAGE_PREFIX).toBe('idem:v3:');
   });
 
   it('keeps shifted separators apart', () => {

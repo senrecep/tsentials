@@ -52,7 +52,7 @@ export interface IdempotencyStore {
 }
 
 /** Default prefix of {@link idempotencyStorageKey}; the version changes with the record format. */
-export const IDEMPOTENCY_STORAGE_PREFIX = 'idem:v1:';
+export const IDEMPOTENCY_STORAGE_PREFIX = 'idem:v3:';
 
 /**
  * Single string for a record key: `prefix` + length-prefixed namespace, scope and key
