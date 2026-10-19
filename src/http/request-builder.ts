@@ -81,9 +81,9 @@ export class RequestBuilder {
   }
 
   /**
-   * Sets the `Idempotency-Key` header (replacing an earlier one). Without `key` a random UUID (or the
-   * result of `options.idempotencyKeyGenerator`) is generated now, so every `send()` of this builder (retries of one logical operation) carries
-   * the same key. Start a new builder for a new operation. Read the key with
+   * Sets the `Idempotency-Key` header (replacing an earlier one). Without `key` a random UUID (or
+   * the result of `options.idempotencyKeyGenerator`) is generated now, so every `send()` of this
+   * builder (retries of one logical operation) carries the same key. Start a new builder for a new operation. Read the key with
    * {@link idempotencyKeyValue}.
    * @throws TypeError when the key, given or generated, is not a valid idempotency key.
    */

@@ -619,7 +619,7 @@ const created = await RequestBuilder.post('https://api.example.com/users')
   .send<User>();
 ```
 
-`idempotencyKey(key?, { idempotencyKeyGenerator })` and `withIdempotencyKey(init, key?, { idempotencyKeyGenerator })` accept your own `() => string` instead of `crypto.randomUUID()`; it runs once per operation, and its key is validated like an explicit one (`TypeError` when invalid).
+`idempotencyKey(key?, { idempotencyKeyGenerator })` and `withIdempotencyKey(init, key?, { idempotencyKeyGenerator })` accept your own `() => string` instead of `crypto.randomUUID()`; it runs once per `idempotencyKey()` / `withIdempotencyKey()` call, and its key is validated like an explicit one (`TypeError` when invalid).
 
 Failures carry response metadata (`HttpErrorMetadataKeys`: status, `Retry-After`, ProblemDetails `code`, replay flag). `withIdempotencyKey(init, key?)` adds the header to a plain `RequestInit`, and `idempotentRetryClassifier(method, hasKey)` is a `shouldRetry` for `ResiliencePolicy.withRetry` that never retries a POST or PATCH without a key. See [Idempotency](#idempotency).
 
@@ -1281,10 +1281,10 @@ What `idempotent()` and the mediator behavior keep after the operation returns (
 | Outcome | Record |
 |---------|--------|
 | Success | stored for `retentionMs` (24 h) |
-| Failure whose first error is `Unexpected` | stored for `serverErrorRetentionMs` (10 min) |
+| Failure whose first error is `Unexpected` | stored for `serverErrorRetentionMs` (10 min, at most `retentionMs`) |
 | Any other failure (Validation, NotFound, Conflict, …) | stored for `retentionMs` |
 | Thrown error or caller abort | kept in flight until the lease ends |
-| Failure with `storeFailures: false` (`idempotent`) or of a `transactional: true` request (mediator) | released, so a retry runs again |
+| Failure with `storeFailures: false` (`idempotent`) or of a `transactional: true` request (mediator default; `releaseFailures` overrides it) | released, so a retry runs again |
 
 Stores: `InMemoryIdempotencyStore`, `RedisIdempotencyStore` (bring your own client through `RedisLike`) and any store that passes `describeIdempotencyStoreContract`. Use a store with atomic compare-and-set; an eventually consistent key-value store such as Cloudflare KV is not safe as a lock. On the client side, `tsentials/http` adds `withIdempotencyKey`, `RequestBuilder.idempotencyKey()` and `idempotentRetryClassifier` for `ResiliencePolicy.withRetry({ shouldRetry })`.
 

@@ -288,12 +288,20 @@ describe('RequestBuilder.idempotencyKey', () => {
     expect(sentKeys(mock)).toEqual(['gen-key', 'gen-key', 'gen-key']);
   });
 
-  it('rejects an invalid generated key like an explicit one', () => {
-    const builder = RequestBuilder.get('/x');
+  it('rejects an invalid generated key like an explicit one', async () => {
+    const mock = stubFetch(() => new Response(null, { status: 204 }));
+    const builder = RequestBuilder.post('/x');
     expect(() =>
       builder.idempotencyKey(undefined, { idempotencyKeyGenerator: () => 'bad key' }),
     ).toThrow(TypeError);
     expect(builder.idempotencyKeyValue).toBeUndefined();
+    builder.idempotencyKey('a');
+    expect(() =>
+      builder.idempotencyKey(undefined, { idempotencyKeyGenerator: () => 'bad key' }),
+    ).toThrow(TypeError);
+    expect(builder.idempotencyKeyValue).toBe('a');
+    await builder.send();
+    expect(sentKeys(mock)).toEqual(['a']);
   });
 
   it('is undefined until set and rejects an invalid key', () => {

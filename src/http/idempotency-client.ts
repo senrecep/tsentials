@@ -11,7 +11,7 @@ export interface IdempotencyKeyOptions {
    * once per `withIdempotencyKey` / `idempotencyKey` call, and its result is validated like an
    * explicit key.
    */
-  idempotencyKeyGenerator?: () => string;
+  readonly idempotencyKeyGenerator?: (() => string) | undefined;
 }
 
 /** @internal Checks a key given by the caller, or generates one (a random UUID by default). */
@@ -29,8 +29,8 @@ export function idempotencyKeyOrNew(
 
 /**
  * Returns a copy of `init` with an `Idempotency-Key` header (replacing any earlier one). The key
- * defaults to a random UUID, or to what `options.idempotencyKeyGenerator` returns. Reuse the returned init for every retry of the same logical
- * operation; a new operation needs a new key.
+ * defaults to a random UUID, or to what `options.idempotencyKeyGenerator` returns. Reuse the
+ * returned init for every retry of the same logical operation; a new operation needs a new key.
  *
  * ```ts
  * const init = withIdempotencyKey({ method: 'POST', body });
