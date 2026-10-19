@@ -155,7 +155,7 @@ What is stored:
 | Anything else | Yes, for `retentionMs` |
 | The handler throws | No, the key stays in flight until the lease ends |
 
-`idempotencyStorePolicies.successOnly` stores only 2xx. Replayed headers are `content-type`, `content-language`, `location`, `etag`, `cache-control` and `retry-after` by default (`replayedHeaders`); `set-cookie` is never replayed.
+`idempotencyStorePolicies.successOnly` stores only 2xx and releases every other response, so a retry after a 3xx or 5xx runs the handler again even if its work already happened. Replayed headers are `content-type`, `content-language`, `location`, `etag`, `cache-control` and `retry-after` by default (`replayedHeaders`); `set-cookie` is never replayed.
 
 Notes:
 

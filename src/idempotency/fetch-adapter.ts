@@ -40,7 +40,10 @@ export const DEFAULT_NEVER_STORE_STATUSES: readonly number[] = [503, 504];
 export const idempotencyStorePolicies = {
   /** Everything but 4xx: 2xx and 3xx for `retentionMs`, 5xx for `serverErrorRetentionMs`. */
   default: (response: Response): boolean => response.status < 400 || response.status >= 500,
-  /** Only 2xx; every other response is released, so a retry runs the handler again. */
+  /**
+   * Only 2xx; every other response is released, so a retry runs the handler again, even after a
+   * 3xx or 5xx whose work already happened.
+   */
   successOnly: (response: Response): boolean => response.status >= 200 && response.status < 300,
 } as const;
 
@@ -69,7 +72,10 @@ export interface WithIdempotencyOptions extends IdempotencySettings {
   readonly shouldStore?: ((response: Response) => boolean) | undefined;
   /** Responses that are neither stored nor released. Default: 503, 504. */
   readonly neverStoreStatuses?: readonly number[] | undefined;
-  /** A larger response is sent unchanged, not stored, and its key released. Default: 1 MiB. */
+  /**
+   * A larger response is sent unchanged and not stored; its key stays in flight until the lease
+   * ends (a 4xx is released). Default: 1 MiB.
+   */
   readonly maxResponseBodyBytes?: number | undefined;
   /** Response headers stored with the body. Default: {@link DEFAULT_REPLAYED_HEADERS}. */
   readonly replayedHeaders?: readonly string[] | undefined;
@@ -329,7 +335,8 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  * - 2xx and 3xx → stored for `retentionMs`; 5xx → stored for `serverErrorRetentionMs`;
  * - 4xx → released, so a corrected retry with the same key runs again;
  * - 503 and 504 (`neverStoreStatuses`) → kept in flight until the lease ends;
- * - a body over `maxResponseBodyBytes`, a `Content-Encoding` or an event stream → released;
+ * - a body over `maxResponseBodyBytes`, a `Content-Encoding` or an event stream → kept in flight
+ *   until the lease ends (a 4xx is released);
  * - the handler throws → kept in flight until the lease ends.
  *
  * The request body is buffered to hash it (Web Crypto has no streaming digest), so enforce a
