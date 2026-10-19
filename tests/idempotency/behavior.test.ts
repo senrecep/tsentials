@@ -191,6 +191,38 @@ describe('idempotencyBehavior', () => {
     expect(await first).toEqual(Result.success({ charged: 10 }));
   });
 
+  it('runs the handler once and answers the other 9 same-key sends InFlight', async () => {
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const { mediator, fn } = setup(
+      idempotencyBehavior({ store: new InMemoryIdempotencyStore() }),
+      async (req) => {
+        await gate;
+        return Result.success({ charged: req.amount });
+      },
+    );
+    let settled = 0;
+    const calls = Array.from({ length: 10 }, () =>
+      mediator.send('Capture', capture()).then((r) => {
+        settled += 1;
+        return r;
+      }),
+    );
+    await vi.waitFor(() => expect(fn).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(settled).toBe(9));
+    open();
+    const results = await Promise.all(calls);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    const busy = results.filter((r) => !r.ok);
+    expect(busy).toHaveLength(9);
+    for (const r of busy) {
+      expect(Result.firstError(r)?.code).toBe(IdempotencyErrorCodes.InFlight);
+    }
+  });
+
   it('keeps the key in flight when the handler throws', async () => {
     const { mediator } = setup(
       idempotencyBehavior({ store: new InMemoryIdempotencyStore() }),

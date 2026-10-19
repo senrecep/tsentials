@@ -77,6 +77,36 @@ describe('idempotent', () => {
     expect(await first).toEqual(Result.success(1));
   });
 
+  it('runs once and answers the other 9 same-key calls InFlight', async () => {
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const fn = vi.fn(async (c: Cmd) => {
+      await gate;
+      return Result.success(c.amount);
+    });
+    const capture = idempotent(fn, options(new InMemoryIdempotencyStore()));
+    let settled = 0;
+    const calls = Array.from({ length: 10 }, () =>
+      capture(cmd).then((r) => {
+        settled += 1;
+        return r;
+      }),
+    );
+    await vi.waitFor(() => expect(fn).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(settled).toBe(9));
+    open();
+    const results = await Promise.all(calls);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    const busy = results.filter((r) => !r.ok);
+    expect(busy).toHaveLength(9);
+    for (const r of busy) {
+      expect(!r.ok && r.errors[0]?.code).toBe(IdempotencyErrorCodes.InFlight);
+    }
+  });
+
   it('rejects a key without a scope by default', async () => {
     const capture = idempotent(
       (_: Cmd) => Result.success(1),

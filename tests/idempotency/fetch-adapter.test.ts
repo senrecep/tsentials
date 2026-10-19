@@ -714,6 +714,37 @@ describe('withIdempotency', () => {
     });
   });
 
+  describe('same-key concurrency', () => {
+    it('runs the handler once and answers the other 9 calls 409 InFlight', async () => {
+      let open: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      const s = setup(async () => {
+        await gate;
+        return new Response('done', { status: 201 });
+      });
+      let settled = 0;
+      const calls = Array.from({ length: 10 }, () =>
+        s.handler(post('k')).then((response) => {
+          settled += 1;
+          return response;
+        }),
+      );
+      await vi.waitFor(() => expect(s.runs()).toBe(1));
+      await vi.waitFor(() => expect(settled).toBe(9));
+      open();
+      const responses = await Promise.all(calls);
+      expect(s.runs()).toBe(1);
+      expect(responses.filter((r) => r.status === 201)).toHaveLength(1);
+      const busy = responses.filter((r) => r.status === 409);
+      expect(busy).toHaveLength(9);
+      for (const response of busy) {
+        expect(await problemOf(response)).toMatchObject({ code: IdempotencyErrorCodes.InFlight });
+      }
+    });
+  });
+
   describe('setup', () => {
     it('throws without a store', () => {
       expect(() => withIdempotency(async () => new Response(), {})).toThrow(TypeError);

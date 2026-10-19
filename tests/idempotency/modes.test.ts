@@ -35,6 +35,7 @@ interface Driver {
   setMode(mode: IdempotencyMode): void;
   events: IdempotencyDecisionEvent[];
   store: InMemoryIdempotencyStore;
+  log: ReturnType<typeof vi.fn>;
 }
 
 type DriverFactory = (unscoped: UnscopedKeyBehavior) => Driver;
@@ -65,9 +66,11 @@ function common() {
   let mode: IdempotencyMode = 'enforce';
   const events: IdempotencyDecisionEvent[] = [];
   const store = new InMemoryIdempotencyStore();
+  const log = vi.fn();
   return {
     events,
     store,
+    log,
     setMode: (next: IdempotencyMode) => {
       mode = next;
     },
@@ -75,6 +78,7 @@ function common() {
       store,
       mode: () => mode,
       onDecision: (e: IdempotencyDecisionEvent) => events.push(e),
+      logger: { log },
     },
   };
 }
@@ -258,6 +262,32 @@ describe.each(Object.entries(drivers))('rollout modes: %s', (_name, create) => {
     } else {
       expect(second).toEqual(first);
     }
+  });
+
+  it('enforce rejects another payload for a key completed in observe as KeyReused', async () => {
+    const d = create('reject');
+    d.setMode('observe');
+    await d.send(scoped('k'));
+    d.setMode('enforce');
+    const reused = await d.send(scoped('k', 'other'));
+    expect(d.runs()).toBe(1);
+    expect(d.events.at(-1)?.decision).toBe('key_reused');
+    expect(JSON.stringify(reused)).toContain(IdempotencyErrorCodes.KeyReused);
+    if (d.source === 'http') expect((reused as { status: number }).status).toBe(422);
+  });
+
+  it('logs Idempotency.Observe.WouldReplay through the logger in observe', async () => {
+    const d = create('reject');
+    d.setMode('observe');
+    await d.send(scoped('k'));
+    await d.send(scoped('k'));
+    const replays = d.log.mock.calls.filter(
+      (c) => (c[2] as { EventName?: string }).EventName === 'Idempotency.Observe.WouldReplay',
+    );
+    expect(IdempotencyEventNames.WouldReplay).toBe('Idempotency.Observe.WouldReplay');
+    expect(replays).toHaveLength(1);
+    expect(replays[0]?.[0]).toBe('information');
+    expect(replays[0]?.[2]).toMatchObject({ Mode: 'observe', Source: d.source });
   });
 
   it('enforce rejects a key reserved in observe as in flight', async () => {
