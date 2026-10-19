@@ -1,7 +1,10 @@
-import { utf8 } from './encoding.js';
+import { isWellFormed, utf8 } from './encoding.js';
 
 /** Construction token; not exported, so only the builders below can create a scope. */
 const CONSTRUCT: unique symbol = Symbol('IdempotencyScope');
+
+/** Reads the private storage form; assigned in the class's static block, so it stays module-private. */
+let storageOf: (scope: IdempotencyScope) => string;
 
 /**
  * JSON form of an {@link IdempotencyScope} (`toJSON`), for requests that are serialized, for
@@ -52,9 +55,8 @@ export class IdempotencyScope {
     return typeof value === 'object' && value !== null && #storage in value;
   }
 
-  /** @internal Storage form read from the private field, so a patched `toString` is ignored. */
-  static storageOf(scope: IdempotencyScope): string {
-    return scope.#storage;
+  static {
+    storageOf = (scope) => scope.#storage;
   }
 }
 Object.freeze(IdempotencyScope.prototype);
@@ -66,7 +68,7 @@ Object.freeze(IdempotencyScope);
  * another owner's records.
  */
 export function scopeStorageValue(scope: unknown): string {
-  if (IdempotencyScope.isScope(scope)) return IdempotencyScope.storageOf(scope);
+  if (IdempotencyScope.isScope(scope)) return storageOf(scope);
   throw new TypeError(
     typeof scope === 'string'
       ? 'A raw string is not an idempotency scope: build it with idempotencyScopes, for example idempotencyScopes.tenant(id).'
@@ -110,7 +112,7 @@ export const idempotencyScopes = {
     single('client', clientId),
   /**
    * Any other kind of owner, stored as `kind:value`. `kind` must not be a built-in kind
-   * (`user`, `tenant`, `client`, `global`), contain `:` or `/`, or be all digits, so a custom
+   * (`user`, `tenant`, `client`, `global`, in any case), contain `:` or `/`, or be all digits, so a custom
    * scope never shares the storage form of a built-in one; otherwise it throws `TypeError`.
    */
   custom(kind: string, value: string | null | undefined): IdempotencyScope | undefined {
@@ -167,6 +169,9 @@ function isMissing(value: string | null | undefined): value is null | undefined 
   if (typeof value !== 'string') {
     throw new TypeError(`An idempotency scope value must be a string (got ${typeof value}).`);
   }
+  if (!isWellFormed(value)) {
+    throw new TypeError('An idempotency scope value must be well-formed UTF-16.');
+  }
   return false;
 }
 
@@ -174,7 +179,8 @@ function assertCustomKind(kind: string): void {
   if (
     typeof kind !== 'string' ||
     kind === '' ||
-    BUILT_IN_KINDS.has(kind) ||
+    !isWellFormed(kind) ||
+    BUILT_IN_KINDS.has(kind.toLowerCase()) ||
     /[:/]/.test(kind) ||
     /^[0-9]+$/.test(kind)
   ) {

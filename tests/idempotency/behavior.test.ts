@@ -457,6 +457,33 @@ describe('idempotencyBehavior', () => {
     expect(perType.fn).toHaveBeenCalledTimes(1);
   });
 
+  it('passes reviveScopeJson through createIdempotency', async () => {
+    const idem = createIdempotency({ store: new InMemoryIdempotencyStore() });
+    const { mediator, fn } = setup(idem.idempotencyBehavior({ reviveScopeJson: true }), charge);
+    const json = { kind: 'user', value: '42' } as unknown as IdempotencyScope;
+    await mediator.send('Capture', capture({ idempotencyScope: json }));
+    await mediator.send('Capture', capture({ idempotencyScope: json }));
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a JSON scope without idempotency in observe mode when revival is off', async () => {
+    const log = vi.fn();
+    const { mediator, fn } = setup(
+      idempotencyBehavior({
+        store: new InMemoryIdempotencyStore(),
+        mode: 'observe',
+        logger: { log },
+      }),
+      charge,
+    );
+    const json = { kind: 'user', value: '42' } as unknown as IdempotencyScope;
+    expect((await mediator.send('Capture', capture({ idempotencyScope: json }))).ok).toBe(true);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls[0]?.[2]).toMatchObject({
+      EventName: 'Idempotency.Observe.ResolutionFailed',
+    });
+  });
+
   it('runs a malformed JSON scope without idempotency in observe mode', async () => {
     const log = vi.fn();
     const reserve = vi.fn<IdempotencyStore['reserve']>();

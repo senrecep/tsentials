@@ -32,9 +32,23 @@ describe('idempotencyScopes', () => {
   });
 
   it('rejects custom kinds that could share a built-in storage form', () => {
-    for (const kind of ['user', 'tenant', 'client', 'global', '', '12', 'a:b', 'a/b', 3 as never]) {
+    for (const kind of [
+      'user',
+      'User',
+      'GLOBAL',
+      'tenant',
+      'client',
+      'global',
+      '',
+      '12',
+      'a:b',
+      'a/b',
+      '\uD800',
+      3 as never,
+    ]) {
       expect(() => s.custom(kind, 'x')).toThrow('is not a custom idempotency scope kind');
     }
+    expect(() => s.custom('user', undefined)).toThrow('is not a custom idempotency scope kind');
     expect(String(s.custom('account', 'b:c'))).toBe('account:b:c');
     expect(String(s.custom('v2', 'x'))).toBe('v2:x');
   });
@@ -43,6 +57,9 @@ describe('idempotencyScopes', () => {
     expect(() => s.user(42 as never)).toThrow('must be a string (got number)');
     expect(() => s.userAndTenant('u', {} as never)).toThrow(TypeError);
     expect(() => s.custom('account', true as never)).toThrow(TypeError);
+    expect(() => s.tenant('\uD800')).toThrow('well-formed UTF-16');
+    expect(() => s.userAndTenant('\uDC00', 't')).toThrow('well-formed UTF-16');
+    expect(String(s.tenant('\uFFFD'))).toBe('tenant:\uFFFD');
   });
 
   it('reads the storage form from the scope itself, not from a lookalike', () => {
