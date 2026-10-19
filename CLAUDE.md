@@ -693,7 +693,7 @@ Codes: `Idempotency.InFlight` (Conflict, 409 + Retry-After), `Idempotency.KeyReu
 - `"sideEffects": false` in package.json for full tree-shaking
 
 ## Testing
-Vitest. `npm test` runs all 2900 tests across 80 test files.
+Vitest. `npm test` runs all 2903 tests across 80 test files.
 Test files mirror src/ structure under `tests/`.
 
 ## Publishing

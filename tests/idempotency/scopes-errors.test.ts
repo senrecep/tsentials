@@ -25,6 +25,13 @@ describe('idempotencyScopes', () => {
     expect(scopeStorageValue('tenant:global')).toBe('tenant:global');
   });
 
+  it('rejects a scope that is not a non-empty string', () => {
+    expect(() => scopeStorageValue('')).toThrow('an empty string');
+    for (const bad of [null, 0, Symbol('other'), {}]) {
+      expect(() => scopeStorageValue(bad as unknown as string)).toThrow(TypeError);
+    }
+  });
+
   it('length-prefixes the tenant of userAndTenant', () => {
     expect(idempotencyScopes.userAndTenant('u1', 't1')).toBe('9:tenant:t1/user:u1');
     expect(idempotencyScopes.userAndTenant('u', 'é')).toBe('9:tenant:é/user:u');

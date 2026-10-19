@@ -326,6 +326,18 @@ describe('idempotencyBehavior', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects the raw string global from custom settings', async () => {
+    const { mediator, fn } = setup(
+      idempotencyBehavior({
+        store: new InMemoryIdempotencyStore(),
+        settings: () => ({ key: 'k1', scope: 'global' }),
+      }),
+      charge,
+    );
+    await expect(mediator.send('Capture', capture())).rejects.toThrow(TypeError);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
   it('skips everything in off mode, per request type', async () => {
     const store: IdempotencyStore = {
       reserve: vi.fn(),

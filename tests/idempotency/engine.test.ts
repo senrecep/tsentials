@@ -215,6 +215,15 @@ describe('runIdempotent: unscoped keys', () => {
     expect(reserve).toHaveBeenCalledTimes(1);
     expect(h.runs).toBe(1);
   });
+
+  it('shares records between idempotencyScopes.global and unscopedKeyBehavior global', async () => {
+    const h = harness({ store: new InMemoryIdempotencyStore() });
+    expect(await runIdempotent(h.call({ scope: () => idempotencyScopes.global }))).toBe('out1');
+    expect(
+      await runIdempotent(h.call({ scope: () => undefined, unscopedKeyBehavior: 'global' })),
+    ).toBe('replay:out1');
+    expect(h.runs).toBe(1);
+  });
 });
 
 describe('runIdempotent: observe', () => {

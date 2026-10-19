@@ -691,7 +691,7 @@ Operations accepting `{ signal }` (`Result.tryAsync`, `traverseAsync`, `sequence
 
 ```bash
 npm run build      # tsc compile
-npm test           # vitest run (2900 tests)
+npm test           # vitest run (2903 tests)
 npm run check      # biome lint + format check
 npm run lint:fix   # auto-fix lint
 ```

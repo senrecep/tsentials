@@ -19,13 +19,19 @@ const GLOBAL_SCOPE_STORAGE = 'global';
 
 /**
  * Storage form of a resolved scope. The raw string `'global'` throws `TypeError`: it would
- * share records with the global scope (for example a tenant whose id is `global`).
+ * share records with the global scope (for example a tenant whose id is `global`). A value that
+ * is not a non-empty string (from untyped code) throws `TypeError` too.
  */
 export function scopeStorageValue(scope: IdempotencyScope): string {
   if (scope === IDEMPOTENCY_GLOBAL_SCOPE) return GLOBAL_SCOPE_STORAGE;
   if (scope === GLOBAL_SCOPE_STORAGE) {
     throw new TypeError(
       "The idempotency scope 'global' is reserved: return idempotencyScopes.global for the shared scope, or a prefixed scope such as idempotencyScopes.tenant(id).",
+    );
+  }
+  if (typeof scope !== 'string' || scope === '') {
+    throw new TypeError(
+      `An idempotency scope must be a non-empty string or idempotencyScopes.global (got ${typeof scope === 'string' ? 'an empty string' : typeof scope}).`,
     );
   }
   return scope;
