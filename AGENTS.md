@@ -295,7 +295,7 @@ const users = await RequestBuilder.get('/users')
   .send<User[]>();
 
 await RequestBuilder.post('/users')
-  .header('X-Idempotency-Key', key)
+  .header('Idempotency-Key', key)
   .json({ name: 'Alice' })
   .send<User>();
 

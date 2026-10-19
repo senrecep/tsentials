@@ -1,3 +1,9 @@
+export {
+  IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENCY_REPLAYED_HEADER,
+  type IdempotencyErrorCode,
+  IdempotencyErrorCodes,
+} from '../idempotency/constants.js';
 export type { FetchResultInit } from './fetch-result.js';
 export { fetchResult } from './fetch-result.js';
 export type { HttpCode } from './http-codes.js';
