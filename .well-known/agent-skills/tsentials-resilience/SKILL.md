@@ -47,7 +47,7 @@ const user = await policy.execute(
 
 | Method | Options |
 |--------|---------|
-| `withRetry({ maxAttempts, delay, exponentialBackoff, backoff })` | `backoff`: `'constant' \| 'linear' \| 'exponential'` |
+| `withRetry({ maxAttempts, delay, exponentialBackoff, backoff, shouldRetry, maxRetryAfterMs })` | `backoff`: `'constant' \| 'linear' \| 'exponential'`; `shouldRetry(error)` replaces the retryable check (a throw stops retrying); a failure with `retryAfterMs` metadata waits at least that long, capped at `maxRetryAfterMs` (default 30 s) |
 | `withTimeout(ms \| { timeout })` | default 30 000 ms, min 10 ms |
 | `withCircuitBreaker({ minimumThroughput, samplingDuration, breakDuration, failureRatio })` | durations >= 500 ms |
 | `withFallback(signal => value)` / `withFallbackResult(action)` | value or Result used when everything else failed |

@@ -33,7 +33,7 @@ These naming rules MUST be followed. Getting them wrong causes runtime bugs.
 | RequestBuilder terminal | `.fetchResult<T>()` | `.send<T>()` | Terminal method is `send`, not `fetchResult` |
 | deepClone mechanism | "calls .clone()" | self-contained recursive copy | `cloneArray` calls `.clone()`; `deepClone` is its own recursive implementation (never native `structuredClone`) |
 | Predicate.and arity | `Predicate.and(a, b, c)` | `Predicate.and(Predicate.and(a, b), c)` | `and`/`or` take exactly 2 args. Use `all`/`any` for variadic |
-| Subpath-only modules | `import { Validator } from 'tsentials'` | `from 'tsentials/validation'` | `validation`, `resilience`, `pagination`, `enums`, `mediator` are not re-exported from the root entry |
+| Subpath-only modules | `import { Validator } from 'tsentials'` | `from 'tsentials/validation'` | `validation`, `resilience`, `pagination`, `enums`, `mediator`, `idempotency` are not re-exported from the root entry |
 | AbortSignal | caller abort becomes a failure | caller abort rejects with `signal.reason` | Any other error (incl. abort-like while the caller's signal is not aborted) becomes a failure |
 | String case functions | `toCamelCase(str, opts)` | `toCamelCase(str)` | Single-argument, no options object — normalization is automatic |
 
@@ -148,6 +148,7 @@ RuleEngine.evaluateAsync(rule, ctx)  // async → Promise<VoidResult>
 | Offset and keyset (cursor) paging | `pagination` (subpath-only) | `tsentials-pagination` |
 | Enums with wire names, aliases, safe parse | `enums` (subpath-only) | `tsentials-enums` |
 | Typed request/response mediator with behaviors | `mediator` (subpath-only) | `tsentials-mediator` |
+| Run an operation once per idempotency key (functions, mediator, Fetch handlers) | `idempotency` (subpath-only) | `tsentials-idempotency` |
 | Date helpers (next weekday, age, date-only) | `time` | `tsentials-time` |
 | Module overview / all imports | — | `tsentials-meta` |
 
@@ -193,4 +194,5 @@ import { ResiliencePolicy, retryIfFailed } from 'tsentials/resilience';
 import { paginate, keysetOrdering, keysetPaginate } from 'tsentials/pagination';
 import { defineEnum } from 'tsentials/enums';
 import { createMediator, exceptionHandlingBehavior, validationBehavior } from 'tsentials/mediator';
+import { createIdempotency, idempotent, withIdempotency, idempotencyKeys, idempotencyScopes } from 'tsentials/idempotency';
 ```

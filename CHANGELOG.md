@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **New subpath-only module `tsentials/idempotency`** (100% coverage enforced): runs an operation once per `(namespace, scope, key)` and replays the stored outcome to later calls. Guide: [docs/IDEMPOTENCY.md](./docs/IDEMPOTENCY.md).
+  - Wrappers over one engine: `idempotent(fn, options)` for functions returning `Result<T>`, `idempotencyBehavior(options)` for mediator requests and `withIdempotency(handler, options)` for Fetch API handlers (`Idempotency-Key` header, problem+json errors, `Idempotency-Replayed: true` on replays). `createIdempotency(defaults)` shares the store, mode, durations, profiles and observers.
+  - Rollout modes `off`, `observe` and `enforce` (a value or a function read on every call). `observe` answers like `off` and reports `Idempotency.Observe.Would…` events.
+  - Error codes `Idempotency.InFlight` (Conflict, 409 + `Retry-After`), `Idempotency.KeyReused` (Validation, 422), `Idempotency.KeyMissing`, `Idempotency.KeyInvalid` and `Idempotency.ScopeRequired` (Validation, 400).
+  - Stores: `InMemoryIdempotencyStore`, `RedisIdempotencyStore` over a minimal `RedisLike` client (`eval` only; Lua scripts exported as `RedisIdempotencyScripts`) and `describeIdempotencyStoreContract` for custom stores. `examples/idempotency-redis` and `examples/idempotency-sql` (a transactional PostgreSQL store) run the contract suite against real servers.
+  - Keys and scopes: `idempotencyKeys` (`for`, `fromMessage`), `createIdempotencyKeys`, `isValidIdempotencyKey`, `normalizeIdempotencyKey`, `idempotencyScopes`, `idempotencyStorageKey`, `fingerprintOf`, `stableStringify`.
+- **Http:** `withIdempotencyKey(init, key?)`, `RequestBuilder.idempotencyKey(key?)` and `idempotencyKeyValue`, `idempotentRetryClassifier(method, hasKey)`, `HttpErrorMetadataKeys`, `parseRetryAfter`, `IDEMPOTENCY_KEY_HEADER`, `IDEMPOTENCY_REPLAYED_HEADER` and `IdempotencyErrorCodes`. Failed responses carry status, `Retry-After`, replay and problem code metadata (see [docs/BEHAVIOUR-CHANGES.md](./docs/BEHAVIOUR-CHANGES.md)).
+- **Resilience:** `withRetry` accepts `shouldRetry(error)` (already available on `retryIfFailed`) to replace the retryable check; `withRetry` and `retryIfFailed` accept `maxRetryAfterMs` to cap a server's `Retry-After` wait.
+- Agent skill `tsentials-idempotency` under `.well-known/agent-skills/`.
+
 ### Changed
 
 #### BREAKING

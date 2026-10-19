@@ -129,6 +129,7 @@
     "README.md",
     "CHANGELOG.md",
     "docs/BEHAVIOUR-CHANGES.md",
+    "docs/IDEMPOTENCY.md",
     "LICENSE"
   ],
   "keywords": [

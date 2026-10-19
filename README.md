@@ -65,6 +65,7 @@ Railway-oriented programming for TypeScript: `Result<T>`, `Maybe<T>`, Rule Engin
 - [Pagination](#pagination)
 - [Enums](#enums)
 - [Mediator](#mediator)
+- [Idempotency](#idempotency)
 - [Design Notes](#design-notes)
 - [AI Skills](#ai-skills)
 
@@ -104,8 +105,9 @@ npm install tsentials
 | `tsentials/pagination` | `paginate`, `keysetOrdering`, `keysetPaginate`, cursor helpers |
 | `tsentials/enums` | `defineEnum` |
 | `tsentials/mediator` | `createMediator`, `pipeline`, behaviors |
+| `tsentials/idempotency` | `idempotent`, `idempotencyBehavior`, `withIdempotency`, `createIdempotency`, stores, keys and scopes |
 
-> **Subpath-only modules.** `validation`, `resilience`, `pagination`, `enums` and `mediator` are not re-exported
+> **Subpath-only modules.** `validation`, `resilience`, `pagination`, `enums`, `mediator` and `idempotency` are not re-exported
 > from the root `tsentials` entry; import them from their subpath (`tsentials/validation`, …). The time
 > extensions (`nextDayOfWeek`, `getAge`, …) are exported from `tsentials/time` only.
 
@@ -610,12 +612,14 @@ const users = await RequestBuilder.get('https://api.example.com/users')
 // Relative URLs stay relative (resolved against the page origin as with plain fetch)
 await RequestBuilder.get('/api/users').send<User[]>();
 
-// JSON body with custom headers
+// JSON body with an Idempotency-Key (a fresh UUID when called without a key; every send() of this builder reuses it)
 const created = await RequestBuilder.post('https://api.example.com/users')
-  .header('Idempotency-Key', key)
+  .idempotencyKey()
   .json({ name: 'Alice', email: 'alice@example.com' })
   .send<User>();
 ```
+
+Failures carry response metadata (`HttpErrorMetadataKeys`: status, `Retry-After`, ProblemDetails `code`, replay flag). `withIdempotencyKey(init, key?)` adds the header to a plain `RequestInit`, and `idempotentRetryClassifier(method, hasKey)` is a `shouldRetry` for `ResiliencePolicy.withRetry` that never retries a POST or PATCH without a key. See [Idempotency](#idempotency).
 
 Status code mapping:
 
@@ -1161,6 +1165,8 @@ await retryIfFailed((signal) => loadOrder(id, signal), { maxAttempts: 2, delay: 
 
 **Note:** `maxAttempts` counts RETRIES, so the action runs at most `maxAttempts + 1` times. `executeValue(fn)` wraps a plain value as success.
 
+`withRetry({ shouldRetry })` replaces the retryable check (a throwing predicate stops retrying). A failure with `retryAfterMs` metadata (set by `fetchResult` from a `Retry-After` header) waits at least that long, capped at `maxRetryAfterMs` (default 30 s).
+
 ---
 
 ## Pagination
@@ -1230,6 +1236,50 @@ const result = await mediator.send('GetUser', { id: 1 }, { signal }); // Promise
 
 ---
 
+## Idempotency
+
+Runs an operation once per idempotency key. A later call with the same key gets the stored outcome; the operation does not run again. Wrappers exist for functions, mediator requests and Fetch API handlers, and they share one engine and one store contract.
+
+```typescript
+import {
+  createIdempotency,
+  idempotencyKeys,
+  idempotencyScopes,
+  RedisIdempotencyStore,
+} from 'tsentials/idempotency';
+
+const idem = createIdempotency({
+  store: new RedisIdempotencyStore(redis),   // or InMemoryIdempotencyStore for one process
+  mode: () => flags.idempotencyMode,         // 'off' | 'observe' | 'enforce'
+});
+
+// Functions returning Result<T>
+const capture = idem.idempotent(capturePayment, {
+  namespace: 'capture-payment',
+  key: (cmd: CaptureCommand) => idempotencyKeys.for('capture', cmd.orderId),
+  scope: (cmd) => idempotencyScopes.tenant(cmd.tenantId),
+});
+
+// Fetch API handlers (Hono, Next.js route handlers, Bun, Deno, Workers): reads the Idempotency-Key header
+export const POST = idem.withIdempotency(createOrder, {
+  scope: (request) => idempotencyScopes.user(userIdOf(request)),
+});
+
+// Mediator: idem.idempotencyBehavior() reads idempotencyKey / idempotencyScope from the request
+```
+
+- Same key still running → `Idempotency.InFlight` (Conflict, HTTP 409 with `Retry-After`).
+- Same key with another payload → `Idempotency.KeyReused` (Validation, HTTP 422).
+- Same key, same payload, completed → the stored outcome (HTTP adds `Idempotency-Replayed: true`).
+- Keys are scoped by `(namespace, scope, key)`; a key without a scope is rejected or skipped, never shared by accident.
+- Roll out with `observe` first: it answers exactly like `off` and reports what `enforce` would have done.
+
+Stores: `InMemoryIdempotencyStore`, `RedisIdempotencyStore` (bring your own client through `RedisLike`) and any store that passes `describeIdempotencyStoreContract`. Use a store with atomic compare-and-set; an eventually consistent key-value store such as Cloudflare KV is not safe as a lock. On the client side, `tsentials/http` adds `withIdempotencyKey`, `RequestBuilder.idempotencyKey()` and `idempotentRetryClassifier` for `ResiliencePolicy.withRetry({ shouldRetry })`.
+
+The [idempotency guide](./docs/IDEMPOTENCY.md) covers settings, the HTTP response table, lease and retry budgets, a transactional PostgreSQL store, webhooks and rollout.
+
+---
+
 ## Design Notes
 
 - **`Result<T>`**: discriminated union, no class, zero runtime overhead
@@ -1237,7 +1287,7 @@ const result = await mediator.send('GetUser', { id: 1 }, { signal }); // Promise
 - **`ResultChain<T>`**: fluent sync wrapper; monadic bind named `bind` (not `then`) for the same reason
 - **`Maybe<T>`**: pure functional namespace, all operations are static functions
 - **`Rule<T>`**: just `(ctx: T) => VoidResult`, no interface hierarchy
-- **Subpath-only modules**: `validation`, `resilience`, `pagination`, `enums`, `mediator` are not in the root entry, keeping the root bundle small
+- **Subpath-only modules**: `validation`, `resilience`, `pagination`, `enums`, `mediator`, `idempotency` are not in the root entry, keeping the root bundle small
 - **Entity base**: mixin factory pattern (`createEntityBase()`), not abstract class inheritance
 - **`sideEffects: false`**: all subpath imports are fully tree-shakeable
 
