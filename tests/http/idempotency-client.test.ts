@@ -202,7 +202,9 @@ describe('withIdempotencyKey', () => {
   });
 
   it('uses an injected generator and validates its key like an explicit one', () => {
-    const init = withIdempotencyKey({}, undefined, { idempotencyKeyGenerator: () => 'gen-1' });
+    const init = withIdempotencyKey({} as RequestInit, undefined, {
+      idempotencyKeyGenerator: () => 'gen-1',
+    });
     expect(new Headers(init.headers).get('idempotency-key')).toBe('gen-1');
     expect(() =>
       withIdempotencyKey({}, undefined, { idempotencyKeyGenerator: () => 'bad key' }),
