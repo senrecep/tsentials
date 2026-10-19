@@ -31,6 +31,7 @@ export const DEFAULT_REPLAYED_HEADERS: readonly string[] = [
   'location',
   'etag',
   'cache-control',
+  'retry-after',
 ];
 /** Statuses that leave the key in flight until the lease ends, instead of storing it. */
 export const DEFAULT_NEVER_STORE_STATUSES: readonly number[] = [503, 504];
@@ -242,13 +243,17 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
 
   const complete = async (response: Response): Promise<IdempotencyCompletion> => {
     if (neverStore.has(response.status)) return KEEP;
-    if (!shouldStore(response) || !isReplayable(response)) return RELEASE;
+    if (!shouldStore(response)) return RELEASE;
+    // The handler did its work but the response cannot be stored: only a 4xx is released, any
+    // other status keeps the key in flight so a retry cannot repeat the side effect.
+    const unstorable = response.status >= 400 && response.status < 500 ? RELEASE : KEEP;
+    if (!isReplayable(response)) return unstorable;
     const body = NULL_BODY_STATUSES.has(response.status)
       ? new Uint8Array(0)
       : await readBody(response, maxBodyBytes);
     if (body === undefined) {
       warn(settings, IdempotencyEventNames.ResponseTooLarge, namespace);
-      return RELEASE;
+      return unstorable;
     }
     const headers: [string, string][] = [];
     for (const name of replayedHeaders) {

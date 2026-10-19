@@ -321,36 +321,49 @@ describe('withIdempotency', () => {
       expect(s.runs()).toBe(1);
     });
 
-    it('sends a too large body unchanged, releases the key and logs', async () => {
+    it('sends a too large body unchanged, keeps the key in flight and logs', async () => {
       const s = setup((_req, run) => new Response('x'.repeat(10), { status: 201 + run - 1 }), {
         maxResponseBodyBytes: 4,
       });
       const first = await s.handler(post('k'));
       expect(await first.text()).toBe('x'.repeat(10));
-      expect((await s.handler(post('k'))).status).toBe(202);
+      const retry = await s.handler(post('k'));
+      expect(retry.status).toBe(409);
+      expect(await problemOf(retry)).toMatchObject({ code: IdempotencyErrorCodes.InFlight });
+      expect(s.runs()).toBe(1);
       expect(s.logs.map((l) => l.properties.EventName)).toContain(
         IdempotencyEventNames.ResponseTooLarge,
       );
     });
 
-    it('releases a body whose Content-Length is over the limit without reading it', async () => {
-      const s = setup(
-        () => new Response('x', { status: 201, headers: { 'content-length': '100' } }),
-        { maxResponseBodyBytes: 4 },
-      );
+    it('releases a too large 4xx body so a corrected retry runs again', async () => {
+      const s = setup(() => new Response('x'.repeat(10), { status: 400 }), {
+        maxResponseBodyBytes: 4,
+        shouldStore: () => true,
+      });
       await s.handler(post('k'));
       await s.handler(post('k'));
       expect(s.runs()).toBe(2);
     });
 
+    it('keeps a body whose Content-Length is over the limit in flight without reading it', async () => {
+      const s = setup(
+        () => new Response('x', { status: 201, headers: { 'content-length': '100' } }),
+        { maxResponseBodyBytes: 4 },
+      );
+      await s.handler(post('k'));
+      expect((await s.handler(post('k'))).status).toBe(409);
+      expect(s.runs()).toBe(1);
+    });
+
     it.each([
       ['an encoded body', { 'content-encoding': 'gzip' }],
       ['an event stream', { 'content-type': 'text/event-stream' }],
-    ])('releases %s', async (_name, headers) => {
+    ])('keeps the key in flight for %s', async (_name, headers) => {
       const s = setup(() => new Response('x', { status: 201, headers }));
       await s.handler(post('k'));
-      await s.handler(post('k'));
-      expect(s.runs()).toBe(2);
+      expect((await s.handler(post('k'))).status).toBe(409);
+      expect(s.runs()).toBe(1);
     });
 
     it('stores an identity encoded body', async () => {
