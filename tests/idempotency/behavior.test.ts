@@ -21,7 +21,7 @@ interface Capture {
   orderId: string;
   amount: number;
   idempotencyKey?: string | undefined;
-  idempotencyScope?: string | undefined;
+  idempotencyScope?: string | typeof idempotencyScopes.global | undefined;
   idempotencyRetentionMs?: number;
   idempotencyLeaseMs?: number;
   transactional?: boolean;
@@ -156,7 +156,7 @@ describe('idempotencyBehavior', () => {
         store: new InMemoryIdempotencyStore(),
         settings: (req) => {
           const r = req as Capture;
-          return { key: r.idempotencyKey, scope: 'global', fingerprint: r.orderId };
+          return { key: r.idempotencyKey, scope: idempotencyScopes.global, fingerprint: r.orderId };
         },
       }),
       charge,
@@ -302,13 +302,37 @@ describe('idempotencyBehavior', () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
+  it('reads idempotencyScopes.global from the request and rejects the raw string global', async () => {
+    const reserve = vi.fn<IdempotencyStore['reserve']>(async () => ({
+      status: 'reserved',
+      token: 't',
+    }));
+    const store: IdempotencyStore = {
+      reserve,
+      complete: async () => true,
+      release: async () => true,
+    };
+    const { mediator, fn } = setup(idempotencyBehavior({ store }), charge);
+    await mediator.send('Capture', capture({ idempotencyScope: idempotencyScopes.global }));
+    expect(reserve.mock.calls[0]?.[0]).toEqual({
+      namespace: 'Capture',
+      scope: 'global',
+      key: 'k1',
+    });
+    await expect(mediator.send('Capture', capture({ idempotencyScope: 'global' }))).rejects.toThrow(
+      TypeError,
+    );
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('skips everything in off mode, per request type', async () => {
     const store: IdempotencyStore = {
       reserve: vi.fn(),
       complete: vi.fn(),
       release: vi.fn(),
     };
-    const settings = vi.fn(() => ({ key: 'k', scope: 'global' }));
+    const settings = vi.fn(() => ({ key: 'k', scope: idempotencyScopes.global }));
     const { mediator, fn } = setup(
       idempotencyBehavior({ store, settings, forRequest: { Capture: { mode: 'off' } } }),
       charge,

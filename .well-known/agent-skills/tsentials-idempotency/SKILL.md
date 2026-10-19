@@ -104,7 +104,7 @@ await idempotencyKeys.fromMessage(messageId, 'billing');     // UUID per (messag
 idempotencyScopes.user(id) / .tenant(id) / .userAndTenant(u, t) / .client(id) / .custom('kind', id) / .global
 ```
 
-Scope builders return `undefined` for a missing id. Storage key: `idem:v3:{len}:{namespace}|{len}:{scope}|{len}:{key}` (`idempotencyStorageKey`).
+Scope builders return `undefined` for a missing id. `.global` is a symbol stored as `global`; a resolver returning the raw string `'global'` throws (enforce) or runs without idempotency (observe), so return builder output, not raw ids. Storage key: `idem:v3:{len}:{namespace}|{len}:{scope}|{len}:{key}` (`idempotencyStorageKey`).
 
 ## Stores
 

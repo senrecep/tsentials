@@ -138,6 +138,18 @@ describe('idempotent', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
+  it('throws for the raw scope string global and accepts idempotencyScopes.global', async () => {
+    const fn = vi.fn((c: Cmd) => Result.success(c.amount));
+    const store = new InMemoryIdempotencyStore();
+    const raw = idempotent(fn, { ...options(store), scope: (c: Cmd) => c.tenantId });
+    await expect(raw({ ...cmd, tenantId: 'global' })).rejects.toThrow(TypeError);
+    expect(fn).not.toHaveBeenCalled();
+    const shared = idempotent(fn, { ...options(store), scope: () => idempotencyScopes.global });
+    await shared(cmd);
+    await shared(cmd);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('throws for an invalid key', async () => {
     const run = idempotent((_: Cmd) => Result.success(1), {
       ...options(new InMemoryIdempotencyStore()),

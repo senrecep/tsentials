@@ -11,7 +11,7 @@ import type {
   ResolvedIdempotencySettings,
   UnscopedKeyBehavior,
 } from './options.js';
-import { idempotencyScopes } from './scopes.js';
+import { IDEMPOTENCY_GLOBAL_SCOPE, type IdempotencyScope, scopeStorageValue } from './scopes.js';
 import type { IdempotencyRecordKey, IdempotencyReservation } from './store.js';
 
 /** What to do with the record once the handler has returned. */
@@ -49,7 +49,7 @@ export interface IdempotencyCall<O> {
     | IdempotencyKeyRejection
     | Promise<string | undefined | IdempotencyKeyRejection>;
   /** The scope; `undefined` applies `unscopedKeyBehavior`. */
-  readonly scope: () => string | undefined | Promise<string | undefined>;
+  readonly scope: () => IdempotencyScope | undefined | Promise<IdempotencyScope | undefined>;
   readonly fingerprint: () => string | Promise<string>;
   /** Runs the handler. Calling it marks the handler as started. */
   readonly run: () => Promise<O>;
@@ -161,7 +161,7 @@ async function resolve(
   let scope = await call.scope();
   if (scope === undefined) {
     if (call.unscopedKeyBehavior === 'global') {
-      scope = idempotencyScopes.global;
+      scope = IDEMPOTENCY_GLOBAL_SCOPE;
     } else if (call.unscopedKeyBehavior === 'skip') {
       reporter.decision('unscoped', IdempotencyEventNames.UnscopedKeySkipped, true);
       return RUN;
@@ -174,7 +174,11 @@ async function resolve(
     }
   }
 
-  const recordKey: IdempotencyRecordKey = { namespace: call.namespace, scope, key };
+  const recordKey: IdempotencyRecordKey = {
+    namespace: call.namespace,
+    scope: scopeStorageValue(scope),
+    key,
+  };
   return { kind: 'reserve', reporter, recordKey, fingerprint: await call.fingerprint() };
 }
 

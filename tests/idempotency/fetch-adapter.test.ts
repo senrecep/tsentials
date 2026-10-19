@@ -10,6 +10,7 @@ import {
   IdempotencyEventNames,
   type IdempotencyStore,
   InMemoryIdempotencyStore,
+  idempotencyScopes,
   idempotencyStorePolicies,
   type WithIdempotencyOptions,
   withIdempotency,
@@ -236,6 +237,30 @@ describe('withIdempotency', () => {
       });
       await expect(s.handler(post('k'))).rejects.toThrow('boom');
       expect((await s.handler(post('k'))).status).toBe(409);
+    });
+
+    it('rejects for the raw scope string global, and runs once in observe', async () => {
+      const enforce = setup((_req, run) => created(run), { scope: () => 'global' });
+      await expect(enforce.handler(post('k'))).rejects.toThrow(TypeError);
+      expect(enforce.runs()).toBe(0);
+      const observe = setup((_req, run) => created(run), {
+        scope: () => 'global',
+        mode: 'observe',
+      });
+      expect((await observe.handler(post('k'))).status).toBe(201);
+      expect((await observe.handler(post('k'))).status).toBe(201);
+      expect(observe.runs()).toBe(2);
+      expect(observe.logs.map((l) => l.properties.EventName)).toEqual([
+        IdempotencyEventNames.ResolutionFailed,
+        IdempotencyEventNames.ResolutionFailed,
+      ]);
+    });
+
+    it('shares records across requests with idempotencyScopes.global', async () => {
+      const s = setup((_req, run) => created(run), { scope: () => idempotencyScopes.global });
+      await s.handler(post('k'));
+      expect((await s.handler(post('k'))).headers.get('idempotency-replayed')).toBe('true');
+      expect(s.runs()).toBe(1);
     });
 
     it('stores a response returned after the request was aborted', async () => {

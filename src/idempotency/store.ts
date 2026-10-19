@@ -6,7 +6,7 @@ import { utf8 } from './encoding.js';
 export interface IdempotencyRecordKey {
   /** Consumer or handler identity, for example the operation or request type name. */
   readonly namespace: string;
-  /** Whose key it is: user, tenant, client, or `idempotencyScopes.global`. */
+  /** Whose key it is: user, tenant, client, or `global` (from `idempotencyScopes.global`). */
   readonly scope: string;
   /** The idempotency key itself. */
   readonly key: string;

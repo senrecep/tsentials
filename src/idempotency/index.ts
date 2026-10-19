@@ -64,7 +64,12 @@ export {
   type RedisIdempotencyStoreOptions,
   type RedisLike,
 } from './redis-store.js';
-export { idempotencyScopes } from './scopes.js';
+export {
+  IDEMPOTENCY_GLOBAL_SCOPE,
+  type IdempotencyGlobalScope,
+  type IdempotencyScope,
+  idempotencyScopes,
+} from './scopes.js';
 export type {
   IdempotencyRecordKey,
   IdempotencyReservation,

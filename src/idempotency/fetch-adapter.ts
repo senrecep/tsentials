@@ -19,6 +19,7 @@ import {
   resolveSettings,
   type UnscopedKeyBehavior,
 } from './options.js';
+import type { IdempotencyScope } from './scopes.js';
 
 /** Methods guarded by default. */
 export const DEFAULT_IDEMPOTENT_METHODS: readonly string[] = ['POST', 'PATCH'];
@@ -54,7 +55,7 @@ export interface WithIdempotencyOptions extends IdempotencySettings {
    * `undefined` applies `unscopedKeyBehavior`.
    */
   readonly scope?:
-    | ((request: Request) => string | undefined | Promise<string | undefined>)
+    | ((request: Request) => IdempotencyScope | undefined | Promise<IdempotencyScope | undefined>)
     | undefined;
   /** Default: `'http'`. Also the `target` of decision events. */
   readonly namespace?: string | undefined;

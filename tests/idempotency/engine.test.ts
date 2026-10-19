@@ -5,6 +5,7 @@ import {
   IdempotencyEventNames,
   type IdempotencyStore,
   InMemoryIdempotencyStore,
+  idempotencyScopes,
 } from '../../src/idempotency/index.js';
 import { type IdempotencySettings, resolveSettings } from '../../src/idempotency/options.js';
 import type { MediatorLogLevel } from '../../src/mediator/index.js';
@@ -199,6 +200,21 @@ describe('runIdempotent: unscoped keys', () => {
     await runIdempotent(h.call({ scope: () => undefined, unscopedKeyBehavior: 'global' }));
     expect(reserve.mock.calls[0]?.[0]).toEqual({ namespace: 'orders', scope: 'global', key: 'k1' });
   });
+
+  it('stores idempotencyScopes.global as global and rejects the raw string global', async () => {
+    const reserve = vi.fn<IdempotencyStore['reserve']>(async () => ({
+      status: 'reserved',
+      token: 't',
+    }));
+    const h = harness({
+      store: { reserve, complete: async () => true, release: async () => true },
+    });
+    await runIdempotent(h.call({ scope: () => idempotencyScopes.global }));
+    expect(reserve.mock.calls[0]?.[0]).toEqual({ namespace: 'orders', scope: 'global', key: 'k1' });
+    await expect(runIdempotent(h.call({ scope: async () => 'global' }))).rejects.toThrow(TypeError);
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(h.runs).toBe(1);
+  });
 });
 
 describe('runIdempotent: observe', () => {
@@ -276,6 +292,18 @@ describe('runIdempotent: observe', () => {
       ),
     ).rejects.toThrow('stop');
     expect(observe.runs).toBe(0);
+  });
+
+  it('runs without idempotency in observe when the scope is the raw string global', async () => {
+    const reserve = vi.fn<IdempotencyStore['reserve']>();
+    const h = harness({
+      mode: 'observe',
+      store: { reserve, complete: async () => true, release: async () => true },
+    });
+    expect(await runIdempotent(h.call({ scope: () => 'global' }))).toBe('out1');
+    expect(reserve).not.toHaveBeenCalled();
+    expect(names(h)).toEqual([IdempotencyEventNames.ResolutionFailed]);
+    expect(h.logs[0]?.properties.Exception).toBeInstanceOf(TypeError);
   });
 
   it('runs a throwing handler once in observe, with or without a failing resolver', async () => {

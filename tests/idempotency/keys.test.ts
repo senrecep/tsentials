@@ -12,6 +12,7 @@ import {
   normalizeIdempotencyKey,
 } from '../../src/idempotency/index.js';
 import { uuidV5With } from '../../src/idempotency/keys.js';
+import { scopeStorageValue } from '../../src/idempotency/scopes.js';
 
 interface Vectors {
   version: number;
@@ -67,7 +68,7 @@ interface Vectors {
 function scopeOf(v: Vectors['scopes'][number]): string | undefined {
   switch (v.kind) {
     case 'global':
-      return idempotencyScopes.global;
+      return scopeStorageValue(idempotencyScopes.global);
     case 'custom':
       return idempotencyScopes.custom(v.customKind, v.value);
     case 'userAndTenant':

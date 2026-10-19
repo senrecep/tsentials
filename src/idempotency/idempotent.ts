@@ -12,6 +12,7 @@ import {
   type UnscopedKeyBehavior,
 } from './options.js';
 import { replayResult, resultCompletion } from './result-policy.js';
+import type { IdempotencyScope } from './scopes.js';
 
 /** Options of {@link idempotent}. */
 export interface IdempotentOptions<A extends readonly unknown[]> extends IdempotencySettings {
@@ -23,7 +24,9 @@ export interface IdempotentOptions<A extends readonly unknown[]> extends Idempot
    */
   readonly key: (...args: A) => string | undefined | Promise<string | undefined>;
   /** Whose key it is. Use `idempotencyScopes.global` explicitly for a shared scope. */
-  readonly scope: (...args: A) => string | undefined | Promise<string | undefined>;
+  readonly scope: (
+    ...args: A
+  ) => IdempotencyScope | undefined | Promise<IdempotencyScope | undefined>;
   /** Value whose hash detects a reused key. Default: the arguments. */
   readonly fingerprint?: ((...args: A) => unknown) | undefined;
   /** Abort signal passed to the store's `reserve`. */

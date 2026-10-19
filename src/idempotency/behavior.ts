@@ -14,13 +14,14 @@ import {
   type UnscopedKeyBehavior,
 } from './options.js';
 import { replayResult, resultCompletion } from './result-policy.js';
+import { IDEMPOTENCY_GLOBAL_SCOPE, type IdempotencyScope } from './scopes.js';
 
 /** Idempotency settings of one request. */
 export interface IdempotencyRequestSettings {
   /** The key; `undefined` runs the request without idempotency. */
   readonly key: string | undefined;
   /** Whose key it is; `undefined` applies `unscopedKeyBehavior`. */
-  readonly scope?: string | undefined;
+  readonly scope?: IdempotencyScope | undefined;
   /** Overrides the retention of this request. */
   readonly retentionMs?: number | undefined;
   /** Overrides the lease of this request. */
@@ -78,7 +79,10 @@ function defaultRequestSettings(request: unknown): IdempotencyRequestSettings | 
   if (typeof r.idempotencyKey !== 'string') return undefined;
   return {
     key: r.idempotencyKey,
-    scope: typeof r.idempotencyScope === 'string' ? r.idempotencyScope : undefined,
+    scope:
+      typeof r.idempotencyScope === 'string' || r.idempotencyScope === IDEMPOTENCY_GLOBAL_SCOPE
+        ? r.idempotencyScope
+        : undefined,
     retentionMs:
       typeof r.idempotencyRetentionMs === 'number' ? r.idempotencyRetentionMs : undefined,
     leaseMs: typeof r.idempotencyLeaseMs === 'number' ? r.idempotencyLeaseMs : undefined,

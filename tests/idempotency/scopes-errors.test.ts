@@ -1,17 +1,28 @@
 import { ErrorType } from '../../src/errors/index.js';
 import {
+  IDEMPOTENCY_GLOBAL_SCOPE,
   IdempotencyErrorCodes,
   idempotencyErrors,
   idempotencyScopes,
 } from '../../src/idempotency/index.js';
+import { scopeStorageValue } from '../../src/idempotency/scopes.js';
 
 describe('idempotencyScopes', () => {
   it('builds kind:value scopes', () => {
-    expect(idempotencyScopes.global).toBe('global');
     expect(idempotencyScopes.user('u1')).toBe('user:u1');
     expect(idempotencyScopes.tenant('t1')).toBe('tenant:t1');
     expect(idempotencyScopes.client('c1')).toBe('client:c1');
     expect(idempotencyScopes.custom('device', 'd1')).toBe('device:d1');
+  });
+
+  it('makes global a symbol stored as global, which no scope string can produce', () => {
+    expect(typeof idempotencyScopes.global).toBe('symbol');
+    expect(idempotencyScopes.global).toBe(IDEMPOTENCY_GLOBAL_SCOPE);
+    expect(scopeStorageValue(idempotencyScopes.global)).toBe('global');
+    expect(() => scopeStorageValue('global')).toThrow(TypeError);
+    expect(idempotencyScopes.custom('global', 'x')).toBe('global:x');
+    expect(scopeStorageValue('global:x')).toBe('global:x');
+    expect(scopeStorageValue('tenant:global')).toBe('tenant:global');
   });
 
   it('length-prefixes the tenant of userAndTenant', () => {
