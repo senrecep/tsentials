@@ -131,7 +131,7 @@ const uploaded = await RequestBuilder.post('https://api.example.com/upload')
 | `.query(name, value)` | Append a query string parameter |
 | `.json(body)` | Set body as JSON + Content-Type header |
 | `.body(body: BodyInit)` | Set raw body |
-| `.idempotencyKey(key?)` | Set `Idempotency-Key` (a UUID generated once when omitted; every `send()` reuses it) |
+| `.idempotencyKey(key?, { idempotencyKeyGenerator }?)` | Set `Idempotency-Key` (a UUID, or your generator's result, created once when omitted and validated like an explicit key; every `send()` reuses it) |
 | `.send<T>()` | Send request, returns `Promise<Result<T>>` |
 
 ---

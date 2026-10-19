@@ -4,9 +4,23 @@ import { IDEMPOTENCY_KEY_HEADER, IdempotencyErrorCodes } from '../idempotency/co
 import { isValidIdempotencyKey } from '../idempotency/keys.js';
 import { HttpErrorMetadataKeys } from './response-metadata.js';
 
-/** @internal Checks a key given by the caller, or generates a random UUID. */
-export function idempotencyKeyOrNew(key: string | undefined): string {
-  const value = key ?? globalThis.crypto.randomUUID();
+/** Options for the client-side idempotency key helpers. */
+export interface IdempotencyKeyOptions {
+  /**
+   * Creates the key when none is given. Defaults to `crypto.randomUUID()`. It is called at most
+   * once per `withIdempotencyKey` / `idempotencyKey` call, and its result is validated like an
+   * explicit key.
+   */
+  idempotencyKeyGenerator?: () => string;
+}
+
+/** @internal Checks a key given by the caller, or generates one (a random UUID by default). */
+export function idempotencyKeyOrNew(
+  key: string | undefined,
+  options?: IdempotencyKeyOptions,
+): string {
+  const value =
+    key ?? (options?.idempotencyKeyGenerator ?? (() => globalThis.crypto.randomUUID()))();
   if (!isValidIdempotencyKey(value)) {
     throw new TypeError('idempotency key must be 1-255 printable ASCII characters without " or \\');
   }
@@ -15,7 +29,7 @@ export function idempotencyKeyOrNew(key: string | undefined): string {
 
 /**
  * Returns a copy of `init` with an `Idempotency-Key` header (replacing any earlier one). The key
- * defaults to a random UUID. Reuse the returned init for every retry of the same logical
+ * defaults to a random UUID, or to what `options.idempotencyKeyGenerator` returns. Reuse the returned init for every retry of the same logical
  * operation; a new operation needs a new key.
  *
  * ```ts
@@ -23,11 +37,15 @@ export function idempotencyKeyOrNew(key: string | undefined): string {
  * await policy.execute((signal) => fetchResult.send(url, { ...init, signal }));
  * ```
  *
- * @throws TypeError when `key` is not a valid idempotency key.
+ * @throws TypeError when the key, given or generated, is not a valid idempotency key.
  */
-export function withIdempotencyKey<I extends RequestInit>(init: I, key?: string): I {
+export function withIdempotencyKey<I extends RequestInit>(
+  init: I,
+  key?: string,
+  options?: IdempotencyKeyOptions,
+): I {
   const headers = new Headers(init.headers);
-  headers.set(IDEMPOTENCY_KEY_HEADER, idempotencyKeyOrNew(key));
+  headers.set(IDEMPOTENCY_KEY_HEADER, idempotencyKeyOrNew(key, options));
   return { ...init, headers };
 }
 

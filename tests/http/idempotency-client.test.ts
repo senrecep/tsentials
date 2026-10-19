@@ -201,6 +201,36 @@ describe('withIdempotencyKey', () => {
     expect(key).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it('uses an injected generator and validates its key like an explicit one', () => {
+    const init = withIdempotencyKey({}, undefined, { idempotencyKeyGenerator: () => 'gen-1' });
+    expect(new Headers(init.headers).get('idempotency-key')).toBe('gen-1');
+    expect(() =>
+      withIdempotencyKey({}, undefined, { idempotencyKeyGenerator: () => 'bad key' }),
+    ).toThrow(TypeError);
+    const generator = vi.fn(() => 'unused');
+    withIdempotencyKey({}, 'explicit', { idempotencyKeyGenerator: generator });
+    expect(generator).not.toHaveBeenCalled();
+  });
+
+  it('generates the key once for every retry of one operation', async () => {
+    const mock = stubFetch(() => new Response(null, { status: 503 }));
+    const generator = vi.fn(() => 'gen-key');
+    const init = withIdempotencyKey({ method: 'POST' }, undefined, {
+      idempotencyKeyGenerator: generator,
+    });
+    const result = await ResiliencePolicy.create()
+      .withRetry({ maxAttempts: 2, delay: 0, shouldRetry: idempotentRetryClassifier('POST', true) })
+      .execute((signal) => fetchResult.send('/orders', { ...init, signal }));
+    expect(result.ok).toBe(false);
+    expect(generator).toHaveBeenCalledTimes(1);
+    expect(mock).toHaveBeenCalledTimes(3);
+    expect(mock.mock.calls.map(([, i]) => new Headers(i?.headers).get('idempotency-key'))).toEqual([
+      'gen-key',
+      'gen-key',
+      'gen-key',
+    ]);
+  });
+
   it('rejects an invalid key', () => {
     expect(() => withIdempotencyKey({}, 'has space')).toThrow(TypeError);
     expect(() => withIdempotencyKey({}, '')).toThrow(TypeError);
@@ -242,6 +272,28 @@ describe('RequestBuilder.idempotencyKey', () => {
     await builder.send();
     expect(sentKeys(mock)).toEqual(['second']);
     expect(builder.idempotencyKeyValue).toBe('second');
+  });
+
+  it('uses an injected generator once across retries', async () => {
+    const mock = stubFetch(() => new Response(null, { status: 503 }));
+    const generator = vi.fn(() => 'gen-key');
+    const builder = RequestBuilder.post('/orders')
+      .json({ a: 1 })
+      .idempotencyKey(undefined, { idempotencyKeyGenerator: generator });
+    await ResiliencePolicy.create()
+      .withRetry({ maxAttempts: 2, delay: 0, shouldRetry: idempotentRetryClassifier('POST', true) })
+      .execute((signal) => builder.signal(signal).send());
+    expect(generator).toHaveBeenCalledTimes(1);
+    expect(builder.idempotencyKeyValue).toBe('gen-key');
+    expect(sentKeys(mock)).toEqual(['gen-key', 'gen-key', 'gen-key']);
+  });
+
+  it('rejects an invalid generated key like an explicit one', () => {
+    const builder = RequestBuilder.get('/x');
+    expect(() =>
+      builder.idempotencyKey(undefined, { idempotencyKeyGenerator: () => 'bad key' }),
+    ).toThrow(TypeError);
+    expect(builder.idempotencyKeyValue).toBeUndefined();
   });
 
   it('is undefined until set and rejects an invalid key', () => {
