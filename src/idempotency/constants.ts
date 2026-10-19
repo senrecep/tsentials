@@ -32,6 +32,14 @@ export const IdempotencyEventNames = {
   WouldRejectInFlight: 'Idempotency.Observe.WouldRejectInFlight',
   WouldRejectScopeRequired: 'Idempotency.Observe.WouldRejectScopeRequired',
   UnscopedKeySkipped: 'Idempotency.UnscopedKeySkipped',
+  /** Name of the decisions that have no fixed event name (`reserved`, `stored`, …). */
+  Decision: 'Idempotency.Decision',
+  /** `reserve` threw in `observe` mode; the handler ran without idempotency. */
+  StoreFailed: 'Idempotency.StoreFailed',
+  /** Writing the outcome (`complete` or `release`) threw; the handler's output was returned. */
+  CompleteFailed: 'Idempotency.CompleteFailed',
+  /** `complete` found another reservation (the lease ran out and another call took over). */
+  ReservationLost: 'Idempotency.ReservationLost',
 } as const;
 
 /** Largest key accepted by default, in characters. */

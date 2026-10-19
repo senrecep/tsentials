@@ -105,6 +105,10 @@
     "./mediator": {
       "import": "./dist/mediator/index.js",
       "types": "./dist/mediator/index.d.ts"
+    },
+    "./idempotency": {
+      "import": "./dist/idempotency/index.js",
+      "types": "./dist/idempotency/index.d.ts"
     }
   },
   "sideEffects": false,
