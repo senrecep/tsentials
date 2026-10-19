@@ -282,6 +282,8 @@ describeIdempotencyStoreContract('MyRedisStore', () => new MyRedisStore(), { des
 });
 ```
 
+A store must compare namespace, scope and key byte for byte. A case-insensitive or normalizing collation (the MySQL default, for example) merges `tenant:ABC` with `tenant:abc`, so two owners share records; use a binary collation for those columns.
+
 ## Money and credits: a transactional SQL store
 
 For payments, credits and stock, the idempotency record must commit or roll back together with the business change. Otherwise a crash between the two either loses the record (the operation runs again) or keeps a record of work that never happened.
