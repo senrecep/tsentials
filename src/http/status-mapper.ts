@@ -40,7 +40,8 @@ export function httpStatusToErrorType(status: number): ErrorType {
   }
 }
 
-const createError = (
+/** @internal Builds an AppError with the factory of its type. */
+export const createError = (
   type: ErrorType,
   code: string,
   description: string,

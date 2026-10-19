@@ -2,7 +2,12 @@
 
 This guide lists every change in 1.0.0 that alters the runtime behaviour of an existing tsentials API. Read it when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](../CHANGELOG.md).
 
-## Behaviour changes
+## Unreleased
+
+* **http:** the first error of a failed `fetchResult` / `RequestBuilder` response carries metadata: `httpStatus` (always), `retryAfterMs` (from a valid `Retry-After`), `idempotencyReplayed` (`Idempotency-Replayed: true`) and `problemCode` (a string `code` field of the body). Keys the problem body already gave the error win. Code, type and description are unchanged; a test that compares a whole failure with `toEqual` now also sees the metadata.
+* **resilience:** `withRetry` and `retryIfFailed` wait at least the `retryAfterMs` metadata of a failure's first error before the next retry, capped by the new `maxRetryAfterMs` option (default 30 000 ms). A `fetchResult` failure with `Retry-After` therefore waits longer than the backoff when the server asks it to.
+
+## Behaviour changes in 1.0.0
 
 * **results:** `Result.recover(r, match, fn)` now scans ALL errors for a match, not only the first. Use the new `Result.recoverFirst` for the old first-error behaviour.
 * **results:** `Result.ensure` evaluates an error factory lazily, only when the predicate fails.

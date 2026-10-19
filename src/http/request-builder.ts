@@ -1,6 +1,8 @@
+import { IDEMPOTENCY_KEY_HEADER } from '../idempotency/constants.js';
 import type { Result } from '../result/result.js';
 import type { FetchResultInit } from './fetch-result.js';
 import { fetchResult } from './fetch-result.js';
+import { idempotencyKeyOrNew } from './idempotency-client.js';
 
 /** Value accepted by {@link RequestBuilder.query}. */
 export type QueryValue = string | number | boolean;
@@ -37,6 +39,7 @@ export class RequestBuilder {
   #jsonContentType = false;
   #signal: AbortSignal | undefined;
   #timeout: number | undefined;
+  #idempotencyKey: string | undefined;
 
   private constructor(method: string, url: string | URL) {
     this.#method = method;
@@ -75,6 +78,26 @@ export class RequestBuilder {
     }
     this.#headers.push([name, value]);
     return this;
+  }
+
+  /**
+   * Sets the `Idempotency-Key` header (replacing an earlier one). Without `key` a random UUID is
+   * generated now, so every `send()` of this builder (retries of one logical operation) carries
+   * the same key. Start a new builder for a new operation. Read the key with
+   * {@link idempotencyKeyValue}.
+   * @throws TypeError when `key` is not a valid idempotency key.
+   */
+  idempotencyKey(key?: string): this {
+    const value = idempotencyKeyOrNew(key);
+    this.#removeHeader(IDEMPOTENCY_KEY_HEADER);
+    this.#headers.push([IDEMPOTENCY_KEY_HEADER, value]);
+    this.#idempotencyKey = value;
+    return this;
+  }
+
+  /** The key set by {@link idempotencyKey}, or `undefined`. */
+  get idempotencyKeyValue(): string | undefined {
+    return this.#idempotencyKey;
   }
 
   /** Adds several request headers (same semantics as {@link header} for each entry). */
@@ -129,8 +152,13 @@ export class RequestBuilder {
   }
 
   #removeContentType(): void {
+    this.#removeHeader('content-type');
+  }
+
+  #removeHeader(name: string): void {
+    const lower = name.toLowerCase();
     for (let i = this.#headers.length - 1; i >= 0; i--) {
-      if (this.#headers[i]?.[0].toLowerCase() === 'content-type') this.#headers.splice(i, 1);
+      if (this.#headers[i]?.[0].toLowerCase() === lower) this.#headers.splice(i, 1);
     }
   }
 

@@ -2,6 +2,7 @@ import { Err } from '../errors/app-error.js';
 import { ErrorType } from '../errors/error-type.js';
 import type { Result } from '../result/result.js';
 import { Result as R } from '../result/result.js';
+import { withResponseMetadata } from './response-metadata.js';
 import { problemDetailsToErrors } from './status-mapper.js';
 
 /**
@@ -56,7 +57,9 @@ async function responseToResult<T>(
         body = undefined; // unreadable error body, fall back to the status error
       }
     }
-    return R.failureFrom(problemDetailsToErrors(response.status, body));
+    return R.failureFrom(
+      withResponseMetadata(problemDetailsToErrors(response.status, body), response, body),
+    );
   }
 
   // 204 No Content / 205 Reset Content never carry a body, and a non-JSON body is not
@@ -147,6 +150,8 @@ const jsonInit = (method: string, body: unknown, init: RequestInit | undefined):
  *
  * - Network errors, body parse errors and HTTP error responses become failures
  *   (status mapping: {@link httpStatusToErrorType}; ProblemDetails `errors` are parsed).
+ * - The first error of a failed response carries the metadata `httpStatus`, and when present
+ *   `idempotencyReplayed`, `retryAfterMs` and `problemCode` (see `HttpErrorMetadataKeys`).
  * - 2xx bodies: 204/205 and non-JSON content types are void successes (`undefined`); a JSON
  *   content type with an empty body or a literal `null` is a NotFound failure
  *   (code `NotFound`, "Response body was empty or could not be deserialized."), except for

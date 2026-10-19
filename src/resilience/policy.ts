@@ -29,14 +29,6 @@ export interface ResiliencePolicyOptions {
 
 /** Options for {@link retryIfFailed}. */
 export interface RetryIfFailedOptions extends RetryOptions, AbortOptions {
-  /**
-   * Replaces the default classification: retry while this returns true for the first error.
-   * A thrown value is converted to the error the call would return for it (Unexpected) and passed
-   * here too. Caller aborts are never retried. Keep it pure, it can be called more than once for
-   * the same attempt. If it throws while classifying an attempt, retrying stops and the throw is
-   * returned as an Unexpected error.
-   */
-  readonly shouldRetry?: ((error: AppError) => boolean) | undefined;
   readonly time?: ResilienceTime | undefined;
 }
 
@@ -46,6 +38,38 @@ export type ResilienceAction<T> = (signal: AbortSignal) => PromiseLike<Result<T>
 /** Retry predicate shared by `withRetry` and `retryIfFailed` without a custom predicate. */
 const defaultRetryHandle = (outcome: Outcome<unknown>, signal: AbortSignal): boolean =>
   outcome.thrown ? !isCallerAbort(outcome.error, signal) : isRetryable(outcome.result);
+
+/**
+ * Wraps a custom `shouldRetry`: a throwing predicate stops retrying (the throw becomes the
+ * Unexpected failure of the call), except after an abort of `signal`, where the cancellation
+ * wins and the abort reason is thrown instead.
+ */
+const guardShouldRetry =
+  (shouldRetry: (error: AppError) => boolean, signal: () => AbortSignal | undefined) =>
+  (error: AppError): boolean => {
+    try {
+      return shouldRetry(error);
+    } catch (predicateError) {
+      const aborted = signal();
+      if (aborted?.aborted) throw aborted.reason;
+      throw predicateError;
+    }
+  };
+
+/** Retry predicate of `withRetry` and `retryIfFailed`; `undefined` uses the default one. */
+function retryHandle(
+  shouldRetry: ((error: AppError) => boolean) | undefined,
+): (outcome: Outcome<unknown>, signal: AbortSignal) => boolean {
+  if (shouldRetry === undefined) return defaultRetryHandle;
+  return (outcome, signal) => {
+    const guarded = guardShouldRetry(shouldRetry, () => signal);
+    if (outcome.thrown) {
+      return !isCallerAbort(outcome.error, signal) && guarded(toResilienceError(outcome.error));
+    }
+    const first = outcome.result.ok ? undefined : outcome.result.errors[0];
+    return first !== undefined && guarded(first);
+  };
+}
 
 /** Circuit breaker counts any thrown value and every retryable failure. */
 const circuitBreakerHandle = (outcome: Outcome<unknown>): boolean =>
@@ -101,11 +125,15 @@ export class ResiliencePolicy<T = never> {
 
   /**
    * Adds a retry strategy. Retries thrown values (except the caller's abort) and retryable
-   * failures; defaults: 3 retries, 1000 ms, exponential (1 s, 2 s, 4 s). No jitter.
-   * @throws RangeError for `maxAttempts < 1` or `delay` outside 0 … 1 day.
+   * failures (or what `shouldRetry` accepts); defaults: 3 retries, 1000 ms, exponential (1 s, 2 s,
+   * 4 s). No jitter. A failure with `retryAfterMs` metadata waits at least that long, capped at
+   * `maxRetryAfterMs` (default 30 s).
+   * @throws RangeError for `maxAttempts < 1`, or `delay` / `maxRetryAfterMs` outside 0 … 1 day.
    */
   withRetry(options?: RetryOptions): ResiliencePolicy<T> {
-    return this.add(retryStrategy(resolveRetry(options), this.time, defaultRetryHandle));
+    return this.add(
+      retryStrategy(resolveRetry(options), this.time, retryHandle(options?.shouldRetry)),
+    );
   }
 
   /**
@@ -185,45 +213,18 @@ export function retryIfFailed<T>(
       const config = resolveRetry(options);
       const customRetry = options?.shouldRetry;
       const callerSignal = options?.signal;
-      // A throwing predicate stops retrying: the throw becomes the Unexpected failure of the
-      // call (see RetryIfFailedOptions.shouldRetry), except after a caller abort, where the
-      // cancellation wins and the call rejects with the abort reason.
-      const shouldRetry =
-        customRetry === undefined
-          ? undefined
-          : (error: AppError): boolean => {
-              try {
-                return customRetry(error);
-              } catch (predicateError) {
-                if (callerSignal?.aborted) throw callerSignal.reason;
-                throw predicateError;
-              }
-            };
-
-      const handle =
-        shouldRetry === undefined
-          ? defaultRetryHandle
-          : (outcome: Outcome<unknown>, signal: AbortSignal): boolean => {
-              if (outcome.thrown) {
-                return (
-                  !isCallerAbort(outcome.error, signal) &&
-                  shouldRetry(toResilienceError(outcome.error))
-                );
-              }
-              const first = outcome.result.ok ? undefined : outcome.result.errors[0];
-              return first !== undefined && shouldRetry(first);
-            };
-
       const postCheck =
-        shouldRetry === undefined
+        customRetry === undefined
           ? isRetryable
           : (result: Result<T>): boolean => {
               const first = result.ok ? undefined : result.errors[0];
-              return first !== undefined && shouldRetry(first);
+              return (
+                first !== undefined && guardShouldRetry(customRetry, () => callerSignal)(first)
+              );
             };
 
       return runPipeline<T>(
-        [retryStrategy(config, resolveTime(options?.time), handle)],
+        [retryStrategy(config, resolveTime(options?.time), retryHandle(customRetry))],
         operation,
         options?.signal,
         postCheck,
