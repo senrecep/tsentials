@@ -17,6 +17,7 @@ import {
 } from '../../src/idempotency/index.js';
 import type { MediatorLogLevel } from '../../src/mediator/index.js';
 import { ResiliencePolicy } from '../../src/resilience/index.js';
+import { createFakeDateTimeProvider } from '../../src/time/index.js';
 
 const URL_BASE = 'https://api.test/orders';
 
@@ -620,6 +621,96 @@ describe('withIdempotency', () => {
         IdempotencyEventNames.WouldReplay,
         IdempotencyEventNames.WouldRejectKeyReused,
       ]);
+    });
+  });
+
+  describe('record expiry and lease end', () => {
+    const clockedStore = () => {
+      const clock = createFakeDateTimeProvider(new Date('2026-01-01T00:00:00Z'));
+      return { clock, store: new InMemoryIdempotencyStore({ clock }) };
+    };
+    const serverError = (_req: Request, run: number) => new Response(`e${run}`, { status: 500 });
+
+    it('replays a 500 until the default serverErrorRetentionMs, then runs again', async () => {
+      const { clock, store } = clockedStore();
+      const s = setup(serverError, { store });
+      expect((await s.handler(post('k'))).status).toBe(500);
+      const replay = await s.handler(post('k'));
+      expect(replay.headers.get('idempotency-replayed')).toBe('true');
+      expect(await replay.text()).toBe('e1');
+      expect(s.runs()).toBe(1);
+      clock.advance(600_000 + 1);
+      const again = await s.handler(post('k'));
+      expect(again.headers.get('idempotency-replayed')).toBeNull();
+      expect(await again.text()).toBe('e2');
+      expect(s.runs()).toBe(2);
+    });
+
+    it('takes serverErrorRetentionMs from the selected profile', async () => {
+      const { clock, store } = clockedStore();
+      const idem = createIdempotency({ store, profiles: { p: { serverErrorRetentionMs: 5_000 } } });
+      let runs = 0;
+      const handler = idem.withIdempotency(
+        async () => {
+          runs += 1;
+          return new Response('x', { status: 500 });
+        },
+        { profile: 'p', unscopedKeyBehavior: 'global' },
+      );
+      await handler(post('k'));
+      clock.advance(5_000 - 1);
+      expect((await handler(post('k'))).headers.get('idempotency-replayed')).toBe('true');
+      expect(runs).toBe(1);
+      clock.advance(2);
+      await handler(post('k'));
+      expect(runs).toBe(2);
+    });
+
+    const LEASE = 10_000;
+    it.each([
+      [
+        'a handler that throws',
+        async () => {
+          throw new Error('boom');
+        },
+      ],
+      [
+        'a handler whose request signal aborts',
+        async (_req: Request, controller: AbortController) => {
+          controller.abort(new Error('client gone'));
+          throw controller.signal.reason;
+        },
+      ],
+      ['a 503 response', async () => new Response('busy', { status: 503 })],
+    ])('%s: 409 with Retry-After within the lease, one more run after it', async (_name, first) => {
+      const { clock, store } = clockedStore();
+      const controller = new AbortController();
+      const s = setup((req, run) => (run === 1 ? first(req, controller) : created(run)), {
+        store,
+        leaseMs: LEASE,
+      });
+      await s
+        .handler(
+          new Request(URL_BASE, {
+            method: 'POST',
+            body: '{"sku":"a"}',
+            headers: { 'Idempotency-Key': 'k' },
+            signal: controller.signal,
+          }),
+        )
+        .catch(() => undefined);
+      expect(s.runs()).toBe(1);
+      clock.advance(LEASE - 1);
+      const busy = await s.handler(post('k'));
+      expect(busy.status).toBe(409);
+      expect(busy.headers.get('retry-after')).toBe('1');
+      expect(await problemOf(busy)).toMatchObject({ code: IdempotencyErrorCodes.InFlight });
+      expect(s.runs()).toBe(1);
+      clock.advance(2);
+      expect((await s.handler(post('k'))).status).toBe(201);
+      expect(s.runs()).toBe(2);
+      expect((await s.handler(post('k'))).headers.get('idempotency-replayed')).toBe('true');
+      expect(s.runs()).toBe(2);
     });
   });
 
