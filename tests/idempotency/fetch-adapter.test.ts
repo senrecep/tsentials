@@ -5,6 +5,7 @@ import {
 } from '../../src/http/index.js';
 import {
   createIdempotency,
+  DEFAULT_SERVER_ERROR_RETENTION_MS,
   type IdempotencyDecisionEvent,
   IdempotencyErrorCodes,
   IdempotencyEventNames,
@@ -639,7 +640,10 @@ describe('withIdempotency', () => {
       expect(replay.headers.get('idempotency-replayed')).toBe('true');
       expect(await replay.text()).toBe('e1');
       expect(s.runs()).toBe(1);
-      clock.advance(600_000 + 1);
+      clock.advance(DEFAULT_SERVER_ERROR_RETENTION_MS - 1);
+      expect((await s.handler(post('k'))).headers.get('idempotency-replayed')).toBe('true');
+      expect(s.runs()).toBe(1);
+      clock.advance(2);
       const again = await s.handler(post('k'));
       expect(again.headers.get('idempotency-replayed')).toBeNull();
       expect(await again.text()).toBe('e2');

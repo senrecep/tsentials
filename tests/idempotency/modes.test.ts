@@ -282,7 +282,9 @@ describe.each(Object.entries(drivers))('rollout modes: %s', (_name, create) => {
     await d.send(scoped('k'));
     await d.send(scoped('k'));
     const replays = d.log.mock.calls.filter(
-      (c) => (c[2] as { EventName?: string }).EventName === 'Idempotency.Observe.WouldReplay',
+      (c) =>
+        (c[2] as { EventName?: string } | undefined)?.EventName ===
+        'Idempotency.Observe.WouldReplay',
     );
     expect(IdempotencyEventNames.WouldReplay).toBe('Idempotency.Observe.WouldReplay');
     expect(replays).toHaveLength(1);
