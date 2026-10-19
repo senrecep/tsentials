@@ -14,7 +14,7 @@ import {
   type UnscopedKeyBehavior,
 } from './options.js';
 import { replayResult, resultCompletion } from './result-policy.js';
-import { IDEMPOTENCY_GLOBAL_SCOPE, type IdempotencyScope } from './scopes.js';
+import { type IdempotencyScope, idempotencyScopes } from './scopes.js';
 
 /** Idempotency settings of one request. */
 export interface IdempotencyRequestSettings {
@@ -79,10 +79,9 @@ function defaultRequestSettings(request: unknown): IdempotencyRequestSettings | 
   if (typeof r.idempotencyKey !== 'string') return undefined;
   return {
     key: r.idempotencyKey,
-    scope:
-      typeof r.idempotencyScope === 'string' || r.idempotencyScope === IDEMPOTENCY_GLOBAL_SCOPE
-        ? r.idempotencyScope
-        : undefined,
+    // Checked when the call resolves (idempotencyScopes.fromJSON), so a raw string or a
+    // malformed value is rejected instead of being treated as "no scope".
+    scope: r.idempotencyScope == null ? undefined : (r.idempotencyScope as IdempotencyScope),
     retentionMs:
       typeof r.idempotencyRetentionMs === 'number' ? r.idempotencyRetentionMs : undefined,
     leaseMs: typeof r.idempotencyLeaseMs === 'number' ? r.idempotencyLeaseMs : undefined,
@@ -157,7 +156,11 @@ export function makeIdempotencyBehavior(
         typeSettings?.unscopedKeyBehavior ?? options.unscopedKeyBehavior ?? 'reject',
       signal: context.signal,
       key: () => key,
-      scope: () => scope,
+      // The default reader also accepts the JSON form of a scope (a queued request).
+      scope: () =>
+        options.settings === undefined && scope !== undefined
+          ? idempotencyScopes.fromJSON(scope)
+          : scope,
       fingerprint: () =>
         fingerprintOf('fingerprint' in requestSettings ? requestSettings.fingerprint : request),
       run: () => next(),

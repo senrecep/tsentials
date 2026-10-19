@@ -3,9 +3,11 @@ import {
   IdempotencyErrorCodes,
   IdempotencyEventNames,
   type IdempotencyMode,
+  type IdempotencyScope,
   type IdempotencySource,
   InMemoryIdempotencyStore,
   idempotencyBehavior,
+  idempotencyScopes,
   idempotent,
   type UnscopedKeyBehavior,
   withIdempotency,
@@ -88,7 +90,7 @@ const drivers: Record<string, DriverFactory> = {
       ...c.settings,
       namespace: 'orders',
       key: (call) => call.key,
-      scope: (call) => call.scope,
+      scope: (call) => idempotencyScopes.tenant(call.scope),
       fingerprint: (call) => call.payload,
       unscopedKeyBehavior,
     });
@@ -104,7 +106,11 @@ const drivers: Record<string, DriverFactory> = {
   mediator: (unscopedKeyBehavior) => {
     const c = common();
     const h = handlerState();
-    type Req = { payload: string; idempotencyKey: string; idempotencyScope?: string | undefined };
+    type Req = {
+      payload: string;
+      idempotencyKey: string;
+      idempotencyScope?: IdempotencyScope | undefined;
+    };
     const mediator = createMediator<{ Create: { request: Req; response: string } }>({
       behaviors: [idempotencyBehavior({ ...c.settings, unscopedKeyBehavior })],
     }).register('Create', async (req) => Result.success(await h.run(req.payload)));
@@ -118,7 +124,7 @@ const drivers: Record<string, DriverFactory> = {
           await mediator.send('Create', {
             payload: call.payload,
             idempotencyKey: call.key,
-            idempotencyScope: call.scope,
+            idempotencyScope: idempotencyScopes.tenant(call.scope),
           }),
         ),
     };
@@ -131,7 +137,7 @@ const drivers: Record<string, DriverFactory> = {
       async (req: Request) => new Response(await h.run(await req.text()), { status: 201 }),
       {
         ...c.settings,
-        scope: (req) => req.headers.get('x-scope') ?? undefined,
+        scope: (req) => idempotencyScopes.tenant(req.headers.get('x-scope')),
         unscopedKeyBehavior,
       },
     );
@@ -160,7 +166,7 @@ const drivers: Record<string, DriverFactory> = {
   },
 };
 
-const scoped = (key: string, payload = 'a'): Call => ({ key, payload, scope: 'tenant:1' });
+const scoped = (key: string, payload = 'a'): Call => ({ key, payload, scope: '1' });
 
 /** The four conflict scenarios; each returns what every call of it saw. */
 const scenarios: Record<string, (d: Driver) => Promise<Outcome[]>> = {

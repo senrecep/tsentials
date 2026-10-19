@@ -141,7 +141,7 @@ describe('idempotent', () => {
   it('throws for the raw scope string global and accepts idempotencyScopes.global', async () => {
     const fn = vi.fn((c: Cmd) => Result.success(c.amount));
     const store = new InMemoryIdempotencyStore();
-    const raw = idempotent(fn, { ...options(store), scope: (c: Cmd) => c.tenantId });
+    const raw = idempotent(fn, { ...options(store), scope: (c: Cmd) => c.tenantId as never });
     await expect(raw({ ...cmd, tenantId: 'global' })).rejects.toThrow(TypeError);
     expect(fn).not.toHaveBeenCalled();
     const shared = idempotent(fn, { ...options(store), scope: () => idempotencyScopes.global });

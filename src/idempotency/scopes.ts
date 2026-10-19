@@ -1,41 +1,73 @@
 import { utf8 } from './encoding.js';
 
-/**
- * The shared scope (`idempotencyScopes.global`). A symbol, so no value read from a request,
- * a token or a database can select it: only code that names it can.
- */
-export const IDEMPOTENCY_GLOBAL_SCOPE: unique symbol = Symbol.for(
-  'tsentials.idempotency.globalScope',
-);
-
-/** Type of {@link IDEMPOTENCY_GLOBAL_SCOPE}. */
-export type IdempotencyGlobalScope = typeof IDEMPOTENCY_GLOBAL_SCOPE;
-
-/** What a scope resolver returns: a scope string or the shared scope. */
-export type IdempotencyScope = string | IdempotencyGlobalScope;
-
-/** Storage form of the shared scope; reserved, so a resolver cannot return it as a string. */
-const GLOBAL_SCOPE_STORAGE = 'global';
+/** Construction token; not exported, so only the builders below can create a scope. */
+const CONSTRUCT: unique symbol = Symbol('IdempotencyScope');
 
 /**
- * Storage form of a resolved scope. The raw string `'global'` throws `TypeError`: it would
- * share records with the global scope (for example a tenant whose id is `global`). A value that
- * is not a non-empty string (from untyped code) throws `TypeError` too.
+ * JSON form of an {@link IdempotencyScope} (`toJSON`), for requests that are serialized, for
+ * example queued mediator requests. `idempotencyScopes.fromJSON` turns it back into a scope.
  */
-export function scopeStorageValue(scope: IdempotencyScope): string {
-  if (scope === IDEMPOTENCY_GLOBAL_SCOPE) return GLOBAL_SCOPE_STORAGE;
-  if (scope === GLOBAL_SCOPE_STORAGE) {
-    throw new TypeError(
-      "The idempotency scope 'global' is reserved: return idempotencyScopes.global for the shared scope, or a prefixed scope such as idempotencyScopes.tenant(id).",
-    );
+export type IdempotencyScopeJson =
+  | { readonly kind: 'global' }
+  | { readonly kind: 'user' | 'tenant' | 'client'; readonly value: string }
+  | { readonly kind: 'custom'; readonly customKind: string; readonly value: string }
+  | { readonly kind: 'userAndTenant'; readonly userId: string; readonly tenantId: string };
+
+/**
+ * Whose idempotency key it is. Only the `idempotencyScopes` builders create one, so no raw
+ * string (a tenant id `global`, a user id `user:42`) can select another owner's records.
+ * Immutable; `toString()` gives the storage form.
+ */
+export class IdempotencyScope {
+  readonly #storage: string;
+  readonly #json: IdempotencyScopeJson;
+
+  /** @internal Use `idempotencyScopes`. */
+  constructor(token: typeof CONSTRUCT, storage: string, json: IdempotencyScopeJson) {
+    if (token !== CONSTRUCT) {
+      throw new TypeError('Create an IdempotencyScope with idempotencyScopes.');
+    }
+    this.#storage = storage;
+    this.#json = Object.freeze({ ...json });
+    Object.freeze(this);
   }
-  if (typeof scope !== 'string' || scope === '') {
-    throw new TypeError(
-      `An idempotency scope must be a non-empty string or idempotencyScopes.global (got ${typeof scope === 'string' ? 'an empty string' : typeof scope}).`,
-    );
+
+  /** The builder that created this scope. */
+  get kind(): IdempotencyScopeJson['kind'] {
+    return this.#json.kind;
   }
-  return scope;
+
+  /** JSON form, read back by `idempotencyScopes.fromJSON`. */
+  toJSON(): IdempotencyScopeJson {
+    return this.#json;
+  }
+
+  /** Storage form: `user:42`, `9:tenant:t1/user:u1`, `global`, `kind:value`. */
+  toString(): string {
+    return this.#storage;
+  }
+
+  /** True for a scope created by `idempotencyScopes`. */
+  static isScope(value: unknown): value is IdempotencyScope {
+    return typeof value === 'object' && value !== null && #storage in value;
+  }
 }
+
+/**
+ * Storage form of a resolved scope. Anything other than an {@link IdempotencyScope} throws
+ * `TypeError`: a raw string would let an owner id such as `global` or `user:42` share
+ * another owner's records.
+ */
+export function scopeStorageValue(scope: unknown): string {
+  if (IdempotencyScope.isScope(scope)) return scope.toString();
+  throw new TypeError(
+    typeof scope === 'string'
+      ? 'A raw string is not an idempotency scope: build it with idempotencyScopes, for example idempotencyScopes.tenant(id).'
+      : `An idempotency scope must come from idempotencyScopes (got ${scope === null ? 'null' : typeof scope}).`,
+  );
+}
+
+const GLOBAL = new IdempotencyScope(CONSTRUCT, 'global', { kind: 'global' });
 
 /**
  * Scope builders. A scope says whose key it is, so the same key sent by two users or two
@@ -43,15 +75,13 @@ export function scopeStorageValue(scope: IdempotencyScope): string {
  * which the caller treats as "no scope" (see `unscopedKeyBehavior`).
  */
 export const idempotencyScopes = {
-  /**
-   * One shared scope (stored as `global`). Choose it explicitly, only when keys are unique
-   * across all callers; a resolver that returns the string `'global'` throws instead.
-   */
-  global: IDEMPOTENCY_GLOBAL_SCOPE,
+  /** One shared scope (stored as `global`). Choose it only when keys are unique across all callers. */
+  global: GLOBAL,
   /** Per authenticated user. */
-  user: (userId: string | null | undefined): string | undefined => part('user', userId),
+  user: (userId: string | null | undefined): IdempotencyScope | undefined => single('user', userId),
   /** Per tenant. */
-  tenant: (tenantId: string | null | undefined): string | undefined => part('tenant', tenantId),
+  tenant: (tenantId: string | null | undefined): IdempotencyScope | undefined =>
+    single('tenant', tenantId),
   /**
    * Per user within a tenant; `undefined` when either is missing. The tenant part is
    * length-prefixed, so no tenant and user pair shares a scope with another.
@@ -59,19 +89,83 @@ export const idempotencyScopes = {
   userAndTenant(
     userId: string | null | undefined,
     tenantId: string | null | undefined,
-  ): string | undefined {
-    const tenant = part('tenant', tenantId);
-    const user = part('user', userId);
-    return tenant === undefined || user === undefined
-      ? undefined
-      : `${utf8(tenant).length}:${tenant}/${user}`;
+  ): IdempotencyScope | undefined {
+    if (isMissing(userId) || isMissing(tenantId)) return undefined;
+    const tenant = `tenant:${tenantId}`;
+    return new IdempotencyScope(CONSTRUCT, `${utf8(tenant).length}:${tenant}/user:${userId}`, {
+      kind: 'userAndTenant',
+      userId,
+      tenantId,
+    });
   },
   /** Per machine client, for API keys and client credentials. */
-  client: (clientId: string | null | undefined): string | undefined => part('client', clientId),
-  /** Any other kind of owner, written as `kind:value`. */
-  custom: (kind: string, value: string | null | undefined): string | undefined => part(kind, value),
+  client: (clientId: string | null | undefined): IdempotencyScope | undefined =>
+    single('client', clientId),
+  /** Any other kind of owner, stored as `kind:value`. */
+  custom(kind: string, value: string | null | undefined): IdempotencyScope | undefined {
+    if (isMissing(value)) return undefined;
+    return new IdempotencyScope(CONSTRUCT, `${kind}:${value}`, {
+      kind: 'custom',
+      customKind: kind,
+      value,
+    });
+  },
+  /**
+   * Reads a scope back from its JSON form (`IdempotencyScope.toJSON`); a scope is returned
+   * as is. Anything else, including a raw string or a JSON form with a missing or empty
+   * field, throws `TypeError`.
+   */
+  fromJSON(json: unknown): IdempotencyScope {
+    if (IdempotencyScope.isScope(json)) return json;
+    if (typeof json !== 'object' || json === null || Array.isArray(json)) {
+      return invalidJson(typeof json === 'string' ? 'a raw string' : typeof json);
+    }
+    const j = json as Record<string, unknown>;
+    const { kind } = j;
+    switch (kind) {
+      case 'global':
+        return GLOBAL;
+      case 'user':
+      case 'tenant':
+      case 'client':
+        return single(kind, field(j, 'value')) as IdempotencyScope;
+      case 'custom':
+        return idempotencyScopes.custom(
+          field(j, 'customKind'),
+          field(j, 'value'),
+        ) as IdempotencyScope;
+      case 'userAndTenant':
+        return idempotencyScopes.userAndTenant(
+          field(j, 'userId'),
+          field(j, 'tenantId'),
+        ) as IdempotencyScope;
+      default:
+        return invalidJson(`kind ${JSON.stringify(kind)}`);
+    }
+  },
 } as const;
 
-function part(kind: string, value: string | null | undefined): string | undefined {
-  return value == null || value === '' ? undefined : `${kind}:${value}`;
+function isMissing(value: string | null | undefined): value is null | undefined | '' {
+  return value == null || value === '';
+}
+
+function single(
+  kind: 'user' | 'tenant' | 'client',
+  value: string | null | undefined,
+): IdempotencyScope | undefined {
+  return isMissing(value)
+    ? undefined
+    : new IdempotencyScope(CONSTRUCT, `${kind}:${value}`, { kind, value });
+}
+
+function field(json: Record<string, unknown>, name: string): string {
+  const value = json[name];
+  if (typeof value !== 'string' || value === '') {
+    return invalidJson(`${name} is not a non-empty string`);
+  }
+  return value;
+}
+
+function invalidJson(what: string): never {
+  throw new TypeError(`Not an idempotency scope JSON form (${what}).`);
 }

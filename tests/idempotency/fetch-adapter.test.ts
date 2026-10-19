@@ -62,7 +62,7 @@ function setup(
     },
     {
       store,
-      scope: () => 'tenant:1',
+      scope: () => idempotencyScopes.tenant('1'),
       onDecision: (e) => events.push(e),
       logger: { log: (level, message, properties) => logs.push({ level, message, properties }) },
       ...options,
@@ -197,7 +197,12 @@ describe('withIdempotency', () => {
       const handler = withIdempotency(
         async (req: Request) =>
           new Response(null, { status: req.url.endsWith('fail') ? 500 : 303 }),
-        { store, scope: () => 's', retentionMs: 50_000, serverErrorRetentionMs: 5_000 },
+        {
+          store,
+          scope: () => idempotencyScopes.tenant('s'),
+          retentionMs: 50_000,
+          serverErrorRetentionMs: 5_000,
+        },
       );
       await handler(post('a', '{}', { url: `${URL_BASE}/ok` }));
       await handler(post('b', '{}', { url: `${URL_BASE}/fail` }));
@@ -240,11 +245,11 @@ describe('withIdempotency', () => {
     });
 
     it('rejects for the raw scope string global, and runs once in observe', async () => {
-      const enforce = setup((_req, run) => created(run), { scope: () => 'global' });
+      const enforce = setup((_req, run) => created(run), { scope: () => 'global' as never });
       await expect(enforce.handler(post('k'))).rejects.toThrow(TypeError);
       expect(enforce.runs()).toBe(0);
       const observe = setup((_req, run) => created(run), {
-        scope: () => 'global',
+        scope: () => 'global' as never,
         mode: 'observe',
       });
       expect((await observe.handler(post('k'))).status).toBe(201);
@@ -472,14 +477,16 @@ describe('withIdempotency', () => {
 
     it('isolates scopes and namespaces', async () => {
       let tenant = 'a';
-      const s = setup((_req, run) => created(run), { scope: async () => tenant });
+      const s = setup((_req, run) => created(run), {
+        scope: async () => idempotencyScopes.tenant(tenant),
+      });
       await s.handler(post('k'));
       tenant = 'b';
       await s.handler(post('k'));
       expect(s.runs()).toBe(2);
       const other = withIdempotency(async () => new Response('other'), {
         store: s.store,
-        scope: () => 'b',
+        scope: () => idempotencyScopes.tenant('b'),
         namespace: 'other',
       });
       expect(await (await other(post('k'))).text()).toBe('other');
@@ -513,7 +520,7 @@ describe('withIdempotency', () => {
         },
         {
           store: storeReturning(payload),
-          scope: () => 's',
+          scope: () => idempotencyScopes.tenant('s'),
           logger: {
             log: (_level, _message, properties) => logs.push(String(properties.EventName)),
           },
@@ -540,14 +547,14 @@ describe('withIdempotency', () => {
       ]) {
         const handler = withIdempotency(async () => new Response('x'), {
           store: storeReturning('{'),
-          scope: () => 's',
+          scope: () => idempotencyScopes.tenant('s'),
           logger,
         });
         expect((await handler(post('k'))).status).toBe(500);
       }
       const noLogger = withIdempotency(async () => new Response('x'), {
         store: storeReturning('{'),
-        scope: () => 's',
+        scope: () => idempotencyScopes.tenant('s'),
       });
       expect((await noLogger(post('k'))).status).toBe(500);
     });

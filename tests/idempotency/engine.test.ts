@@ -42,7 +42,7 @@ function harness(settings: IdempotencySettings = {}): Harness {
       namespace: 'orders',
       unscopedKeyBehavior: 'reject',
       key: () => 'k1',
-      scope: () => 'tenant:1',
+      scope: () => idempotencyScopes.tenant('1'),
       fingerprint: () => 'fp',
       run: async () => `out${++h.runs}`,
       complete: (output) => ({ action: 'store', payload: output, retentionMs: 10_000 }),
@@ -211,7 +211,9 @@ describe('runIdempotent: unscoped keys', () => {
     });
     await runIdempotent(h.call({ scope: () => idempotencyScopes.global }));
     expect(reserve.mock.calls[0]?.[0]).toEqual({ namespace: 'orders', scope: 'global', key: 'k1' });
-    await expect(runIdempotent(h.call({ scope: async () => 'global' }))).rejects.toThrow(TypeError);
+    await expect(runIdempotent(h.call({ scope: async () => 'global' as never }))).rejects.toThrow(
+      TypeError,
+    );
     expect(reserve).toHaveBeenCalledTimes(1);
     expect(h.runs).toBe(1);
   });
@@ -309,7 +311,7 @@ describe('runIdempotent: observe', () => {
       mode: 'observe',
       store: { reserve, complete: async () => true, release: async () => true },
     });
-    expect(await runIdempotent(h.call({ scope: () => 'global' }))).toBe('out1');
+    expect(await runIdempotent(h.call({ scope: () => 'global' as never }))).toBe('out1');
     expect(reserve).not.toHaveBeenCalled();
     expect(names(h)).toEqual([IdempotencyEventNames.ResolutionFailed]);
     expect(h.logs[0]?.properties.Exception).toBeInstanceOf(TypeError);

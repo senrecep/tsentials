@@ -3,6 +3,7 @@ import {
   createIdempotency,
   type IdempotencyDecisionEvent,
   IdempotencyErrorCodes,
+  type IdempotencyScope,
   type IdempotencyStore,
   InMemoryIdempotencyStore,
   idempotencyBehavior,
@@ -21,7 +22,7 @@ interface Capture {
   orderId: string;
   amount: number;
   idempotencyKey?: string | undefined;
-  idempotencyScope?: string | typeof idempotencyScopes.global | undefined;
+  idempotencyScope?: IdempotencyScope | undefined;
   idempotencyRetentionMs?: number;
   idempotencyLeaseMs?: number;
   transactional?: boolean;
@@ -319,9 +320,9 @@ describe('idempotencyBehavior', () => {
       scope: 'global',
       key: 'k1',
     });
-    await expect(mediator.send('Capture', capture({ idempotencyScope: 'global' }))).rejects.toThrow(
-      TypeError,
-    );
+    await expect(
+      mediator.send('Capture', capture({ idempotencyScope: 'global' as never })),
+    ).rejects.toThrow(TypeError);
     expect(reserve).toHaveBeenCalledTimes(1);
     expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -330,7 +331,89 @@ describe('idempotencyBehavior', () => {
     const { mediator, fn } = setup(
       idempotencyBehavior({
         store: new InMemoryIdempotencyStore(),
-        settings: () => ({ key: 'k1', scope: 'global' }),
+        settings: () => ({ key: 'k1', scope: 'global' as never }),
+      }),
+      charge,
+    );
+    await expect(mediator.send('Capture', capture())).rejects.toThrow(TypeError);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('replays a request whose scope went through JSON', async () => {
+    const { mediator, fn } = setup(
+      idempotencyBehavior({ store: new InMemoryIdempotencyStore() }),
+      charge,
+    );
+    const request = capture({ idempotencyScope: idempotencyScopes.user('42') });
+    expect(await mediator.send('Capture', request)).toEqual(Result.success({ charged: 10 }));
+    const queued = JSON.parse(JSON.stringify(request)) as Capture;
+    expect(queued.idempotencyScope).toEqual({ kind: 'user', value: '42' });
+    expect(await mediator.send('Capture', queued)).toEqual(Result.success({ charged: 10 }));
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a JSON scope and a raw string apart', async () => {
+    const reserve = vi.fn<IdempotencyStore['reserve']>(async () => ({
+      status: 'reserved',
+      token: 't',
+    }));
+    const store: IdempotencyStore = {
+      reserve,
+      complete: async () => true,
+      release: async () => true,
+    };
+    const { mediator, fn } = setup(idempotencyBehavior({ store }), charge);
+    const json = { kind: 'tenant', value: 'user:42' } as unknown as IdempotencyScope;
+    await mediator.send('Capture', capture({ idempotencyScope: json }));
+    expect(reserve.mock.calls[0]?.[0]).toEqual({
+      namespace: 'Capture',
+      scope: 'tenant:user:42',
+      key: 'k1',
+    });
+    for (const bad of ['user:42', { kind: 'admin', value: 'x' }, 0]) {
+      await expect(
+        mediator.send('Capture', capture({ idempotencyScope: bad as never })),
+      ).rejects.toThrow(TypeError);
+    }
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a raw string scope even when unscoped keys use the global scope', async () => {
+    const reserve = vi.fn<IdempotencyStore['reserve']>();
+    const store: IdempotencyStore = {
+      reserve,
+      complete: async () => true,
+      release: async () => true,
+    };
+    const { mediator, fn } = setup(
+      idempotencyBehavior({ store, unscopedKeyBehavior: 'global' }),
+      charge,
+    );
+    await expect(
+      mediator.send('Capture', capture({ idempotencyScope: 'user:42' as never })),
+    ).rejects.toThrow(TypeError);
+    expect(reserve).not.toHaveBeenCalled();
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('treats a null scope as no scope', async () => {
+    const { mediator, fn } = setup(
+      idempotencyBehavior({ store: new InMemoryIdempotencyStore(), unscopedKeyBehavior: 'reject' }),
+      charge,
+    );
+    const result = await mediator.send('Capture', capture({ idempotencyScope: null as never }));
+    expect(result.ok ? undefined : result.errors[0]?.code).toBe(
+      IdempotencyErrorCodes.ScopeRequired,
+    );
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('passes a custom settings scope to the engine without reading JSON', async () => {
+    const { mediator, fn } = setup(
+      idempotencyBehavior({
+        store: new InMemoryIdempotencyStore(),
+        settings: () => ({ key: 'k1', scope: { kind: 'global' } as never }),
       }),
       charge,
     );

@@ -11,7 +11,7 @@ import type {
   ResolvedIdempotencySettings,
   UnscopedKeyBehavior,
 } from './options.js';
-import { IDEMPOTENCY_GLOBAL_SCOPE, type IdempotencyScope, scopeStorageValue } from './scopes.js';
+import { type IdempotencyScope, idempotencyScopes, scopeStorageValue } from './scopes.js';
 import type { IdempotencyRecordKey, IdempotencyReservation } from './store.js';
 
 /** What to do with the record once the handler has returned. */
@@ -161,7 +161,7 @@ async function resolve(
   let scope = await call.scope();
   if (scope === undefined) {
     if (call.unscopedKeyBehavior === 'global') {
-      scope = IDEMPOTENCY_GLOBAL_SCOPE;
+      scope = idempotencyScopes.global;
     } else if (call.unscopedKeyBehavior === 'skip') {
       reporter.decision('unscoped', IdempotencyEventNames.UnscopedKeySkipped, true);
       return RUN;
