@@ -1,4 +1,6 @@
+import type { GenericBehavior } from '../mediator/mediator.js';
 import type { Result } from '../result/index.js';
+import { type IdempotencyBehaviorOptions, makeIdempotencyBehavior } from './behavior.js';
 import { type IdempotentOptions, makeIdempotent } from './idempotent.js';
 import { type IdempotencyDefaults, resolveTunables } from './options.js';
 
@@ -11,6 +13,8 @@ export interface Idempotency {
     fn: (...args: A) => Result<T> | Promise<Result<T>>,
     options: IdempotentOptions<A>,
   ): (...args: A) => Promise<Result<T>>;
+  /** `idempotencyBehavior` with these defaults; `forRequest` and `profile` select profiles. */
+  idempotencyBehavior(options?: IdempotencyBehaviorOptions): GenericBehavior;
 }
 
 /**
@@ -25,6 +29,7 @@ export interface Idempotency {
  *   profiles: { payments: { serverErrorRetentionMs: 86_400_000 } },
  * });
  * const capture = idem.idempotent(capturePayment, { namespace: 'capture', key, scope, profile: 'payments' });
+ * const behavior = idem.idempotencyBehavior({ forRequest: { CapturePayment: { mode: 'observe' } } });
  * ```
  *
  * Throws when the defaults (or any profile merged over them) are out of range.
@@ -38,5 +43,6 @@ export function createIdempotency(defaults: IdempotencyDefaults): Idempotency {
   return {
     defaults,
     idempotent: (fn, options) => makeIdempotent(fn, options, defaults),
+    idempotencyBehavior: (options = {}) => makeIdempotencyBehavior(options, defaults),
   };
 }

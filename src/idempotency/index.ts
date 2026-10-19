@@ -1,4 +1,10 @@
 export {
+  type IdempotencyBehaviorOptions,
+  type IdempotencyRequestSettings,
+  type IdempotencyRequestTypeSettings,
+  idempotencyBehavior,
+} from './behavior.js';
+export {
   DEFAULT_MAX_KEY_LENGTH,
   IDEMPOTENCY_KEY_HEADER,
   IDEMPOTENCY_REPLAYED_HEADER,
