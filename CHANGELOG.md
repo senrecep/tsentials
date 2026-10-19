@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+#### BREAKING
+
+- **Minimum Node.js version is now 22.** `engines.node` is `>=22.0.0`; CI runs on Node 22 and 24, publishing runs on Node 22 and `@types/node` is `^22`. The library relies on the global Web Crypto API (`crypto.subtle`, `crypto.randomUUID`) without any runtime dependency.
+
 ## [1.0.0] - 2026-10-14
 
 First stable release. It adds five new subpath modules, cancellation support across the async APIs and a self-contained `deepClone`. It also tightens several behaviours of the 0.1.x API; every breaking change is listed below and explained in [docs/BEHAVIOUR-CHANGES.md](./docs/BEHAVIOUR-CHANGES.md).

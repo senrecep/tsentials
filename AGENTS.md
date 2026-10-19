@@ -4,7 +4,7 @@
 
 **Package:** `tsentials` (npm)  
 **Purpose:** Railway-oriented programming: errors as values instead of exceptions  
-**Node:** ≥18, TypeScript ≥5.0, ESM only
+**Node:** ≥22, TypeScript ≥5.0, ESM only
 
 ## Import Paths
 

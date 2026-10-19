@@ -11,7 +11,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/senrecep/tsentials/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/senrecep/tsentials/actions)
 [![license](https://img.shields.io/github/license/senrecep/tsentials?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js)](https://nodejs.org)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js)](https://nodejs.org)
 
 Railway-oriented programming for TypeScript: `Result<T>`, `Maybe<T>`, Rule Engine, and DDD base classes with full async pipeline support.
 
@@ -74,7 +74,7 @@ Railway-oriented programming for TypeScript: `Result<T>`, `Maybe<T>`, Rule Engin
 npm install tsentials
 ```
 
-**Requirements:** Node.js ≥ 18, TypeScript ≥ 5.0
+**Requirements:** Node.js ≥ 22, TypeScript ≥ 5.0
 
 ## Modules
 

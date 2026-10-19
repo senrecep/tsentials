@@ -13,7 +13,7 @@ tsentials is a modular TypeScript library for railway-oriented programming. Each
 npm install tsentials
 ```
 
-**Requirements:** Node.js ≥ 18, TypeScript ≥ 5.0
+**Requirements:** Node.js ≥ 22, TypeScript ≥ 5.0
 
 ## All Modules
 

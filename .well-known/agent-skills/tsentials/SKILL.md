@@ -8,7 +8,7 @@ description: Master skill for tsentials — railway-oriented programming library
 Railway-oriented programming toolkit for TypeScript. Errors are values, not exceptions.
 
 **Install:** `npm install tsentials`
-**Requirements:** Node.js >= 18, TypeScript >= 5.0, ESM only
+**Requirements:** Node.js >= 22, TypeScript >= 5.0, ESM only
 
 ## Critical Naming Rules
 

@@ -224,5 +224,5 @@ const description = await extractErrorDescription(response);
 - Prefer `RequestBuilder` over raw `fetchResult` for multi-header or multi-param requests
 - Combine with `fromAsync()` to chain downstream calls without nested try/catch
 - Always type the generic parameter `send<T>()` / `get<T>()` so TypeScript knows the response shape
-- Works in both Node.js >= 18 (built-in `fetch`) and browser environments
+- Works in both Node.js >= 22 (built-in `fetch`) and browser environments
 - POST/PUT/PATCH on `fetchResult` take `body` as the second argument (auto-serialized to JSON)
