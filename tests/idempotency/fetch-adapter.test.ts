@@ -542,6 +542,26 @@ describe('withIdempotency', () => {
       expect(reserve).not.toHaveBeenCalled();
     });
 
+    it('observe answers like off when the request body cannot be read', async () => {
+      const consumed = async () => {
+        const request = post('k');
+        await request.text();
+        return request;
+      };
+      const respond = (_req: Request, run: number) => created(run);
+      const off = await setup(respond, { mode: 'off' }).handler(await consumed());
+      const s = setup(respond, { mode: 'observe' });
+      const observed = await s.handler(await consumed());
+      expect(observed.status).toBe(off.status);
+      expect(await observed.text()).toBe(await off.text());
+      expect(s.runs()).toBe(1);
+      expect(s.events).toEqual([]);
+      expect(s.logs.map((l) => l.properties.EventName)).toEqual([
+        IdempotencyEventNames.ResolutionFailed,
+      ]);
+      await expect(setup(respond).handler(await consumed())).rejects.toThrow(TypeError);
+    });
+
     it('observe runs every request and only reports conflicts', async () => {
       const s = setup((_req, run) => created(run), { mode: 'observe' });
       await s.handler(post('k'));

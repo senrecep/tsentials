@@ -31,6 +31,8 @@ export const IdempotencyEventNames = {
   WouldRejectKeyReused: 'Idempotency.Observe.WouldRejectKeyReused',
   WouldRejectInFlight: 'Idempotency.Observe.WouldRejectInFlight',
   WouldRejectScopeRequired: 'Idempotency.Observe.WouldRejectScopeRequired',
+  /** The key, scope or fingerprint resolver threw in `observe` mode; the handler ran without idempotency. */
+  ResolutionFailed: 'Idempotency.Observe.ResolutionFailed',
   UnscopedKeySkipped: 'Idempotency.UnscopedKeySkipped',
   /** Name of the decisions that have no fixed event name (`reserved`, `stored`, …). */
   Decision: 'Idempotency.Decision',

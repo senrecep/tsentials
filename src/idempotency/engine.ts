@@ -65,6 +65,32 @@ async function keyHashOf(key: string): Promise<string> {
   return (await sha256Hex(key)).slice(0, 16);
 }
 
+/** `keyHash` is unknown only when resolving the key itself failed. */
+function logEvent(
+  call: IdempotencyCall<unknown>,
+  mode: Exclude<IdempotencyMode, 'off'>,
+  keyHash: string | undefined,
+  level: 'information' | 'warning',
+  name: string,
+  exception: unknown,
+): void {
+  const { logger } = call.settings;
+  try {
+    if (logger === undefined || !(logger.isEnabled?.(level) ?? true)) return;
+    const hash = keyHash === undefined ? '' : ` (key hash ${keyHash})`;
+    logger.log(level, `${name} for ${call.target}${hash}`, {
+      EventName: name,
+      Mode: mode,
+      Source: call.source,
+      Target: call.target,
+      ...(keyHash === undefined ? {} : { KeyHash: keyHash }),
+      ...(exception === undefined ? {} : { Exception: exception }),
+    });
+  } catch {
+    // Ignored: logging is best effort.
+  }
+}
+
 class Reporter {
   constructor(
     private readonly call: IdempotencyCall<unknown>,
@@ -91,20 +117,7 @@ class Reporter {
   }
 
   log(level: 'information' | 'warning', name: string, exception: unknown): void {
-    const { logger } = this.call.settings;
-    try {
-      if (logger === undefined || !(logger.isEnabled?.(level) ?? true)) return;
-      logger.log(level, `${name} for ${this.call.target} (key hash ${this.keyHash})`, {
-        EventName: name,
-        Mode: this.mode,
-        Source: this.call.source,
-        Target: this.call.target,
-        KeyHash: this.keyHash,
-        ...(exception === undefined ? {} : { Exception: exception }),
-      });
-    } catch {
-      // Ignored: logging is best effort.
-    }
+    logEvent(this.call, this.mode, this.keyHash, level, name, exception);
   }
 }
 
@@ -119,6 +132,52 @@ const conflictEvents: Readonly<
   inFlight: { decision: 'in_flight', observeName: IdempotencyEventNames.WouldRejectInFlight },
 };
 
+/** Outcome of resolving key, scope and fingerprint, before anything is reserved. */
+type Resolution =
+  | { readonly kind: 'run' }
+  | { readonly kind: 'reject'; readonly code: IdempotencyErrorCode }
+  | {
+      readonly kind: 'reserve';
+      readonly reporter: Reporter;
+      readonly recordKey: IdempotencyRecordKey;
+      readonly fingerprint: string;
+    };
+
+const RUN: Resolution = { kind: 'run' };
+
+async function resolve(
+  call: IdempotencyCall<unknown>,
+  mode: Exclude<IdempotencyMode, 'off'>,
+  onKeyHash: (keyHash: string) => void,
+): Promise<Resolution> {
+  const key = await call.key();
+  if (key === undefined) return RUN;
+  if (typeof key !== 'string')
+    return mode === 'enforce' ? { kind: 'reject', code: key.reject } : RUN;
+  const keyHash = await keyHashOf(key);
+  onKeyHash(keyHash);
+  const reporter = new Reporter(call, mode, keyHash);
+
+  let scope = await call.scope();
+  if (scope === undefined) {
+    if (call.unscopedKeyBehavior === 'global') {
+      scope = idempotencyScopes.global;
+    } else if (call.unscopedKeyBehavior === 'skip') {
+      reporter.decision('unscoped', IdempotencyEventNames.UnscopedKeySkipped, true);
+      return RUN;
+    } else if (mode === 'observe') {
+      reporter.decision('unscoped', IdempotencyEventNames.WouldRejectScopeRequired);
+      return RUN;
+    } else {
+      reporter.decision('unscoped');
+      return { kind: 'reject', code: IdempotencyErrorCodes.ScopeRequired };
+    }
+  }
+
+  const recordKey: IdempotencyRecordKey = { namespace: call.namespace, scope, key };
+  return { kind: 'reserve', reporter, recordKey, fingerprint: await call.fingerprint() };
+}
+
 /**
  * Runs one call: resolve key and scope → reserve → decide → run → complete or release →
  * report. In `observe` mode every call runs the handler and gets its own output; conflicts
@@ -128,29 +187,29 @@ export async function runIdempotent<O>(call: IdempotencyCall<O>): Promise<O> {
   const mode = call.settings.mode();
   if (mode === 'off') return call.run();
 
-  const key = await call.key();
-  if (key === undefined) return call.run();
-  if (typeof key !== 'string') return mode === 'enforce' ? call.reject(key.reject) : call.run();
-  const reporter = new Reporter(call as IdempotencyCall<unknown>, mode, await keyHashOf(key));
-
-  let scope = await call.scope();
-  if (scope === undefined) {
-    if (call.unscopedKeyBehavior === 'global') {
-      scope = idempotencyScopes.global;
-    } else if (call.unscopedKeyBehavior === 'skip') {
-      reporter.decision('unscoped', IdempotencyEventNames.UnscopedKeySkipped, true);
-      return call.run();
-    } else if (mode === 'observe') {
-      reporter.decision('unscoped', IdempotencyEventNames.WouldRejectScopeRequired);
-      return call.run();
-    } else {
-      reporter.decision('unscoped');
-      return call.reject(IdempotencyErrorCodes.ScopeRequired);
-    }
+  let resolution: Resolution;
+  let keyHash: string | undefined;
+  try {
+    resolution = await resolve(call as IdempotencyCall<unknown>, mode, (hash) => {
+      keyHash = hash;
+    });
+  } catch (error) {
+    // Observe never blocks: a key, scope or fingerprint resolver that throws is logged and
+    // the handler runs without idempotency.
+    if (mode === 'enforce' || call.signal?.aborted === true) throw error;
+    logEvent(
+      call as IdempotencyCall<unknown>,
+      mode,
+      keyHash,
+      'warning',
+      IdempotencyEventNames.ResolutionFailed,
+      error,
+    );
+    return call.run();
   }
-
-  const recordKey: IdempotencyRecordKey = { namespace: call.namespace, scope, key };
-  const fingerprint = await call.fingerprint();
+  if (resolution.kind === 'run') return call.run();
+  if (resolution.kind === 'reject') return call.reject(resolution.code);
+  const { reporter, recordKey, fingerprint } = resolution;
   const { store, leaseMs } = call.settings;
 
   let reservation: IdempotencyReservation;
