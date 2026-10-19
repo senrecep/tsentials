@@ -132,6 +132,6 @@ await ResiliencePolicy.create()
 - One key per logical operation: create it when the user starts the operation, reuse it on every retry, never reuse it for another payload (422 `KeyReused` is final).
 - **Cloudflare KV (and any store without atomic insert) is not safe** as an idempotency store or lock.
 - Webhooks: key `idempotencyKeys.fromMessage(event.id, 'stripe-webhook')`, scope = provider account, constant fingerprint; verify signature → claim → work → commit; duplicates get 2xx, errors roll back and return 5xx.
-- Roll out `observe` before `enforce`: observe answers like `off` and reports `Idempotency.Observe.Would…` events.
+- Roll out `observe` before `enforce`: observe answers like `off` and reports `Idempotency.Observe.Would…` events. A resolver that throws in `observe` runs the call without idempotency (`Idempotency.Observe.ResolutionFailed`).
 - `withIdempotency` buffers the request body to fingerprint it; limit body size before it. Do not wrap streaming routes.
 - Events carry `keyHash` (16 hex), never the raw key.

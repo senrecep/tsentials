@@ -1,6 +1,7 @@
 import type { AppError } from '../../src/errors/app-error.js';
 import { Err } from '../../src/errors/app-error.js';
 import { ErrorMetadata } from '../../src/errors/error-metadata.js';
+import { ErrorType } from '../../src/errors/error-type.js';
 import {
   fetchResult,
   HttpErrorMetadataKeys,
@@ -9,6 +10,7 @@ import {
   RequestBuilder,
   withIdempotencyKey,
 } from '../../src/http/index.js';
+import { ResiliencePolicy } from '../../src/resilience/index.js';
 
 const errorWith = (meta: Record<string, unknown>, error = Err.failure('X', 'x')): AppError =>
   ({ ...error, metadata: ErrorMetadata.fromRecord(meta) }) as AppError;
@@ -118,6 +120,20 @@ describe('fetchResult failure metadata', () => {
     if (r.ok) throw new Error('expected failure');
     expect(r.errors[0]?.metadata?.get(HttpErrorMetadataKeys.HttpStatus)).toBeUndefined();
     expect(idempotentRetryClassifier('POST', true)(r.errors[0] as AppError)).toBe(true);
+  });
+
+  it('keeps the status on a 2xx body that cannot be parsed and never retries it', async () => {
+    const fetchMock = stubFetch(
+      () =>
+        new Response('{not json', { status: 201, headers: { 'content-type': 'application/json' } }),
+    );
+    const r = await ResiliencePolicy.create<unknown>()
+      .withRetry({ maxAttempts: 3, delay: 0, shouldRetry: idempotentRetryClassifier('POST', true) })
+      .execute(() => RequestBuilder.post('/orders').json({}).idempotencyKey('k-1').send());
+    if (r.ok) throw new Error('expected failure');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(r.errors[0]?.type).toBe(ErrorType.Unexpected);
+    expect(r.errors[0]?.metadata?.get(HttpErrorMetadataKeys.HttpStatus)).toBe(201);
   });
 });
 

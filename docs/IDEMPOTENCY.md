@@ -219,7 +219,7 @@ const builder = RequestBuilder.post('/orders').json(order).idempotencyKey();
 await policy.execute((signal) => builder.signal(signal).send<Order>());
 ```
 
-`idempotentRetryClassifier(method, hasKey)` never retries a POST or PATCH without a key, never retries a replayed response, retries network errors and timeouts, retries 409 `Idempotency.InFlight`, 408, 429, 503 and 504, and nothing else. `withRetry` waits at least the server's `Retry-After` (capped by `maxRetryAfterMs`). A failed response's first error carries the metadata `httpStatus`, `retryAfterMs`, `idempotencyReplayed` and `problemCode` (`HttpErrorMetadataKeys`).
+`idempotentRetryClassifier(method, hasKey)` never retries a POST or PATCH without a key, never retries a replayed response, retries network errors and timeouts, never retries a received response whose body cannot be parsed (2xx included), retries 409 `Idempotency.InFlight`, 408, 429, 503 and 504, and nothing else. `withRetry` waits at least the server's `Retry-After` (capped by `maxRetryAfterMs`). A failed response's first error, including a body parse failure, carries the metadata `httpStatus`, `retryAfterMs`, `idempotencyReplayed` and `problemCode` (`HttpErrorMetadataKeys`).
 
 ## Lease, retention and the retry budget
 
@@ -410,6 +410,8 @@ Turning idempotency on in front of live traffic changes answers: retries that us
    - `Idempotency.Observe.WouldRejectKeyReused`
    - `Idempotency.Observe.WouldRejectInFlight`
    - `Idempotency.Observe.WouldRejectScopeRequired`
+
+   A key, scope or fingerprint resolver that throws does not block the call in `observe`: the call runs without idempotency and the logger gets `Idempotency.Observe.ResolutionFailed` (the same error rejects the call in `enforce`).
 3. Watch these events. `WouldRejectKeyReused` usually means a client reuses keys across operations; `WouldRejectScopeRequired` means the scope resolver misses some callers. Fix the clients and resolvers first.
 4. **`enforce`**: replays and rejections take effect. Records written in `observe` are used, so a key completed during `observe` is replayed right away.
 
@@ -431,4 +433,4 @@ Events report a `keyHash` (16 hex characters of the key's SHA-256), never the ke
 | `Idempotency.KeyInvalid` | Validation | 400 | After fixing the key |
 | `Idempotency.ScopeRequired` | Validation | 400 | No, a server-side bug |
 
-`IdempotencyEventNames` also has `Idempotency.Decision` (decisions without a fixed name, such as `reserved` and `stored`), `Idempotency.UnscopedKeySkipped`, `Idempotency.StoreFailed`, `Idempotency.CompleteFailed`, `Idempotency.ReservationLost`, `Idempotency.ResponseTooLarge` and `Idempotency.StoredResponseUnreadable`.
+`IdempotencyEventNames` also has `Idempotency.Decision` (decisions without a fixed name, such as `reserved` and `stored`), `Idempotency.UnscopedKeySkipped`, `Idempotency.Observe.ResolutionFailed`, `Idempotency.StoreFailed`, `Idempotency.CompleteFailed`, `Idempotency.ReservationLost`, `Idempotency.ResponseTooLarge` and `Idempotency.StoredResponseUnreadable`.

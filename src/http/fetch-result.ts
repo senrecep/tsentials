@@ -69,10 +69,19 @@ async function responseToResult<T>(
   }
 
   // The server declared JSON, so a value is expected: an empty body or a literal `null`
-  // is a NotFound failure (unless `allowEmptyBody`). Malformed JSON throws and becomes an
-  // Unexpected failure in `execute`.
-  const text = await response.text();
-  const value: unknown = text.trim() === '' ? null : JSON.parse(text);
+  // is a NotFound failure (unless `allowEmptyBody`). A body that cannot be read or parsed is
+  // an Unexpected failure that carries the response metadata: the server answered, so a
+  // retry classifier must not treat it as a missing response.
+  let value: unknown;
+  try {
+    const text = await response.text();
+    value = text.trim() === '' ? null : JSON.parse(text);
+  } catch (e) {
+    if (signal.aborted) throw e;
+    return R.failureFrom(
+      withResponseMetadata([Err.fromException(e, ErrorType.Unexpected)], response, undefined),
+    );
+  }
   if (value === null) {
     return allowEmptyBody
       ? R.success(undefined as unknown as T)
