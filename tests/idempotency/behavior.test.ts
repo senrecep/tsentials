@@ -20,8 +20,8 @@ import { createFakeDateTimeProvider } from '../../src/time/index.js';
 interface Capture {
   orderId: string;
   amount: number;
-  idempotencyKey?: string;
-  idempotencyScope?: string;
+  idempotencyKey?: string | undefined;
+  idempotencyScope?: string | undefined;
   idempotencyRetentionMs?: number;
   idempotencyLeaseMs?: number;
   transactional?: boolean;

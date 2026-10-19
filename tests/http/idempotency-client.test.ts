@@ -181,7 +181,7 @@ describe('withIdempotencyKey', () => {
   });
 
   it('generates a UUID by default', () => {
-    const key = new Headers(withIdempotencyKey({}).headers).get('Idempotency-Key');
+    const key = new Headers(withIdempotencyKey({} as RequestInit).headers).get('Idempotency-Key');
     expect(key).toMatch(/^[0-9a-f-]{36}$/);
   });
 

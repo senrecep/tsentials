@@ -21,6 +21,16 @@ export type IdempotencyCompletion =
   /** Neither store nor release: the reservation stays in flight until its lease ends. */
   | { readonly action: 'keep' };
 
+/**
+ * A key the caller sent but cannot be used: `enforce` answers with the code, `observe` runs
+ * the handler without idempotency.
+ */
+export interface IdempotencyKeyRejection {
+  readonly reject:
+    | typeof IdempotencyErrorCodes.KeyMissing
+    | typeof IdempotencyErrorCodes.KeyInvalid;
+}
+
 /** One call through the engine; built by `idempotent`, the mediator behavior and the adapter. */
 export interface IdempotencyCall<O> {
   readonly settings: ResolvedIdempotencySettings;
@@ -29,8 +39,15 @@ export interface IdempotencyCall<O> {
   readonly namespace: string;
   readonly unscopedKeyBehavior: UnscopedKeyBehavior;
   readonly signal?: AbortSignal | undefined;
-  /** The key; `undefined` runs the handler without idempotency. Not called in `off` mode. */
-  readonly key: () => string | undefined | Promise<string | undefined>;
+  /**
+   * The key; `undefined` runs the handler without idempotency, a rejection refuses the call.
+   * Not called in `off` mode.
+   */
+  readonly key: () =>
+    | string
+    | undefined
+    | IdempotencyKeyRejection
+    | Promise<string | undefined | IdempotencyKeyRejection>;
   /** The scope; `undefined` applies `unscopedKeyBehavior`. */
   readonly scope: () => string | undefined | Promise<string | undefined>;
   readonly fingerprint: () => string | Promise<string>;
@@ -113,6 +130,7 @@ export async function runIdempotent<O>(call: IdempotencyCall<O>): Promise<O> {
 
   const key = await call.key();
   if (key === undefined) return call.run();
+  if (typeof key !== 'string') return mode === 'enforce' ? call.reject(key.reject) : call.run();
   const reporter = new Reporter(call as IdempotencyCall<unknown>, mode, await keyHashOf(key));
 
   let scope = await call.scope();

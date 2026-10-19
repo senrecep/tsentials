@@ -21,6 +21,15 @@ export { describeIdempotencyStoreContract } from './contract.js';
 export { createIdempotency, type Idempotency } from './create.js';
 export { fingerprintOf, stableStringify } from './encoding.js';
 export { idempotencyErrors } from './errors.js';
+export {
+  DEFAULT_IDEMPOTENT_METHODS,
+  DEFAULT_MAX_RESPONSE_BODY_BYTES,
+  DEFAULT_NEVER_STORE_STATUSES,
+  DEFAULT_REPLAYED_HEADERS,
+  idempotencyStorePolicies,
+  type WithIdempotencyOptions,
+  withIdempotency,
+} from './fetch-adapter.js';
 export { type IdempotentOptions, idempotent } from './idempotent.js';
 export {
   createIdempotencyKeys,

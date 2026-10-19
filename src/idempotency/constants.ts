@@ -40,6 +40,10 @@ export const IdempotencyEventNames = {
   CompleteFailed: 'Idempotency.CompleteFailed',
   /** `complete` found another reservation (the lease ran out and another call took over). */
   ReservationLost: 'Idempotency.ReservationLost',
+  /** An HTTP response was not stored: its body exceeded `maxResponseBodyBytes`. */
+  ResponseTooLarge: 'Idempotency.ResponseTooLarge',
+  /** A stored HTTP response cannot be read; the call got 500 and the handler did not run. */
+  StoredResponseUnreadable: 'Idempotency.StoredResponseUnreadable',
 } as const;
 
 /** Largest key accepted by default, in characters. */
