@@ -94,7 +94,7 @@ export const POST = withIdempotency(createOrder, {
 | Same key, other method/path/query/body | 422 `Idempotency.KeyReused` |
 | Same key, completed | stored status, whitelisted headers, body + `Idempotency-Replayed: true` |
 
-Errors are `application/problem+json` with a `code`. Guards POST and PATCH by default. 4xx, compressed or streaming bodies and bodies over 1 MiB are not stored (released); 503/504 and a thrown handler keep the key in flight until the lease ends; 5xx is stored for `serverErrorRetentionMs`.
+Errors are `application/problem+json` with a `code`. Guards POST and PATCH by default. 4xx is released, not stored. Compressed or streaming bodies and bodies over 1 MiB are not stored and keep the key in flight (released for a 4xx), as do 503/504 and a thrown handler, until the lease ends; other 5xx is stored for `serverErrorRetentionMs`. Replayed headers: `content-type`, `content-language`, `location`, `etag`, `cache-control`, `retry-after`.
 
 ## Keys and scopes
 

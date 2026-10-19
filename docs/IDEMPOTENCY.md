@@ -149,13 +149,13 @@ What is stored:
 |-----------------|---------|
 | 503 or 504 (`neverStoreStatuses`) | No, the key stays in flight until the lease ends |
 | 4xx (`shouldStore` default) | No, the key is released so the client can fix the request and retry |
-| `Content-Encoding` other than identity, or `text/event-stream` | No, released |
-| Body larger than `maxResponseBodyBytes` (1 MiB) | No, released; logs `Idempotency.ResponseTooLarge` |
+| `Content-Encoding` other than identity, or `text/event-stream` | No. The handler ran, so the key stays in flight until the lease ends (a 4xx is released) |
+| Body larger than `maxResponseBodyBytes` (1 MiB) | No, kept in flight like above (a 4xx is released); logs `Idempotency.ResponseTooLarge` |
 | 5xx | Yes, for `serverErrorRetentionMs` |
 | Anything else | Yes, for `retentionMs` |
 | The handler throws | No, the key stays in flight until the lease ends |
 
-`idempotencyStorePolicies.successOnly` stores only 2xx. Replayed headers are `content-type`, `content-language`, `location`, `etag` and `cache-control` by default (`replayedHeaders`); `set-cookie` is never replayed.
+`idempotencyStorePolicies.successOnly` stores only 2xx. Replayed headers are `content-type`, `content-language`, `location`, `etag`, `cache-control` and `retry-after` by default (`replayedHeaders`); `set-cookie` is never replayed.
 
 Notes:
 
@@ -302,7 +302,7 @@ CREATE INDEX idempotency_records_expires_at_idx ON idempotency_records (expires_
 -- DELETE FROM idempotency_records WHERE expires_at <= $1;
 ```
 
-Each store operation is one atomic statement:
+The reservation is a single atomic statement, so parallel reserves have exactly one winner; classifying a conflict (mismatch, completed, in flight) re-reads the row. The example compares `expires_at` with the application clock, so keep the application servers' clocks in sync (NTP). The statements:
 
 ```sql
 -- reserve: insert, or take over an expired record. No row returned → read the live record

@@ -19,8 +19,9 @@ function assertPositive(name, value) {
  * caller's transaction. Create the store with the transaction's client and the record commits
  * or rolls back together with the business work; with a pool each call autocommits.
  *
- * Every operation is a single atomic statement (`INSERT ... ON CONFLICT`), so parallel
- * reserves have exactly one winner. All time comparisons use `clock`, never the database clock.
+ * The reservation is a single atomic statement (`INSERT ... ON CONFLICT`), so parallel reserves
+ * have exactly one winner; classifying a conflict re-reads the row. All time comparisons use
+ * `clock`, never the database clock, so keep the application servers' clocks in sync.
  *
  * @implements {import('tsentials/idempotency').IdempotencyStore}
  */
@@ -54,7 +55,7 @@ export class PostgresIdempotencyStore {
                payload = NULL, expires_at = excluded.expires_at
            WHERE r.expires_at <= $7
          RETURNING token`,
-        [key.namespace, key.scope, key.key, token, fingerprint, now + leaseMs, now],
+        [key.namespace, key.scope, key.key, token, fingerprint, now + Math.ceil(leaseMs), now],
       );
       if (inserted.rows.length > 0) return { status: 'reserved', token: inserted.rows[0].token };
       const live = await this.#client.query(
@@ -91,7 +92,7 @@ export class PostgresIdempotencyStore {
         token,
         fingerprint,
         payload,
-        this.#clock.utcNowMs() + retentionMs,
+        this.#clock.utcNowMs() + Math.ceil(retentionMs),
       ],
     );
     return result.rows.length === 1;
