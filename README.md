@@ -1276,6 +1276,16 @@ export const POST = idem.withIdempotency(createOrder, {
 - Keys are scoped by `(namespace, scope, key)`; a key without a scope is rejected or skipped, never shared by accident.
 - Roll out with `observe` first: it answers exactly like `off` and reports what `enforce` would have done.
 
+What `idempotent()` and the mediator behavior keep after the operation returns (the HTTP adapter has its own table in the guide, where a 4xx is released):
+
+| Outcome | Record |
+|---------|--------|
+| Success | stored for `retentionMs` (24 h) |
+| Failure whose first error is `Unexpected` | stored for `serverErrorRetentionMs` (10 min) |
+| Any other failure (Validation, NotFound, Conflict, …) | stored for `retentionMs` |
+| Thrown error or caller abort | kept in flight until the lease ends |
+| Failure with `storeFailures: false` (`idempotent`) or of a `transactional: true` request (mediator) | released, so a retry runs again |
+
 Stores: `InMemoryIdempotencyStore`, `RedisIdempotencyStore` (bring your own client through `RedisLike`) and any store that passes `describeIdempotencyStoreContract`. Use a store with atomic compare-and-set; an eventually consistent key-value store such as Cloudflare KV is not safe as a lock. On the client side, `tsentials/http` adds `withIdempotencyKey`, `RequestBuilder.idempotencyKey()` and `idempotentRetryClassifier` for `ResiliencePolicy.withRetry({ shouldRetry })`.
 
 The [idempotency guide](./docs/IDEMPOTENCY.md) covers settings, the HTTP response table, lease and retry budgets, a transactional PostgreSQL store, webhooks and rollout.
