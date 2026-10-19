@@ -45,7 +45,9 @@ export interface IdempotencyBehaviorOptions extends IdempotencySettings {
   /**
    * Idempotency settings of a request; `undefined` passes it through. Default: reads
    * `idempotencyKey`, `idempotencyScope`, `idempotencyRetentionMs` and `idempotencyLeaseMs`
-   * from the request object.
+   * from the request object. These fields are trusted: set them in server code (the scope from
+   * the authenticated principal) and never copy them from client input, or pass a `settings`
+   * function that reads the scope from a trusted source.
    */
   readonly settings?:
     | ((request: unknown, context: RequestContext) => IdempotencyRequestSettings | undefined)
