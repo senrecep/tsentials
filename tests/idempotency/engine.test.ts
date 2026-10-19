@@ -278,6 +278,21 @@ describe('runIdempotent: observe', () => {
     expect(observe.runs).toBe(0);
   });
 
+  it('runs a throwing handler once in observe, with or without a failing resolver', async () => {
+    for (const resolver of [{}, { scope: () => Promise.reject(new Error('no scope')) }]) {
+      const h = harness({ mode: 'observe' });
+      const call = h.call({
+        ...resolver,
+        run: async () => {
+          h.runs++;
+          throw new Error('handler');
+        },
+      });
+      await expect(runIdempotent(call)).rejects.toThrow('handler');
+      expect(h.runs).toBe(1);
+    }
+  });
+
   it('rethrows a store error when the caller aborted', async () => {
     const controller = new AbortController();
     controller.abort(new Error('stop'));

@@ -4,7 +4,7 @@ This guide lists every change in 1.0.0 that alters the runtime behaviour of an e
 
 ## Unreleased
 
-* **http:** the first error of a failed `fetchResult` / `RequestBuilder` response carries metadata: `httpStatus` (always, also when a 2xx body cannot be parsed), `retryAfterMs` (from a valid `Retry-After`), `idempotencyReplayed` (`Idempotency-Replayed: true`) and `problemCode` (a string `code` field of the body). Keys the problem body already gave the error win. Code, type and description are unchanged; a test that compares a whole failure with `toEqual` now also sees the metadata.
+* **http:** the first error of a failed `fetchResult` / `RequestBuilder` response carries metadata: `httpStatus` (always, also when a 2xx body cannot be parsed or its read times out), `retryAfterMs` (from a valid `Retry-After`), `idempotencyReplayed` (`Idempotency-Replayed: true`) and `problemCode` (a string `code` field of the body). Keys the problem body already gave the error win. Code, type and description are unchanged; a test that compares a whole failure with `toEqual` now also sees the metadata.
 * **resilience:** `withRetry` and `retryIfFailed` wait at least the `retryAfterMs` metadata of a failure's first error before the next retry, capped by the new `maxRetryAfterMs` option (default 30 000 ms). A `fetchResult` failure with `Retry-After` therefore waits longer than the backoff when the server asks it to.
 
 ## Behaviour changes in 1.0.0

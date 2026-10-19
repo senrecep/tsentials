@@ -39,7 +39,8 @@ const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([408, 429, 503, 504]);
  * 1. POST or PATCH without an idempotency key → never retried (the server may have run it).
  * 2. A replayed response (`Idempotency-Replayed: true`) → not retried, it will not change.
  * 3. No response (network error, timeout: no `httpStatus` metadata, type Unexpected) → retried.
- *    A response whose body cannot be parsed carries `httpStatus`, so rules 4–6 apply to it.
+ *    A response whose body cannot be read, parsed or finished before the timeout carries
+ *    `httpStatus`, so rules 4–6 apply to it.
  * 4. 409 `Idempotency.InFlight` → retried (after `Retry-After`).
  * 5. 408, 429, 503, 504 → retried.
  * 6. Anything else, 500 and 502 included → not retried.

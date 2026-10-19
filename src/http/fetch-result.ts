@@ -37,7 +37,8 @@ const isAbortError = (e: unknown): boolean =>
     (e as { name?: unknown }).name === 'TimeoutError');
 
 /**
- * Converts a fetch Response to a Result<T>. Body read/parse errors propagate to the caller.
+ * Converts a fetch Response to a Result<T>. A body that cannot be read or parsed is a failure;
+ * an abort while reading (caller or timeout) propagates to `execute`.
  * With `allowEmptyBody`, an empty / `null` JSON body is a void success instead of NotFound.
  */
 async function responseToResult<T>(
@@ -135,13 +136,20 @@ async function execute<T>(
         }, timeout)
       : undefined;
 
+  let response: Response | undefined;
   try {
-    const response = await fetch(url, { ...rest, ...build(), signal: controller.signal });
+    response = await fetch(url, { ...rest, ...build(), signal: controller.signal });
     return await responseToResult<T>(response, controller.signal, allowEmptyBody);
   } catch (e) {
     if (callerSignal?.aborted && (e === callerSignal.reason || isAbortError(e))) throw e;
-    if (timedOut) return R.failure(Err.fromException(e, ErrorType.Unexpected, HTTP_TIMEOUT_CODE));
-    return R.failure(Err.fromException(e, ErrorType.Unexpected));
+    const error = timedOut
+      ? Err.fromException(e, ErrorType.Unexpected, HTTP_TIMEOUT_CODE)
+      : Err.fromException(e, ErrorType.Unexpected);
+    // A timeout while reading the body still has a response: keep its status so a retry
+    // classifier does not mistake it for a missing response.
+    return response === undefined
+      ? R.failure(error)
+      : R.failureFrom(withResponseMetadata([error], response, undefined));
   } finally {
     if (timer !== undefined) clearTimeout(timer);
     callerSignal?.removeEventListener('abort', onCallerAbort);
