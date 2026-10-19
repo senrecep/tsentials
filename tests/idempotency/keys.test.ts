@@ -86,7 +86,7 @@ const syncKeys = createIdempotencyKeys({
 });
 
 describe('key vectors', () => {
-  it('is the vendored version 2 file, byte for byte', () => {
+  it('is the version 2 key vector file, byte for byte', () => {
     expect(vectors.version).toBe(2);
     expect(createHash('sha256').update(raw).digest('hex')).toBe(
       '2ac049fba14b89654c331ef723c7ebd1575e402f16b1f008c3089121606db5e6',
