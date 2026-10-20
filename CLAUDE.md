@@ -1,9 +1,9 @@
 # tsentials — Developer Guide
 
 Railway-oriented programming toolkit for TypeScript.  
-Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`, `union`, `json`, `string`, `function`, `array`, `eq`, `ord`, `predicate`, `these`, `tree`, `record`, `validation`, `resilience`, `pagination`, `enums`, `mediator`.
+Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`, `union`, `json`, `string`, `function`, `array`, `eq`, `ord`, `predicate`, `these`, `tree`, `record`, `validation`, `resilience`, `pagination`, `enums`, `mediator`, `idempotency`.
 
-**Subpath-only policy:** `validation`, `resilience`, `pagination`, `enums` and `mediator` are NOT re-exported from the root `tsentials` entry. Import them from `tsentials/validation`, `tsentials/resilience`, `tsentials/pagination`, `tsentials/enums`, `tsentials/mediator`. The time extensions (`nextDayOfWeek`, `getAge`, …) are likewise exported from `tsentials/time` only.
+**Subpath-only policy:** `validation`, `resilience`, `pagination`, `enums`, `mediator` and `idempotency` are NOT re-exported from the root `tsentials` entry. Import them from `tsentials/validation`, `tsentials/resilience`, `tsentials/pagination`, `tsentials/enums`, `tsentials/mediator`, `tsentials/idempotency`. The time extensions (`nextDayOfWeek`, `getAge`, …) are likewise exported from `tsentials/time` only.
 
 ## Commands
 
@@ -47,6 +47,7 @@ src/
   pagination/     — offset paging (paginate) and keyset paging (keysetOrdering, keysetPaginate, cursors) (subpath-only)
   enums/          — defineEnum(): wire names, aliases, fallback, Result-returning parse (subpath-only)
   mediator/       — createMediator(), pipeline(), behaviors (validation, logging, caching, lock, transaction) (subpath-only)
+  idempotency/    — idempotent(), idempotencyBehavior(), withIdempotency(), createIdempotency(), InMemory/Redis stores, keys, scopes (subpath-only)
 ```
 
 ### Result<T>
@@ -667,13 +668,32 @@ const result = await mediator.send('GetUser', { id: 1 }, { signal }); // Promise
 
 `exceptionHandlingBehavior()` turns a thrown handler error into `Err.fromException(e)` (Failure); caller abort still propagates. `send` rejects when no handler is registered; `register` throws on a duplicate name. Other behaviors: `loggingBehavior`, `cachingBehavior`, `lockBehavior` (`InProcessResourceLock`), `transactionBehavior`.
 
+### Idempotency (`tsentials/idempotency`)
+
+Runs an operation once per `(namespace, scope, key)`; later calls get the stored outcome. Full guide: `docs/IDEMPOTENCY.md`.
+
+```typescript
+import { createIdempotency, idempotencyKeys, idempotencyScopes, RedisIdempotencyStore } from 'tsentials/idempotency';
+
+const idem = createIdempotency({ store: new RedisIdempotencyStore(redis), mode: () => flags.mode }); // 'off' | 'observe' | 'enforce'
+const capture = idem.idempotent(capturePayment, {
+  namespace: 'capture-payment',
+  key: (cmd: CaptureCommand) => idempotencyKeys.for('capture', cmd.orderId),
+  scope: (cmd) => idempotencyScopes.tenant(cmd.tenantId),
+});
+export const POST = idem.withIdempotency(createOrder, { scope: (req) => idempotencyScopes.user(userIdOf(req)) });
+// mediator: idem.idempotencyBehavior() reads idempotencyKey / idempotencyScope from the request
+```
+
+Codes: `Idempotency.InFlight` (Conflict, 409 + Retry-After), `Idempotency.KeyReused` (Validation, 422), `KeyMissing` / `KeyInvalid` / `ScopeRequired` (Validation, 400). `RedisLike` needs only `eval`; the Lua scripts are `RedisIdempotencyScripts`. Custom stores must pass `describeIdempotencyStoreContract`. `leaseMs` must cover the client's whole retry and timeout budget. `examples/idempotency-*` are excluded from vitest and run against real servers.
+
 ## TypeScript configuration
 - `strict: true`, `exactOptionalPropertyTypes: true`, `noUncheckedIndexedAccess: true`
 - ESM only (`"type": "module"`), `moduleResolution: "bundler"`
 - `"sideEffects": false` in package.json for full tree-shaking
 
 ## Testing
-Vitest. `npm test` runs all 2504 tests across 65 test files.
+Vitest. `npm test` runs all 2948 tests across 80 test files.
 Test files mirror src/ structure under `tests/`.
 
 ## Publishing

@@ -1,0 +1,13 @@
+{
+  "name": "tsentials-example-idempotency-redis",
+  "private": true,
+  "type": "module",
+  "description": "Runs the idempotency store contract against a real Redis through ioredis.",
+  "scripts": {
+    "test": "node --test contract.test.mjs"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1",
+    "tsentials": "file:../.."
+  }
+}

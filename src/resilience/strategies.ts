@@ -1,3 +1,4 @@
+import type { AppError } from '../errors/app-error.js';
 import { Err } from '../errors/app-error.js';
 import { isAbortError, isCallerAbort } from '../result/abort.js';
 import type { Result } from '../result/result.js';
@@ -34,6 +35,20 @@ export interface RetryOptions {
    * Explicit backoff type; overrides `exponentialBackoff` when set.
    */
   readonly backoff?: BackoffType | undefined;
+  /**
+   * Replaces the default classification: retry while this returns true for the first error.
+   * A thrown value is converted to the error the call would return for it (Unexpected) and passed
+   * here too. Caller aborts are never retried. Keep it pure, it can be called more than once for
+   * the same attempt. If it throws while classifying an attempt, retrying stops and the throw is
+   * returned as an Unexpected error.
+   */
+  readonly shouldRetry?: ((error: AppError) => boolean) | undefined;
+  /**
+   * Upper bound for a server-requested wait: when the first error of a failure carries
+   * `retryAfterMs` metadata (`fetchResult` sets it from `Retry-After`), the next retry waits
+   * `max(backoff, min(retryAfterMs, maxRetryAfterMs))`. 0 … 86 400 000 (1 day). Default 30 000.
+   */
+  readonly maxRetryAfterMs?: number | undefined;
 }
 
 /** Timeout settings. */
@@ -47,6 +62,7 @@ export interface RetryConfig {
   readonly maxAttempts: number;
   readonly delay: number;
   readonly backoff: BackoffType;
+  readonly maxRetryAfterMs: number;
 }
 
 /** @internal */
@@ -60,16 +76,18 @@ export const assertDuration = (name: string, value: number, min: number, max: nu
 export function resolveRetry(options: RetryOptions | undefined): RetryConfig {
   const maxAttempts = options?.maxAttempts ?? 3;
   const delay = options?.delay ?? 1000;
+  const maxRetryAfterMs = options?.maxRetryAfterMs ?? 30_000;
   const backoff =
     options?.backoff ?? ((options?.exponentialBackoff ?? true) ? 'exponential' : 'constant');
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
     throw new RangeError(`maxAttempts must be an integer >= 1 (got ${maxAttempts}).`);
   }
   assertDuration('delay', delay, 0, ONE_DAY_MS);
+  assertDuration('maxRetryAfterMs', maxRetryAfterMs, 0, ONE_DAY_MS);
   if (backoff !== 'constant' && backoff !== 'linear' && backoff !== 'exponential') {
     throw new RangeError(`backoff must be 'constant', 'linear' or 'exponential' (got ${backoff}).`);
   }
-  return { maxAttempts, delay, backoff };
+  return { maxAttempts, delay, backoff, maxRetryAfterMs };
 }
 
 /** @internal */
@@ -90,11 +108,22 @@ export function retryDelay(backoff: BackoffType, attempt: number, base: number):
   return Math.min(delay, MAX_DELAY_MS);
 }
 
+/** Metadata key of a server-requested wait (`HttpErrorMetadataKeys.RetryAfterMs`). */
+const RETRY_AFTER_KEY = 'retryAfterMs';
+
+/** @internal The `retryAfterMs` metadata of the first error of a failure, if valid. */
+export function retryAfterOf(outcome: Outcome<unknown>): number | undefined {
+  if (outcome.thrown || outcome.result.ok) return undefined;
+  const value = outcome.result.errors[0]?.metadata?.get(RETRY_AFTER_KEY);
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
 /**
  * @internal Retry strategy. After each attempt:
  * stop when this layer's signal is aborted, when it was the last attempt, or when
- * `shouldHandle` rejects the outcome; otherwise wait the backoff delay (abortable, an abort
- * during the delay becomes the outcome) and try again.
+ * `shouldHandle` rejects the outcome; otherwise wait the backoff delay, or the failure's
+ * `retryAfterMs` (capped at `maxRetryAfterMs`) when longer (abortable, an abort during the delay
+ * becomes the outcome), and try again.
  */
 export function retryStrategy(
   config: RetryConfig,
@@ -109,7 +138,12 @@ export function retryStrategy(
     };
     let outcome = await invoke(next, signal);
     for (let attempt = 0; retries(outcome, attempt); attempt++) {
-      const delay = retryDelay(config.backoff, attempt, config.delay);
+      const backoff = retryDelay(config.backoff, attempt, config.delay);
+      const retryAfter = retryAfterOf(outcome);
+      const delay =
+        retryAfter === undefined
+          ? backoff
+          : Math.min(Math.max(backoff, Math.min(retryAfter, config.maxRetryAfterMs)), MAX_DELAY_MS);
       try {
         // Also for a zero delay: yielding a macrotask between attempts lets a timer-based
         // signal (timeout, caller abort) fire even when the action settles synchronously.

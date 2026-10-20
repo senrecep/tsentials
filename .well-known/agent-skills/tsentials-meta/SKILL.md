@@ -13,7 +13,7 @@ tsentials is a modular TypeScript library for railway-oriented programming. Each
 npm install tsentials
 ```
 
-**Requirements:** Node.js ≥ 18, TypeScript ≥ 5.0
+**Requirements:** Node.js ≥ 22, TypeScript ≥ 5.0
 
 ## All Modules
 
@@ -68,6 +68,7 @@ These modules are **not** re-exported from the root `tsentials` entry — import
 | `tsentials/pagination` | `paginate`, `keysetOrdering`, `keysetPaginate`, `planKeysetPage`, cursor helpers | `tsentials-pagination` |
 | `tsentials/enums` | `defineEnum`, `EnumMember` | `tsentials-enums` |
 | `tsentials/mediator` | `createMediator`, `pipeline`, behaviors, `InProcessResourceLock` | `tsentials-mediator` |
+| `tsentials/idempotency` | `idempotent`, `idempotencyBehavior`, `withIdempotency`, `createIdempotency`, stores, keys, scopes | `tsentials-idempotency` |
 
 ### Web / Infrastructure
 
@@ -111,6 +112,7 @@ These modules are **not** re-exported from the root `tsentials` entry — import
 | Stable cursor (keyset) paging | `tsentials/pagination` (`keysetPaginate`) |
 | Enum with wire names, aliases and safe parsing | `tsentials/enums` (`defineEnum`) |
 | Typed request/response dispatch with pipeline behaviors | `tsentials/mediator` |
+| Run an operation once per idempotency key | `tsentials/idempotency` |
 | Next/previous weekday, age, date-only / time-only | `tsentials/time` |
 | Functional object manipulation | `tsentials/record` |
 | Composable equality checks | `tsentials/eq` |
@@ -157,6 +159,7 @@ import { paginate, keysetOrdering, keysetPaginate }    from 'tsentials/paginatio
 import { defineEnum }                                   from 'tsentials/enums';
 import type { EnumMember }                              from 'tsentials/enums';
 import { createMediator, exceptionHandlingBehavior, validationBehavior } from 'tsentials/mediator';
+import { createIdempotency, idempotent, withIdempotency, idempotencyKeys, idempotencyScopes } from 'tsentials/idempotency';
 ```
 
 ---
@@ -182,7 +185,7 @@ import { createMediator, exceptionHandlingBehavior, validationBehavior } from 't
 |-------|---------|-----|
 | `resultAsync.then(fn)` | `resultAsync.andThen(fn)` | `.then()` is the `PromiseLike` protocol |
 | `chain.then(fn)` | `chain.bind(fn)` | Same reason — breaks `await` |
-| `import { Validator } from 'tsentials'` | `import { Validator } from 'tsentials/validation'` | `validation`, `resilience`, `pagination`, `enums`, `mediator` are subpath-only |
+| `import { Validator } from 'tsentials'` | `import { Validator } from 'tsentials/validation'` | `validation`, `resilience`, `pagination`, `enums`, `mediator`, `idempotency` are subpath-only |
 | `import { Err } from 'tsentials/result'` | `import { Err } from 'tsentials/errors'` | `Err` lives in the errors module |
 | `error.message` | `error.description` | Property is named `description` |
 | `throw new Error(...)` | `Result.failure(Err.unexpected(...))` | Errors are values, not exceptions |

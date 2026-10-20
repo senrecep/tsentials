@@ -1,0 +1,13 @@
+{
+  "name": "tsentials-example-idempotency-sql",
+  "private": true,
+  "type": "module",
+  "description": "Implements IdempotencyStore on PostgreSQL with pg and runs the store contract against a real database.",
+  "scripts": {
+    "test": "node --test contract.test.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.0",
+    "tsentials": "file:../.."
+  }
+}

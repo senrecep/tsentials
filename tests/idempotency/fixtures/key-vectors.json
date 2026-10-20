@@ -1,0 +1,429 @@
+{
+  "version": 2,
+  "spec": {
+    "parts": "For(operation, ...ids): parts are [operation, ...ids] in order.",
+    "canonical": "Each part is written as '{utf8ByteLength}:{value}' (decimal length, no padding) and the parts are joined with '|'.",
+    "allowedCharacters": "A key character is in U+0021..U+007E except '\"' (U+0022) and '\\\\' (U+005C).",
+    "key": "If every character of the canonical string is allowed and its length is 1..255, the key is the canonical string. Otherwise it is 'h:' + base64url(SHA-256(UTF-8(canonical))) without padding. The character check comes first, so the length is always counted over ASCII characters.",
+    "fromMessage": "FromMessage(messageId, consumer) = For('message', consumer, messageId).",
+    "uuidV5": "ToUuidV5(operation, ...ids) = RFC 9562 UUIDv5 of UTF-8(canonical) in namespaceUuid, lowercase with hyphens. The canonical string is hashed whether or not the key falls back to 'h:'.",
+    "invalidInput": "operation null or empty, any id null, or any part that is not well-formed UTF-16 (lone surrogate) throws an argument error in each language. Lone surrogates cannot round-trip through every JSON parser, so each language tests them natively; the 'invalid' list holds the portable cases.",
+    "scopes": "user, tenant and client scopes are '{kind}:{id}'; custom is '{customKind}:{value}'; global is the literal 'global'. userAndTenant builds tenant = 'tenant:' + tenantId and user = 'user:' + userId, then the scope is '{utf8ByteLength(tenant)}:{tenant}/{user}' (only the tenant part is length-prefixed). A null or empty id, value, tenantId or userId means no scope (null in the vectors).",
+    "storageKeys": "storageKey = prefix + [namespace, scope, key] each written as '{utf8ByteLength}:{value}' and joined with '|'. The default prefix is 'idem:v3:'. A global key uses the scope 'global'.",
+    "validation": "Servers accept an Idempotency-Key header with the same allowed characters and length 1..MaxKeyLength (default 255)."
+  },
+  "namespaceUuid": "9c8fbd17-da5f-4f32-a4bf-651721368d5e",
+  "maxKeyLength": 255,
+  "messageOperation": "message",
+  "rfc9562": {
+    "namespace": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    "name": "www.example.com",
+    "uuidV5": "2ed6657d-e927-568b-95e1-2665a8aea6a2"
+  },
+  "storagePrefix": "idem:v3:",
+  "for": [
+    {
+      "name": "single id",
+      "operation": "capture",
+      "ids": [
+        "order-42"
+      ],
+      "canonical": "7:capture|8:order-42",
+      "key": "7:capture|8:order-42",
+      "uuidV5": "db3a1d1f-f8a0-56fe-969e-9d6934781e51"
+    },
+    {
+      "name": "operation only",
+      "operation": "capture",
+      "ids": [],
+      "canonical": "7:capture",
+      "key": "7:capture",
+      "uuidV5": "c6da5337-eb4a-5f02-9ebe-cc526de0aa46"
+    },
+    {
+      "name": "boundary a|bc",
+      "operation": "op",
+      "ids": [
+        "a",
+        "bc"
+      ],
+      "canonical": "2:op|1:a|2:bc",
+      "key": "2:op|1:a|2:bc",
+      "uuidV5": "cfb1fbe3-4a12-5879-8cdb-5a314c5315b4"
+    },
+    {
+      "name": "boundary ab|c",
+      "operation": "op",
+      "ids": [
+        "ab",
+        "c"
+      ],
+      "canonical": "2:op|2:ab|1:c",
+      "key": "2:op|2:ab|1:c",
+      "uuidV5": "c0093846-b956-5f5a-9543-fb2e9b764b6f"
+    },
+    {
+      "name": "separators inside parts",
+      "operation": "op",
+      "ids": [
+        "a|b",
+        "1:2"
+      ],
+      "canonical": "2:op|3:a|b|3:1:2",
+      "key": "2:op|3:a|b|3:1:2",
+      "uuidV5": "24346f2f-ec9c-5df3-be95-f2129766f88c"
+    },
+    {
+      "name": "empty id",
+      "operation": "op",
+      "ids": [
+        ""
+      ],
+      "canonical": "2:op|0:",
+      "key": "2:op|0:",
+      "uuidV5": "4f6c1d66-33c4-5032-accd-1c2a64178c20"
+    },
+    {
+      "name": "two empty ids",
+      "operation": "op",
+      "ids": [
+        "",
+        ""
+      ],
+      "canonical": "2:op|0:|0:",
+      "key": "2:op|0:|0:",
+      "uuidV5": "4f896e61-a3ce-5bbd-b52b-a37196db4ab2"
+    },
+    {
+      "name": "several ids",
+      "operation": "refund",
+      "ids": [
+        "tenant-1",
+        "order-42",
+        "line-7"
+      ],
+      "canonical": "6:refund|8:tenant-1|8:order-42|6:line-7",
+      "key": "6:refund|8:tenant-1|8:order-42|6:line-7",
+      "uuidV5": "4b6f1a91-2793-525c-a271-74acaa741347"
+    },
+    {
+      "name": "exactly 255 characters",
+      "operation": "capture",
+      "ids": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "canonical": "7:capture|241:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "key": "7:capture|241:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "uuidV5": "9ea866b9-7032-5a52-965b-e3b3ba0e9092"
+    },
+    {
+      "name": "256 characters falls back to hash",
+      "operation": "capture",
+      "ids": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "canonical": "7:capture|242:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "key": "h:xurKZE_vlvRHk1hxxurKFT6U4_mRyjasDAIh2x6PU2k",
+      "uuidV5": "d777e5c8-53af-5d8d-b972-3910d91551ab"
+    },
+    {
+      "name": "1000-character id falls back to hash",
+      "operation": "capture",
+      "ids": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "canonical": "7:capture|1000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "key": "h:k5GR6EUadnoVYiO1CK_e04-GCAk9tuthaq79b7BEVKU",
+      "uuidV5": "94cf5838-9016-5fd1-867b-28acb03c602b"
+    },
+    {
+      "name": "space falls back to hash",
+      "operation": "op",
+      "ids": [
+        "a b"
+      ],
+      "canonical": "2:op|3:a b",
+      "key": "h:4F9exGQ-lQLiyXhiiVJN3b3OO_pGMTkOlMIwdn45UCc",
+      "uuidV5": "6c7fc348-de3d-5504-89f4-d5e6f03d9330"
+    },
+    {
+      "name": "double quote falls back to hash",
+      "operation": "op",
+      "ids": [
+        "a\"b"
+      ],
+      "canonical": "2:op|3:a\"b",
+      "key": "h:m0aGtzu7eruK_V06lfyNQQlE-lRMpRfj8XF-u1KFtW0",
+      "uuidV5": "8837e84f-da59-5a6d-b457-acc0375ccb0c"
+    },
+    {
+      "name": "backslash falls back to hash",
+      "operation": "op",
+      "ids": [
+        "a\\b"
+      ],
+      "canonical": "2:op|3:a\\b",
+      "key": "h:o7XA7NzewEcjWaqJgflzXDp3pIM17OkOYTDtAxguYiw",
+      "uuidV5": "06fd08e3-9d5e-5002-a6d9-e7a5ccb4e020"
+    },
+    {
+      "name": "turkish characters fall back to hash",
+      "operation": "ödeme",
+      "ids": [
+        "şirket-ığü"
+      ],
+      "canonical": "6:ödeme|14:şirket-ığü",
+      "key": "h:W1eSBxGDAhlV9-h3jDVLPjuvN_SM3gW6Vje0rJRyKYA",
+      "uuidV5": "a4d6b977-b561-5990-b5f3-b0d4047ec229"
+    },
+    {
+      "name": "emoji falls back to hash",
+      "operation": "op",
+      "ids": [
+        "🎉"
+      ],
+      "canonical": "2:op|4:🎉",
+      "key": "h:N6kYYXFXiqdPAs5DRK-toKMdp_NAtB6i2wrBZS9xeVI",
+      "uuidV5": "2290e747-41ef-5344-bedc-efcbb4b49b6d"
+    },
+    {
+      "name": "uuid id",
+      "operation": "capture",
+      "ids": [
+        "0192f3b4-7c1e-7a00-8000-000000000001"
+      ],
+      "canonical": "7:capture|36:0192f3b4-7c1e-7a00-8000-000000000001",
+      "key": "7:capture|36:0192f3b4-7c1e-7a00-8000-000000000001",
+      "uuidV5": "6eaf1af1-de21-5fc6-ac92-b5c1a58622b6"
+    }
+  ],
+  "fromMessage": [
+    {
+      "name": "message",
+      "messageId": "msg-1",
+      "consumer": "billing",
+      "canonical": "7:message|7:billing|5:msg-1",
+      "key": "7:message|7:billing|5:msg-1"
+    },
+    {
+      "name": "message swapped",
+      "messageId": "billing",
+      "consumer": "msg-1",
+      "canonical": "7:message|5:msg-1|7:billing",
+      "key": "7:message|5:msg-1|7:billing"
+    },
+    {
+      "name": "message other consumer",
+      "messageId": "msg-1",
+      "consumer": "shipping",
+      "canonical": "7:message|8:shipping|5:msg-1",
+      "key": "7:message|8:shipping|5:msg-1"
+    },
+    {
+      "name": "message guid id",
+      "messageId": "0192f3b4-7c1e-7a00-8000-000000000001",
+      "consumer": "OrderPlacedConsumer",
+      "canonical": "7:message|19:OrderPlacedConsumer|36:0192f3b4-7c1e-7a00-8000-000000000001",
+      "key": "7:message|19:OrderPlacedConsumer|36:0192f3b4-7c1e-7a00-8000-000000000001"
+    }
+  ],
+  "scopes": [
+    {
+      "name": "user",
+      "kind": "user",
+      "id": "u1",
+      "scope": "user:u1"
+    },
+    {
+      "name": "tenant",
+      "kind": "tenant",
+      "id": "t1",
+      "scope": "tenant:t1"
+    },
+    {
+      "name": "client",
+      "kind": "client",
+      "id": "billing-service",
+      "scope": "client:billing-service"
+    },
+    {
+      "name": "custom",
+      "kind": "custom",
+      "customKind": "account",
+      "value": "acc-9",
+      "scope": "account:acc-9"
+    },
+    {
+      "name": "global",
+      "kind": "global",
+      "scope": "global"
+    },
+    {
+      "name": "user and tenant",
+      "kind": "userAndTenant",
+      "tenantId": "t1",
+      "userId": "u1",
+      "scope": "9:tenant:t1/user:u1"
+    },
+    {
+      "name": "user and tenant with separators",
+      "kind": "userAndTenant",
+      "tenantId": "a/b:c",
+      "userId": "d|e",
+      "scope": "12:tenant:a/b:c/user:d|e"
+    },
+    {
+      "name": "user and tenant unicode",
+      "kind": "userAndTenant",
+      "tenantId": "şirket",
+      "userId": "kullanıcı-ğ",
+      "scope": "14:tenant:şirket/user:kullanıcı-ğ"
+    },
+    {
+      "name": "user unicode",
+      "kind": "user",
+      "id": "müşteri-ı",
+      "scope": "user:müşteri-ı"
+    },
+    {
+      "name": "user emoji",
+      "kind": "user",
+      "id": "🎉",
+      "scope": "user:🎉"
+    },
+    {
+      "name": "user missing",
+      "kind": "user",
+      "id": null,
+      "scope": null
+    },
+    {
+      "name": "user empty",
+      "kind": "user",
+      "id": "",
+      "scope": null
+    },
+    {
+      "name": "tenant missing",
+      "kind": "tenant",
+      "id": null,
+      "scope": null
+    },
+    {
+      "name": "client empty",
+      "kind": "client",
+      "id": "",
+      "scope": null
+    },
+    {
+      "name": "custom value missing",
+      "kind": "custom",
+      "customKind": "account",
+      "value": null,
+      "scope": null
+    },
+    {
+      "name": "user and tenant without tenant",
+      "kind": "userAndTenant",
+      "tenantId": null,
+      "userId": "u1",
+      "scope": null
+    },
+    {
+      "name": "user and tenant without user",
+      "kind": "userAndTenant",
+      "tenantId": "t1",
+      "userId": null,
+      "scope": null
+    },
+    {
+      "name": "user and tenant with empty tenant",
+      "kind": "userAndTenant",
+      "tenantId": "",
+      "userId": "u1",
+      "scope": null
+    }
+  ],
+  "storageKeys": [
+    {
+      "name": "tenant scope",
+      "prefix": "idem:v3:",
+      "namespace": "capture",
+      "scope": "tenant:t1",
+      "key": "abc",
+      "storageKey": "idem:v3:7:capture|9:tenant:t1|3:abc"
+    },
+    {
+      "name": "http user scope",
+      "prefix": "idem:v3:",
+      "namespace": "http",
+      "scope": "user:u1",
+      "key": "order-42",
+      "storageKey": "idem:v3:4:http|7:user:u1|8:order-42"
+    },
+    {
+      "name": "global scope",
+      "prefix": "idem:v3:",
+      "namespace": "http",
+      "scope": "global",
+      "key": "abc",
+      "storageKey": "idem:v3:4:http|6:global|3:abc"
+    },
+    {
+      "name": "user and tenant scope",
+      "prefix": "idem:v3:",
+      "namespace": "http",
+      "scope": "9:tenant:t1/user:u1",
+      "key": "abc",
+      "storageKey": "idem:v3:4:http|19:9:tenant:t1/user:u1|3:abc"
+    },
+    {
+      "name": "unicode namespace and scope",
+      "prefix": "idem:v3:",
+      "namespace": "SiparişOluştur",
+      "scope": "user:müşteri",
+      "key": "abc",
+      "storageKey": "idem:v3:16:SiparişOluştur|14:user:müşteri|3:abc"
+    },
+    {
+      "name": "separators inside parts",
+      "prefix": "idem:v3:",
+      "namespace": "a|b",
+      "scope": "user:1:2",
+      "key": "x|y",
+      "storageKey": "idem:v3:3:a|b|8:user:1:2|3:x|y"
+    },
+    {
+      "name": "hashed deterministic key",
+      "prefix": "idem:v3:",
+      "namespace": "message",
+      "scope": "client:billing",
+      "key": "h:28IpSFs-98BWqAp_zuHnfjNEy3D95siaSCNdfky4sho",
+      "storageKey": "idem:v3:7:message|14:client:billing|45:h:28IpSFs-98BWqAp_zuHnfjNEy3D95siaSCNdfky4sho"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "empty operation",
+      "operation": "",
+      "ids": [
+        "a"
+      ]
+    },
+    {
+      "name": "null operation",
+      "operation": null,
+      "ids": [
+        "a"
+      ]
+    },
+    {
+      "name": "null id",
+      "operation": "op",
+      "ids": [
+        "a",
+        null
+      ]
+    }
+  ]
+}

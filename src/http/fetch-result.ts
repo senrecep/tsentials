@@ -2,6 +2,7 @@ import { Err } from '../errors/app-error.js';
 import { ErrorType } from '../errors/error-type.js';
 import type { Result } from '../result/result.js';
 import { Result as R } from '../result/result.js';
+import { withResponseMetadata } from './response-metadata.js';
 import { problemDetailsToErrors } from './status-mapper.js';
 
 /**
@@ -36,7 +37,8 @@ const isAbortError = (e: unknown): boolean =>
     (e as { name?: unknown }).name === 'TimeoutError');
 
 /**
- * Converts a fetch Response to a Result<T>. Body read/parse errors propagate to the caller.
+ * Converts a fetch Response to a Result<T>. A body that cannot be read or parsed is a failure;
+ * an abort while reading (caller or timeout) propagates to `execute`.
  * With `allowEmptyBody`, an empty / `null` JSON body is a void success instead of NotFound.
  */
 async function responseToResult<T>(
@@ -56,7 +58,9 @@ async function responseToResult<T>(
         body = undefined; // unreadable error body, fall back to the status error
       }
     }
-    return R.failureFrom(problemDetailsToErrors(response.status, body));
+    return R.failureFrom(
+      withResponseMetadata(problemDetailsToErrors(response.status, body), response, body),
+    );
   }
 
   // 204 No Content / 205 Reset Content never carry a body, and a non-JSON body is not
@@ -66,10 +70,19 @@ async function responseToResult<T>(
   }
 
   // The server declared JSON, so a value is expected: an empty body or a literal `null`
-  // is a NotFound failure (unless `allowEmptyBody`). Malformed JSON throws and becomes an
-  // Unexpected failure in `execute`.
-  const text = await response.text();
-  const value: unknown = text.trim() === '' ? null : JSON.parse(text);
+  // is a NotFound failure (unless `allowEmptyBody`). A body that cannot be read or parsed is
+  // an Unexpected failure that carries the response metadata: the server answered, so a
+  // retry classifier must not treat it as a missing response.
+  let value: unknown;
+  try {
+    const text = await response.text();
+    value = text.trim() === '' ? null : JSON.parse(text);
+  } catch (e) {
+    if (signal.aborted) throw e;
+    return R.failureFrom(
+      withResponseMetadata([Err.fromException(e, ErrorType.Unexpected)], response, undefined),
+    );
+  }
   if (value === null) {
     return allowEmptyBody
       ? R.success(undefined as unknown as T)
@@ -123,13 +136,20 @@ async function execute<T>(
         }, timeout)
       : undefined;
 
+  let response: Response | undefined;
   try {
-    const response = await fetch(url, { ...rest, ...build(), signal: controller.signal });
+    response = await fetch(url, { ...rest, ...build(), signal: controller.signal });
     return await responseToResult<T>(response, controller.signal, allowEmptyBody);
   } catch (e) {
     if (callerSignal?.aborted && (e === callerSignal.reason || isAbortError(e))) throw e;
-    if (timedOut) return R.failure(Err.fromException(e, ErrorType.Unexpected, HTTP_TIMEOUT_CODE));
-    return R.failure(Err.fromException(e, ErrorType.Unexpected));
+    const error = timedOut
+      ? Err.fromException(e, ErrorType.Unexpected, HTTP_TIMEOUT_CODE)
+      : Err.fromException(e, ErrorType.Unexpected);
+    // A timeout while reading the body still has a response: keep its status so a retry
+    // classifier does not mistake it for a missing response.
+    return response === undefined
+      ? R.failure(error)
+      : R.failureFrom(withResponseMetadata([error], response, undefined));
   } finally {
     if (timer !== undefined) clearTimeout(timer);
     callerSignal?.removeEventListener('abort', onCallerAbort);
@@ -147,6 +167,8 @@ const jsonInit = (method: string, body: unknown, init: RequestInit | undefined):
  *
  * - Network errors, body parse errors and HTTP error responses become failures
  *   (status mapping: {@link httpStatusToErrorType}; ProblemDetails `errors` are parsed).
+ * - The first error of a failed response carries the metadata `httpStatus`, and when present
+ *   `idempotencyReplayed`, `retryAfterMs` and `problemCode` (see `HttpErrorMetadataKeys`).
  * - 2xx bodies: 204/205 and non-JSON content types are void successes (`undefined`); a JSON
  *   content type with an empty body or a literal `null` is a NotFound failure
  *   (code `NotFound`, "Response body was empty or could not be deserialized."), except for

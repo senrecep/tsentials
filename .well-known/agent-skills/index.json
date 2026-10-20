@@ -121,6 +121,11 @@
       "files": ["SKILL.md"]
     },
     {
+      "name": "tsentials-idempotency",
+      "description": "Use when an operation must run once per idempotency key — idempotent() for functions, idempotencyBehavior() for mediator requests, withIdempotency() for Fetch API handlers, createIdempotency() for shared settings, InMemory/Redis stores, key and scope helpers, and off/observe/enforce rollout. Subpath-only import.",
+      "files": ["SKILL.md"]
+    },
+    {
       "name": "tsentials-meta",
       "description": "Use when deciding which tsentials module to use — overview of all 24 subpath imports organized by concern, install command, and a quick-reference table mapping problems to modules.",
       "files": ["SKILL.md"]

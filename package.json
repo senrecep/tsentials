@@ -1,6 +1,6 @@
 {
   "name": "tsentials",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Railway-oriented programming for TypeScript — Result<T>, Maybe<T>, Rule Engine, and DDD base classes with full async pipeline support",
   "type": "module",
   "main": "./dist/index.js",
@@ -105,6 +105,10 @@
     "./mediator": {
       "import": "./dist/mediator/index.js",
       "types": "./dist/mediator/index.d.ts"
+    },
+    "./idempotency": {
+      "import": "./dist/idempotency/index.js",
+      "types": "./dist/idempotency/index.d.ts"
     }
   },
   "sideEffects": false,
@@ -125,6 +129,7 @@
     "README.md",
     "CHANGELOG.md",
     "docs/BEHAVIOUR-CHANGES.md",
+    "docs/IDEMPOTENCY.md",
     "LICENSE"
   ],
   "keywords": [
@@ -157,11 +162,11 @@
     "url": "https://github.com/senrecep/tsentials/issues"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
-    "@types/node": "^20.0.0",
+    "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^2.0.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"

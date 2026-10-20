@@ -4,6 +4,28 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-10-20
+
+Adds the `tsentials/idempotency` module and idempotent HTTP client support. The minimum Node.js version is now 22 (listed under BREAKING below); runtime behaviour changes of existing APIs are explained in [docs/BEHAVIOUR-CHANGES.md](./docs/BEHAVIOUR-CHANGES.md).
+
+### Added
+
+- **New subpath-only module `tsentials/idempotency`** (100% coverage enforced): runs an operation once per `(namespace, scope, key)` and replays the stored outcome to later calls. Guide: [docs/IDEMPOTENCY.md](./docs/IDEMPOTENCY.md).
+  - Wrappers over one engine: `idempotent(fn, options)` for functions returning `Result<T>`, `idempotencyBehavior(options)` for mediator requests and `withIdempotency(handler, options)` for Fetch API handlers (`Idempotency-Key` header, problem+json errors, `Idempotency-Replayed: true` on replays). `createIdempotency(defaults)` shares the store, mode, durations, profiles and observers.
+  - Rollout modes `off`, `observe` and `enforce` (a value or a function read on every call). `observe` answers like `off` and reports `Idempotency.Observe.Would…` events; a resolver that throws in `observe` runs the call without idempotency (`Idempotency.Observe.ResolutionFailed`).
+  - Error codes `Idempotency.InFlight` (Conflict, 409 + `Retry-After`), `Idempotency.KeyReused` (Validation, 422), `Idempotency.KeyMissing`, `Idempotency.KeyInvalid` and `Idempotency.ScopeRequired` (Validation, 400).
+  - Stores: `InMemoryIdempotencyStore`, `RedisIdempotencyStore` over a minimal `RedisLike` client (`eval` only; Lua scripts exported as `RedisIdempotencyScripts`) and `describeIdempotencyStoreContract` for custom stores. `examples/idempotency-redis` and `examples/idempotency-sql` (a transactional PostgreSQL store) run the contract suite against real servers.
+  - Keys and scopes: `idempotencyKeys` (`for`, `fromMessage`), `createIdempotencyKeys`, `isValidIdempotencyKey`, `normalizeIdempotencyKey`, `idempotencyScopes`, `idempotencyStorageKey`, `fingerprintOf`, `stableStringify`. A scope is a frozen `IdempotencyScope` value that only the `idempotencyScopes` builders create (`global` included, stored as `global`); a raw string scope is a compile error and at runtime throws `TypeError` (enforce) or runs without idempotency (observe), so a raw owner id such as a tenant named `global` or `user:42` never shares another owner's records. `custom()` rejects the built-in kinds in any case and kinds with `:`, `/` or only digits; scope ids and kinds with a lone surrogate throw. Stores must compare keys byte for byte. `toJSON()` gives the tagged `IdempotencyScopeJson` form and `idempotencyScopes.fromJSON` reads it back; `idempotencyBehavior({ reviveScopeJson: true })` (or per request type) makes the mediator's default reader do this for queued requests. A `null` scope means no scope.
+- **Http:** `withIdempotencyKey(init, key?, options?)`, `RequestBuilder.idempotencyKey(key?, options?)` and `idempotencyKeyValue` (`options.idempotencyKeyGenerator` replaces `crypto.randomUUID()`; a generated key is validated like an explicit one and throws `TypeError` when invalid), `idempotentRetryClassifier(method, hasKey)`, `HttpErrorMetadataKeys`, `parseRetryAfter`, `IDEMPOTENCY_KEY_HEADER`, `IDEMPOTENCY_REPLAYED_HEADER` and `IdempotencyErrorCodes`. Failed responses carry status, `Retry-After`, replay and problem code metadata (see [docs/BEHAVIOUR-CHANGES.md](./docs/BEHAVIOUR-CHANGES.md)).
+- **Resilience:** `withRetry` accepts `shouldRetry(error)` (already available on `retryIfFailed`) to replace the retryable check; `withRetry` and `retryIfFailed` accept `maxRetryAfterMs` to cap a server's `Retry-After` wait.
+- Agent skill `tsentials-idempotency` under `.well-known/agent-skills/`.
+
+### Changed
+
+#### BREAKING
+
+- **Minimum Node.js version is now 22.** `engines.node` is `>=22.0.0`; CI runs on Node 22 and 24, publishing runs on Node 22 and `@types/node` is `^22`. The library relies on the global Web Crypto API (`crypto.subtle`, `crypto.randomUUID`) without any runtime dependency.
+
 ## [1.0.0] - 2026-10-14
 
 First stable release. It adds five new subpath modules, cancellation support across the async APIs and a self-contained `deepClone`. It also tightens several behaviours of the 0.1.x API; every breaking change is listed below and explained in [docs/BEHAVIOUR-CHANGES.md](./docs/BEHAVIOUR-CHANGES.md).
@@ -58,4 +80,5 @@ First stable release. It adds five new subpath modules, cancellation support acr
 
 - Version bumped to 1.0.0; the five new subpath modules are marked stable.
 
+[2.0.0]: https://github.com/senrecep/tsentials/releases/tag/v2.0.0
 [1.0.0]: https://github.com/senrecep/tsentials/releases/tag/v1.0.0

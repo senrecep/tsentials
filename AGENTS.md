@@ -4,7 +4,7 @@
 
 **Package:** `tsentials` (npm)  
 **Purpose:** Railway-oriented programming: errors as values instead of exceptions  
-**Node:** ≥18, TypeScript ≥5.0, ESM only
+**Node:** ≥22, TypeScript ≥5.0, ESM only
 
 ## Import Paths
 
@@ -40,6 +40,7 @@ import { paginate, keysetOrdering, keysetPaginate } from 'tsentials/pagination';
 import { defineEnum } from 'tsentials/enums';
 import type { EnumMember } from 'tsentials/enums';
 import { createMediator, exceptionHandlingBehavior, validationBehavior } from 'tsentials/mediator';
+import { createIdempotency, idempotent, idempotencyBehavior, withIdempotency, idempotencyKeys, idempotencyScopes, InMemoryIdempotencyStore, RedisIdempotencyStore } from 'tsentials/idempotency';
 import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
 ```
 
@@ -295,7 +296,7 @@ const users = await RequestBuilder.get('/users')
   .send<User[]>();
 
 await RequestBuilder.post('/users')
-  .header('X-Idempotency-Key', key)
+  .header('Idempotency-Key', key)
   .json({ name: 'Alice' })
   .send<User>();
 
@@ -639,6 +640,29 @@ const result = await mediator.send('GetUser', { id: 1 }, { signal });   // Promi
 
 `send` rejects when no handler is registered; `register` throws on a duplicate name. Other behaviors: `loggingBehavior`, `cachingBehavior`, `lockBehavior`, `transactionBehavior`.
 
+### Idempotency — run once per key (subpath-only)
+
+```typescript
+import { createIdempotency, idempotencyKeys, idempotencyScopes, RedisIdempotencyStore } from 'tsentials/idempotency';
+
+const idem = createIdempotency({ store: new RedisIdempotencyStore(redis), mode: () => flags.mode }); // 'off' | 'observe' | 'enforce'
+
+const capture = idem.idempotent(capturePayment, {                 // (...args) => Promise<Result<T>>
+  namespace: 'capture-payment',
+  key: (cmd: CaptureCommand) => idempotencyKeys.for('capture', cmd.orderId),   // async, deterministic
+  scope: (cmd) => idempotencyScopes.tenant(cmd.tenantId),
+});
+export const POST = idem.withIdempotency(createOrder, { scope: (req) => idempotencyScopes.user(userIdOf(req)) });
+// mediator: idem.idempotencyBehavior() reads idempotencyKey / idempotencyScope from the request
+```
+
+- Same key running → `Idempotency.InFlight` (Conflict; HTTP 409 + `Retry-After`). Same key, other payload → `Idempotency.KeyReused` (Validation; HTTP 422). Completed → stored outcome replayed (HTTP header `Idempotency-Replayed: true`).
+- Key without scope → `Idempotency.ScopeRequired` (or `unscopedKeyBehavior: 'skip' | 'global'`). Set scope and key fields in server code, never from a client payload.
+- `RedisIdempotencyStore` takes a `RedisLike` (`eval` only): adapt ioredis or node-redis. Cloudflare KV is not atomic and is not safe as a store. Custom stores must pass `describeIdempotencyStoreContract`.
+- `leaseMs` must cover the client's whole retry and timeout budget. Roll out `observe` before `enforce`.
+- Client side (`tsentials/http`): `RequestBuilder.post(url).idempotencyKey()`, `withIdempotencyKey(init)`, `idempotentRetryClassifier(method, hasKey)` as `withRetry({ shouldRetry })`.
+- Full guide: `docs/IDEMPOTENCY.md`.
+
 ### Cancellation — AbortSignal convention
 
 Operations accepting `{ signal }` (`Result.tryAsync`, `traverseAsync`, `sequenceAsync`, `Maybe.fromTryAsync`, `RuleEngine.evaluateAsync`, `fetchResult`, `ResiliencePolicy.execute`): the caller's abort rejects with `signal.reason`; any other error becomes a failure. `Validator.validateAsync` differs: a caller abort rejects with `signal.reason`, and an exception thrown by an async rule predicate or by `configure` rejects too (it is never turned into a failure). Use `mustAsync` predicates that return `false` for validation failures. Helpers: `isAbortError`, `isCallerAbort`, `rethrowIfAborted`, `throwIfAborted`, `withAbort` (from `tsentials/result`).
@@ -659,7 +683,7 @@ Operations accepting `{ signal }` (`Result.tryAsync`, `traverseAsync`, `sequence
 | `const u: Shape = { tag, value }` then `Union.match(u, ...)` | `const u = { tag, value } as Shape` | Assignment narrowing breaks exhaustive match |
 | `These<AppError, T>` with `These.toResult` | `These<AppError[], T>` | `toResult` expects an error array |
 | `fromAsync(promiseOfT)` | `fromAsync(promiseOfResultT)` | Takes `Promise<Result<T>>`, not `Promise<T>` |
-| `import { Validator } from 'tsentials'` | `import { Validator } from 'tsentials/validation'` | `validation`, `resilience`, `pagination`, `enums`, `mediator` are subpath-only |
+| `import { Validator } from 'tsentials'` | `import { Validator } from 'tsentials/validation'` | `validation`, `resilience`, `pagination`, `enums`, `mediator`, `idempotency` are subpath-only |
 
 ---
 
@@ -667,7 +691,7 @@ Operations accepting `{ signal }` (`Result.tryAsync`, `traverseAsync`, `sequence
 
 ```bash
 npm run build      # tsc compile
-npm test           # vitest run (2498 tests)
+npm test           # vitest run (2948 tests)
 npm run check      # biome lint + format check
 npm run lint:fix   # auto-fix lint
 ```

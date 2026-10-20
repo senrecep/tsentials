@@ -131,6 +131,7 @@ const uploaded = await RequestBuilder.post('https://api.example.com/upload')
 | `.query(name, value)` | Append a query string parameter |
 | `.json(body)` | Set body as JSON + Content-Type header |
 | `.body(body: BodyInit)` | Set raw body |
+| `.idempotencyKey(key?, { idempotencyKeyGenerator }?)` | Set `Idempotency-Key` (a UUID, or your generator's result, created once when omitted and validated like an explicit key; every `send()` reuses it) |
 | `.send<T>()` | Send request, returns `Promise<Result<T>>` |
 
 ---
@@ -153,6 +154,23 @@ await RequestBuilder.get('/users')
 
 - **AbortSignal convention:** the caller's abort rejects the promise with `signal.reason`; it never becomes a `Result`. Network, HTTP and body-parse errors become failures.
 - Default timeout is 30 s (`timeout` in ms; `0` or `Infinity` disables it). On expiry the result is a failure with code `Http.Timeout` (`Unexpected`).
+
+---
+
+## Idempotency keys and retries
+
+```typescript
+import { withIdempotencyKey, idempotentRetryClassifier, HttpErrorMetadataKeys } from 'tsentials/http';
+
+const init = withIdempotencyKey({ method: 'POST', body });   // one key for every retry of this operation
+await ResiliencePolicy.create()
+  .withRetry({ shouldRetry: idempotentRetryClassifier('POST', true) })
+  .execute((signal) => fetchResult.send<Order>('/orders', { ...init, signal }));
+```
+
+- `idempotentRetryClassifier(method, hasKey)` never retries a POST/PATCH without a key or a replayed response; it retries network errors, timeouts, 409 `Idempotency.InFlight`, 408, 429, 503 and 504.
+- A failed response's first error carries `HttpErrorMetadataKeys` metadata: `httpStatus`, `retryAfterMs` (from `Retry-After`, see `parseRetryAfter`), `idempotencyReplayed`, `problemCode`.
+- Server side: `tsentials/idempotency` (`withIdempotency`).
 
 ---
 
@@ -224,5 +242,5 @@ const description = await extractErrorDescription(response);
 - Prefer `RequestBuilder` over raw `fetchResult` for multi-header or multi-param requests
 - Combine with `fromAsync()` to chain downstream calls without nested try/catch
 - Always type the generic parameter `send<T>()` / `get<T>()` so TypeScript knows the response shape
-- Works in both Node.js >= 18 (built-in `fetch`) and browser environments
+- Works in both Node.js >= 22 (built-in `fetch`) and browser environments
 - POST/PUT/PATCH on `fetchResult` take `body` as the second argument (auto-serialized to JSON)
