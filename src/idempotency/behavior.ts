@@ -216,9 +216,10 @@ export function makeIdempotencyBehavior(
  * - A handler that throws or is aborted keeps the key in flight until the lease ends.
  * - With a store that has `extend` (the built-in stores do), the lease is extended while the
  *   handler runs, and in `enforce` the handler's `ctx.signal` is a new signal that also aborts
- *   (reason name `ReservationLost`) when the reservation is lost. A handler that throws after
- *   the loss (and without a caller abort) gets Unexpected `Idempotency.ReservationLost` and the
- *   key is released, so a retry runs it again.
+ *   (reason name `ReservationLost`) when the reservation is lost. A handler that then throws
+ *   that reason or an abort-like error (without a caller abort) gets Unexpected
+ *   `Idempotency.ReservationLost` and the key is released, so a retry runs it again; any other
+ *   error is rethrown. A failure result after the loss is released, not stored.
  * - An invalid key or out-of-range request duration throws (`TypeError` / `RangeError`) in
  *   `enforce`; `observe` logs it (`Idempotency.Observe.ResolutionFailed`) and runs the handler
  *   without idempotency, as it does when `settings` or `releaseFailures` throws.

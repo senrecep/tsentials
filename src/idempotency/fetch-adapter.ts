@@ -318,6 +318,7 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
       action: 'store',
       payload: JSON.stringify(stored),
       retentionMs: response.status >= 500 ? settings.serverErrorRetentionMs : settings.retentionMs,
+      failure: response.status >= 400,
     };
   };
 
@@ -388,8 +389,9 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  * - same key with another method, path, query or body → 422 `Idempotency.KeyReused`;
  * - key without a scope (the default `unscopedKeyBehavior: 'reject'`) → 400 `Idempotency.ScopeRequired`;
  *   `'skip'` runs the handler without idempotency instead, `'global'` uses one shared scope;
- * - the reservation was lost while the handler ran and the handler then threw (`enforce`, no
- *   caller abort) → 503 `Idempotency.ReservationLost` with `Retry-After`.
+ * - the reservation was lost while the handler ran and the handler then threw the lease signal's
+ *   reason or an abort-like error (`enforce`, no caller abort) → 503
+ *   `Idempotency.ReservationLost` with `Retry-After`; any other error is rethrown.
  *
  * What happens to the key after the handler returned:
  * - 2xx and 3xx → stored for `retentionMs`; 5xx → stored for `serverErrorRetentionMs`;
@@ -398,8 +400,9 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  * - a body over `maxResponseBodyBytes`, a `Content-Encoding` or an event stream → for a 2xx a
  *   marker is stored for `retentionMs` (a retry gets 409 `Idempotency.ResultUnavailable`), a 4xx
  *   is released, any other status is kept in flight until the lease ends;
- * - the handler throws → kept in flight until the lease ends; after a lost reservation the key
- *   is released instead and the call gets 503 `Idempotency.ReservationLost` with `Retry-After`.
+ * - the handler throws → kept in flight until the lease ends; when it threw because the
+ *   reservation was lost (see above) the key is released instead;
+ * - a 5xx that would be stored, returned after a lost reservation (`enforce`) → released.
  *
  * With a store that has `extend` (the built-in stores do), the lease is extended while the
  * handler runs. The handler gets the original request; to let it observe a lost reservation,

@@ -14,7 +14,8 @@ export interface ResultStorePolicy {
 /**
  * Success → stored for `retentionMs`. Failure → released when `releaseFailures`, otherwise
  * stored: for `serverErrorRetentionMs` when its first error is `Unexpected` (the 5xx
- * kind), for `retentionMs` otherwise.
+ * kind), for `retentionMs` otherwise. A failure after a lost lease (`enforce`) is released by
+ * the engine.
  */
 export function resultCompletion(
   result: Result<unknown>,
@@ -28,6 +29,7 @@ export function resultCompletion(
     action: 'store',
     payload: policy.serializer.serialize(result),
     retentionMs: serverError ? settings.serverErrorRetentionMs : settings.retentionMs,
+    failure: !result.ok,
   };
 }
 

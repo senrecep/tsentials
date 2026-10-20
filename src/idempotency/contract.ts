@@ -98,14 +98,16 @@ export function describeIdempotencyStoreContract(
   let counter = 0;
 
   const scenario = (title: string, body: (ctx: Scenario) => Promise<void>, needsExtend = false) =>
-    // A plain function (not an arrow) so mocha's `this` is the test context. The rest parameter
-    // keeps `length` 0, so no runner treats the body as callback style.
-    api.it(title, async function (this: unknown, ...args: unknown[]) {
+    // A plain function (not an arrow) so mocha's `this` is the test context. No declared
+    // parameters: no runner treats the body as callback style, and vitest's `test.extend`
+    // (which parses the parameter list for fixtures) accepts it.
+    api.it(title, async function (this: unknown) {
+      // biome-ignore lint/complexity/noArguments: a declared parameter would break vitest fixtures.
+      const context = (arguments[0] ?? this) as { skip?: () => void } | undefined;
       const clock = createFakeDateTimeProvider(new Date('2026-01-01T00:00:00Z'));
       const store = await factory(clock);
       // The store is only known here, so the check runs inside the test.
       if (needsExtend && store.extend === undefined) {
-        const context = (args[0] ?? this) as { skip?: () => void } | undefined;
         context?.skip?.();
         return;
       }

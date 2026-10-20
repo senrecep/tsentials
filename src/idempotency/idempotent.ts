@@ -126,8 +126,9 @@ export function makeIdempotent<A extends readonly unknown[], T>(
  *   error propagates.
  * - With a store that has `extend` (the built-in stores do), the lease is extended while the
  *   function runs; `bindSignal` passes it a signal that also aborts when the reservation is
- *   lost. A function that rejects after the loss (in `enforce`, without a caller abort) gets
- *   Unexpected `Idempotency.ReservationLost` and the key is released.
+ *   lost. A function that then rejects with that reason or an abort-like error (in `enforce`,
+ *   without a caller abort) gets Unexpected `Idempotency.ReservationLost` and the key is
+ *   released; any other error propagates. A failure result after the loss is released.
  * - Success results are kept for `retentionMs`; failures whose first error is `Unexpected` for
  *   `serverErrorRetentionMs`, other failures for `retentionMs` (or released with
  *   `storeFailures: false`).

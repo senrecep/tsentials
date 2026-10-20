@@ -288,3 +288,30 @@ describe('describeIdempotencyStoreContract', () => {
     });
   });
 });
+
+// With fixtures registered, vitest parses each test function's parameter list; the scenarios
+// must still run there, and the extend scenarios must still skip through the context.
+const withFixture = test.extend<{ label: string }>({
+  label: async ({ task }, use) => {
+    await use(task.name);
+  },
+});
+
+describeIdempotencyStoreContract(
+  'InMemoryIdempotencyStore with vitest fixtures',
+  (clock) => new InMemoryIdempotencyStore({ clock }),
+  { describe, it: withFixture },
+);
+
+describeIdempotencyStoreContract(
+  'A store without extend with vitest fixtures',
+  (clock) => {
+    const inner = new InMemoryIdempotencyStore({ clock });
+    return {
+      reserve: (...a) => inner.reserve(...a),
+      complete: (...a) => inner.complete(...a),
+      release: (...a) => inner.release(...a),
+    };
+  },
+  { describe, it: withFixture },
+);

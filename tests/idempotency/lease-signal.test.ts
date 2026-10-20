@@ -1,3 +1,4 @@
+import { Err } from '../../src/errors/index.js';
 import {
   IdempotencyErrorCodes,
   type IdempotencyStore,
@@ -39,6 +40,9 @@ const aborted = (signal: AbortSignal) =>
   });
 
 const reasonName = (reason: unknown) => (reason as Error).name;
+
+/** Longer than the first beat of a 'lost' store (10 ms), so the lease is lost by then. */
+const afterLoss = () => new Promise((resolve) => setTimeout(resolve, 50));
 
 // The first beat runs after 10 ms. A 'real' store uses a long lease, so a slow machine never
 // misses a deadline.
@@ -171,6 +175,33 @@ describe('lease signal: idempotent', () => {
     expect(Result.firstError(result)?.code).toBe(IdempotencyErrorCodes.ReservationLost);
   });
 
+  it('rethrows an unrelated error after the loss without bindSignal', async () => {
+    const capture = idempotent(
+      async (_cmd: Cmd) => {
+        await afterLoss();
+        throw new Error('db');
+      },
+      options(store('lost')),
+    );
+    await expect(capture({ orderId: 'o1' })).rejects.toThrow('db');
+  });
+
+  it('releases a failure returned after the loss, so a retry runs again', async () => {
+    const s = store('lost');
+    let runs = 0;
+    const capture = idempotent(
+      async (cmd: Cmd) => {
+        runs++;
+        const reason = await aborted(cmd.signal!);
+        return Result.failure<string>(Err.fromException(reason));
+      },
+      { ...options(s), bindSignal: (signal, cmd) => [{ ...cmd, signal }] },
+    );
+    expect(Result.isFailure(await capture({ orderId: 'o1' }))).toBe(true);
+    expect(Result.isFailure(await capture({ orderId: 'o1' }))).toBe(true);
+    expect(runs).toBe(2);
+  });
+
   it('releases the key when bindSignal throws', async () => {
     const s = store('real');
     let fail = true;
@@ -273,6 +304,31 @@ describe('lease signal: withIdempotency', () => {
       code: IdempotencyErrorCodes.ReservationLost,
     });
     // Released: a retry runs again.
+    const retry = await wrap(s, async () => new Response('again', { status: 201 }))(post());
+    expect(await retry.text()).toBe('again');
+  });
+
+  it('rethrows an unrelated handler error after the loss, with or without bindRequest', async () => {
+    const failing = async () => {
+      await afterLoss();
+      throw new Error('db');
+    };
+    const unbound = withIdempotency(failing, {
+      store: store('lost'),
+      leaseMs: LEASE,
+      scope: () => idempotencyScopes.tenant('1'),
+    });
+    await expect(unbound(post())).rejects.toThrow('db');
+    await expect(wrap(store('lost'), failing)(post())).rejects.toThrow('db');
+  });
+
+  it('releases a 500 returned after the loss, so a retry runs again', async () => {
+    const s = store('lost');
+    const handler = wrap(s, async (request) => {
+      await aborted(request.signal);
+      return new Response('failed', { status: 500 });
+    });
+    expect((await handler(post())).status).toBe(500);
     const retry = await wrap(s, async () => new Response('again', { status: 201 }))(post());
     expect(await retry.text()).toBe('again');
   });

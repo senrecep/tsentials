@@ -1,3 +1,4 @@
+import { isCallerAbort } from '../result/index.js';
 import {
   type IdempotencyErrorCode,
   IdempotencyErrorCodes,
@@ -19,9 +20,10 @@ import type { IdempotencyRecordKey, IdempotencyReservation, IdempotencyStore } f
  * Abort reason of the lease signal in `enforce` mode: the store's `extend` returned `false`, no
  * `extend` succeeded before the lease ran out, or the lease reached `MAX_LEASE_MS`; the
  * reservation may belong to another call by now. `name` is `'ReservationLost'`. When the handler
- * rejects after the loss (with this reason or any other error) and the caller did not abort, the
- * engine releases the reservation and answers with `Idempotency.ReservationLost` instead of
- * rejecting. `cause` holds the last error `extend` threw, if any.
+ * rejects after the loss with this reason or an abort-like error (`AbortError`, `TimeoutError`)
+ * and the caller did not abort, the engine releases the reservation and answers with
+ * `Idempotency.ReservationLost` instead of rejecting; any other error is rethrown as is.
+ * `cause` holds the last error `extend` threw, if any.
  */
 export class IdempotencyReservationLostError extends Error {
   override readonly name = 'ReservationLost';
@@ -41,6 +43,12 @@ export type IdempotencyCompletion =
        * reason as the `Reason` property.
        */
       readonly notice?: { readonly name: string; readonly reason: string } | undefined;
+      /**
+       * The output is a failure. After a lost lease in `enforce` a failure is released instead
+       * of stored: the handler may have failed because its signal aborted, and a retry must run
+       * it again. A success is still stored (token-fenced), so a retry does not repeat it.
+       */
+      readonly failure?: boolean | undefined;
     }
   | { readonly action: 'release' }
   /** Neither store nor release: the reservation stays in flight until its lease ends. */
@@ -346,12 +354,13 @@ export async function runIdempotent<O>(
     output = await pending;
   } catch (error) {
     lease?.stop();
-    // The reservation is gone, so the outcome cannot be recorded: release what may be left of it
-    // and answer with a retryable code. A caller abort still rejects.
-    if (mode === 'enforce' && lease?.lost === true && call.signal?.aborted !== true) {
-      if (error !== lease.signal?.reason) {
-        reporter.log('warning', IdempotencyEventNames.ReservationLost, error);
-      }
+    // Only an error the lease signal can explain (its reason, or abort-like once it aborted) is
+    // about the lost lease; any other error is the handler's and is rethrown as is.
+    if (lease?.lost === true && isCallerAbort(error, lease.signal)) {
+      // A caller abort still rejects with the caller's reason, even when the lease went first.
+      if (call.signal?.aborted === true) throw call.signal.reason;
+      // The reservation is gone, so the outcome cannot be recorded: release what may be left of
+      // it and answer with a retryable code. The heartbeat already logged ReservationLost.
       await releaseQuietly();
       return call.reject(IdempotencyErrorCodes.ReservationLost);
     }
@@ -360,7 +369,15 @@ export async function runIdempotent<O>(
   lease?.stop();
   try {
     const completion = await call.complete(output);
-    if (completion.action === 'store') {
+    // Only `enforce` aborts the handler's signal, so only there can the loss cause a failure.
+    const lostFailure =
+      mode === 'enforce' &&
+      lease?.lost === true &&
+      completion.action === 'store' &&
+      completion.failure === true;
+    if (lostFailure) {
+      await releaseQuietly();
+    } else if (completion.action === 'store') {
       const stored = await store.complete(
         recordKey,
         token,

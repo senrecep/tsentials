@@ -157,7 +157,7 @@ The wrapper guards `POST` and `PATCH` (`methods` changes this) and reads the `Id
 | Same key, other method, path, query or body | 422 `Idempotency.KeyReused` |
 | Same key, same request, completed with a 2xx that could not be stored | 409 `Idempotency.ResultUnavailable` without `Retry-After`; the handler does not run |
 | Same key, same request, completed | The stored status, whitelisted headers and body, plus `Idempotency-Replayed: true` |
-| The reservation was lost while the handler ran and the handler threw (`enforce`) | 503 `Idempotency.ReservationLost` with `Retry-After`; the key is released, so a retry runs the handler again |
+| The reservation was lost while the handler ran and the handler threw the abort of its `bindRequest` signal (`enforce`) | 503 `Idempotency.ReservationLost` with `Retry-After`; the key is released, so a retry runs the handler again |
 
 Errors are `application/problem+json` bodies `{ title, status, detail, code }`. The `code` is the contract, so clients classify on it.
 
@@ -171,7 +171,7 @@ What is stored:
 | Body larger than `maxResponseBodyBytes` (1 MiB) | Like above: a marker for a 2xx (logs `Idempotency.ResponseNotReplayable` with `Reason` `too_large`), released for a 4xx, in flight otherwise; a non-2xx logs `Idempotency.ResponseTooLarge` |
 | 5xx | Yes, for `serverErrorRetentionMs` |
 | Anything else | Yes, for `retentionMs` |
-| The handler throws | No, the key stays in flight until the lease ends. After a lost reservation in `enforce` the key is released instead and the client gets 503 `Idempotency.ReservationLost` |
+| The handler throws | No, the key stays in flight until the lease ends. When it throws the abort of a lost reservation in `enforce`, the key is released instead and the client gets 503 `Idempotency.ReservationLost` |
 
 `idempotencyStorePolicies.successOnly` stores only 2xx and releases every other response, so a retry after a 3xx or 5xx runs the handler again even if its work already happened. Replayed headers are `content-type`, `content-language`, `location`, `etag`, `cache-control` and `retry-after` by default (`replayedHeaders`); `set-cookie` is never replayed.
 
@@ -268,7 +268,8 @@ The heartbeat starts after a reservation and stops when the handler settles. A c
 
 A lost lease logs `Idempotency.ReservationLost` (with the last error `extend` threw, if any), once per call:
 
-- In `enforce`, the handler's signal aborts with an `IdempotencyReservationLostError` (`name` `'ReservationLost'`, `cause` the last error `extend` threw). Hand the signal on to the database and HTTP calls of the handler so they stop: `ctx.signal` for the mediator, `bindSignal` for `idempotent`, `bindRequest` for `withIdempotency`. When the handler then throws or rejects (with the abort or any other error), the engine releases what is left of the reservation and answers `Idempotency.ReservationLost` (Unexpected): a failure for `idempotent` and the mediator, 503 with `Retry-After` for `withIdempotency`. Nothing is stored, so a retry runs the operation again. A caller abort still rejects with the caller's reason. With the mediator, `exceptionHandlingBehavior` rethrows the abort of `ctx.signal`, so the engine sees it wherever the behavior sits.
+- In `enforce`, the handler's signal aborts with an `IdempotencyReservationLostError` (`name` `'ReservationLost'`, `cause` the last error `extend` threw). Hand the signal on to the database and HTTP calls of the handler so they stop: `ctx.signal` for the mediator, `bindSignal` for `idempotent`, `bindRequest` for `withIdempotency`. When the handler then throws or rejects with that abort (the signal's reason, or an abort-like error such as `AbortError` or `TimeoutError`), the engine releases what is left of the reservation and answers `Idempotency.ReservationLost` (Unexpected): a failure for `idempotent` and the mediator, 503 with `Retry-After` for `withIdempotency`. Nothing is stored, so a retry runs the operation again. Any other error is the handler's own and is rethrown as before, so a handler that never got the signal (no `bindSignal` or `bindRequest`) keeps its old behaviour. A caller abort still rejects with the caller's reason, also when the lease was lost first.
+- A handler that returns after the loss: in `enforce` a failure (a failure `Result`, or a 5xx response that would be stored) is released instead of stored, because it may be the result of the abort; a success is still stored, token-fenced, so it is kept only if the reservation was not taken over, and a retry does not repeat the operation. `ReservationLost` is logged once per call, by the heartbeat, whatever the handler does next; reaching the 15 minute limit logs `Idempotency.LeaseLimitReached` instead. With the mediator, `exceptionHandlingBehavior` rethrows the abort of `ctx.signal`, so the engine sees it wherever the behavior sits.
 - In `observe`, the lost lease is only logged; the handler keeps running and its error is rethrown as before.
 
 A handler that ignores the signal and returns is completed as before: if the record was taken over, `complete` fails and nothing is stored; if the lease only expired and nobody took it over, `complete` can still store the handler's outcome. A store without `extend` behaves as before: no timer, no new signal, the original request and arguments.
@@ -513,7 +514,7 @@ const idem = createIdempotency({
 | `Idempotency.KeyInvalid` | Validation | 400 | After fixing the key |
 | `Idempotency.ScopeRequired` | Validation | 400 | No, a server-side bug |
 | `Idempotency.ResultUnavailable` | Conflict | 409, no `Retry-After` | Never. The key completed but its result could not be stored (a 2xx that is too large, encoded or an event stream), so it cannot be replayed. Use a new key only if repeating the side effect is intended |
-| `Idempotency.ReservationLost` | Unexpected | 503 + `Retry-After` | Yes. The lease was lost while the handler ran and the handler failed; the key was released, so the retry runs the operation again |
+| `Idempotency.ReservationLost` | Unexpected | 503 + `Retry-After` | Yes. The lease was lost while the handler ran and the handler threw that abort; the key was released, so the retry runs the operation again |
 
 `onDecision` reports one of the decisions `reserved`, `replay`, `result_unavailable` (a key whose result could not be stored), `key_reused`, `in_flight`, `unscoped`, `released` and `stored`.
 
@@ -525,7 +526,7 @@ const idem = createIdempotency({
 | `Idempotency.UnscopedKeySkipped` | warning | A key without a scope ran without idempotency (`unscopedKeyBehavior: 'skip'`) |
 | `Idempotency.StoreFailed` | warning | `reserve` threw in `observe` |
 | `Idempotency.CompleteFailed` | warning | `complete` or `release` threw; the handler's output was returned |
-| `Idempotency.ReservationLost` | warning | `extend` returned `false`, no `extend` succeeded before the lease deadline, the handler failed after the loss with an error other than the abort, or `complete` found the record taken over |
+| `Idempotency.ReservationLost` | warning | `extend` returned `false`, no `extend` succeeded before the lease deadline, or `complete` found the record taken over; logged once per call |
 | `Idempotency.LeaseLimitReached` | warning | The heartbeat stopped 15 minutes after the reservation |
 | `Idempotency.ResponseTooLarge` | warning | A non-2xx HTTP response over `maxResponseBodyBytes` was not stored |
 | `Idempotency.ResponseNotReplayable` | warning | A marker was stored for a 2xx HTTP response that could not be stored; logged once the marker is stored, with the property `Reason`: `too_large`, `encoded` or `event_stream` |
