@@ -111,7 +111,7 @@ Scope builders return `undefined` for a missing id. A scope is an `IdempotencySc
 
 - `InMemoryIdempotencyStore`: tests and one process.
 - `RedisIdempotencyStore(redis, { prefix })`: `RedisLike` needs only `eval(script, keys, args)`. ioredis: `client.eval(s, keys.length, ...keys, ...args)`; node-redis: `client.eval(s, { keys, arguments: args })`.
-- Own store: compare keys byte for byte (binary no-pad collation: a PAD SPACE one merges `a` and `a `; or key the row by the SHA-256 of `idempotencyStorageKey`, the only option on SQL Server, which pads under every collation); implement `IdempotencyStore` (`reserve`, `complete`, `release` with token compare-and-set) and run `describeIdempotencyStoreContract(name, (clock) => store, { describe, it })`.
+- Own store: compare keys byte for byte (binary no-pad collation: a PAD SPACE one merges `a` and `a `; or key the row by the SHA-256 of `idempotencyStorageKey`, the only option on SQL Server, which pads under every collation); implement `IdempotencyStore` (`reserve`, `complete`, `release` with token compare-and-set, optional `extend` that never revives an expired lease) and run `describeIdempotencyStoreContract(name, (clock) => store, { describe, it })`.
 - SQL in the same transaction as the business change: see `docs/IDEMPOTENCY.md` and `examples/idempotency-sql`.
 
 ## Client side
@@ -129,6 +129,7 @@ await ResiliencePolicy.create()
 
 - Import from `tsentials/idempotency`, never from the root `tsentials` entry.
 - **Lease rule:** `leaseMs` ≥ the client's total retry and timeout budget, and longer than the slowest run. Otherwise a retry takes the key over and the operation runs twice (`Idempotency.ReservationLost`).
+- **Lease extension:** with a store that has the optional `extend` (InMemory, Redis, the SQL example), the lease is extended every `leaseMs / 3` while the handler runs. If `extend` returns `false` or throws, `Idempotency.ReservationLost` is logged and, in `enforce`, the handler's signal aborts with reason name `ReservationLost` (`IdempotencyReservationLostError`): mediator `ctx.signal`, `idempotent({ bindSignal: (signal, cmd) => [{ ...cmd, signal }] })`, and `withIdempotency` passes a rebuilt `Request` whose `signal` aborts (its body moved from the original). `observe` only logs.
 - Take the scope from the authenticated principal, never from the request body. Mediator `idempotencyKey`/`idempotencyScope` fields are trusted input.
 - One key per logical operation: create it when the user starts the operation, reuse it on every retry, never reuse it for another payload (422 `KeyReused` is final).
 - **Cloudflare KV (and any store without atomic insert) is not safe** as an idempotency store or lock.

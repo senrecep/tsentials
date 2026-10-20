@@ -12,7 +12,20 @@ import type {
   UnscopedKeyBehavior,
 } from './options.js';
 import { type IdempotencyScope, idempotencyScopes, scopeStorageValue } from './scopes.js';
-import type { IdempotencyRecordKey, IdempotencyReservation } from './store.js';
+import type { IdempotencyRecordKey, IdempotencyReservation, IdempotencyStore } from './store.js';
+
+/**
+ * Abort reason of the lease signal in `enforce` mode: the store's `extend` returned `false` or
+ * threw, so the reservation may belong to another call by now. `name` is `'ReservationLost'`
+ * (not `AbortError`), so code that only rethrows the caller's abort sees it as an ordinary
+ * error. `cause` holds the error `extend` threw, if any.
+ */
+export class IdempotencyReservationLostError extends Error {
+  override readonly name = 'ReservationLost';
+  constructor(options?: ErrorOptions) {
+    super('The idempotency reservation was lost: its lease could not be extended.', options);
+  }
+}
 
 /** What to do with the record once the handler has returned. */
 export type IdempotencyCompletion =
@@ -55,8 +68,13 @@ export interface IdempotencyCall<O> {
     | undefined
     | Promise<IdempotencyScope | null | undefined>;
   readonly fingerprint: () => string | Promise<string>;
-  /** Runs the handler. Calling it marks the handler as started. */
-  readonly run: () => Promise<O>;
+  /**
+   * Runs the handler. Calling it marks the handler as started. `signal` is defined only in
+   * `enforce` mode, after a reservation, when the store has `extend`: it aborts with the
+   * caller's reason or with an {@link IdempotencyReservationLostError}. Otherwise it is
+   * `undefined` and the handler runs exactly as without a heartbeat.
+   */
+  readonly run: (signal?: AbortSignal) => Promise<O>;
   /** Decides what happens to the record after the handler returned `output`. */
   readonly complete: (output: O) => IdempotencyCompletion | Promise<IdempotencyCompletion>;
   /** Rebuilds a stored output (`enforce` only). */
@@ -251,7 +269,21 @@ export async function runIdempotent<O>(
   }
 
   reporter.decision('reserved');
-  const output = await call.run();
+  const lease = startHeartbeat(
+    store,
+    recordKey,
+    reservation.token,
+    leaseMs,
+    mode,
+    call.signal,
+    reporter,
+  );
+  let output: O;
+  try {
+    output = await (lease?.signal === undefined ? call.run() : call.run(lease.signal));
+  } finally {
+    lease?.stop();
+  }
   try {
     const completion = await call.complete(output);
     if (completion.action === 'store') {
@@ -263,7 +295,9 @@ export async function runIdempotent<O>(
         completion.retentionMs,
       );
       if (stored) reporter.decision('stored');
-      else reporter.log('warning', IdempotencyEventNames.ReservationLost, undefined);
+      else if (lease?.lost !== true) {
+        reporter.log('warning', IdempotencyEventNames.ReservationLost, undefined);
+      }
     } else if (completion.action === 'release') {
       if (await store.release(recordKey, reservation.token)) reporter.decision('released');
     }
@@ -272,6 +306,89 @@ export async function runIdempotent<O>(
     reporter.log('warning', IdempotencyEventNames.CompleteFailed, error);
   }
   return output;
+}
+
+interface Heartbeat {
+  /** The signal for the handler; `undefined` in `observe`, where a lost lease only logs. */
+  readonly signal: AbortSignal | undefined;
+  /** Whether a lost lease was already logged. */
+  readonly lost: boolean;
+  /** Stops extending; later extend results are ignored. */
+  stop(): void;
+}
+
+/**
+ * Extends the lease every `leaseMs / 3` while the handler runs, when the store has `extend`.
+ * Each beat is scheduled after the previous one settled, so a slow store never overlaps two
+ * extends. The first `false` or error logs `ReservationLost`, stops the beats and, in
+ * `enforce` only, aborts the handler's signal. A caller abort also stops the beats.
+ */
+function startHeartbeat(
+  store: IdempotencyStore,
+  recordKey: IdempotencyRecordKey,
+  token: string,
+  leaseMs: number,
+  mode: Exclude<IdempotencyMode, 'off'>,
+  caller: AbortSignal | undefined,
+  reporter: Reporter,
+): Heartbeat | undefined {
+  const extend = store.extend;
+  if (extend === undefined) return undefined;
+  const controller = new AbortController();
+  const intervalMs = Math.max(1, Math.floor(leaseMs / 3));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let settled = false;
+
+  const stop = () => {
+    settled = true;
+    clearTimeout(timer);
+    caller?.removeEventListener('abort', stop);
+  };
+  const lose = (exception: unknown) => {
+    stop();
+    heartbeat.lost = true;
+    reporter.log('warning', IdempotencyEventNames.ReservationLost, exception);
+    if (mode === 'enforce') {
+      controller.abort(
+        new IdempotencyReservationLostError(
+          exception === undefined ? undefined : { cause: exception },
+        ),
+      );
+    }
+  };
+  const beat = async () => {
+    let extended: boolean;
+    try {
+      extended = await extend.call(store, recordKey, token, leaseMs);
+    } catch (error) {
+      if (!settled) lose(error);
+      return;
+    }
+    if (settled) return;
+    if (extended) schedule();
+    else lose(undefined);
+  };
+  const schedule = () => {
+    timer = setTimeout(beat, intervalMs);
+    (timer as { unref?: () => void }).unref?.();
+  };
+
+  const heartbeat = {
+    signal:
+      mode === 'observe'
+        ? undefined
+        : caller === undefined
+          ? controller.signal
+          : AbortSignal.any([caller, controller.signal]),
+    lost: false,
+    stop,
+  };
+  if (caller?.aborted === true) stop();
+  else {
+    caller?.addEventListener('abort', stop, { once: true });
+    schedule();
+  }
+  return heartbeat;
 }
 
 /**

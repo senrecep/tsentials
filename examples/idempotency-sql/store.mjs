@@ -107,4 +107,19 @@ export class PostgresIdempotencyStore {
     );
     return result.rowCount === 1;
   }
+
+  async extend(key, token, leaseMs, signal) {
+    signal?.throwIfAborted();
+    assertNonEmpty('token', token);
+    assertPositive('leaseMs', leaseMs);
+    const now = this.#clock.utcNowMs();
+    const result = await this.#client.query(
+      `UPDATE idempotency_records SET expires_at = $5
+       WHERE namespace = $1 AND scope = $2 AND key = $3 AND token = $4
+         AND payload IS NULL AND expires_at > $6
+       RETURNING 1`,
+      [key.namespace, key.scope, key.key, token, now + Math.ceil(leaseMs), now],
+    );
+    return result.rows.length === 1;
+  }
 }

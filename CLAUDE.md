@@ -685,7 +685,7 @@ export const POST = idem.withIdempotency(createOrder, { scope: (req) => idempote
 // mediator: idem.idempotencyBehavior() reads idempotencyKey / idempotencyScope from the request
 ```
 
-Codes: `Idempotency.InFlight` (Conflict, 409 + Retry-After), `Idempotency.KeyReused` (Validation, 422), `KeyMissing` / `KeyInvalid` / `ScopeRequired` (Validation, 400), `Idempotency.ResultUnavailable` (Conflict, 409, no Retry-After). `RedisLike` needs only `eval`; the Lua scripts are `RedisIdempotencyScripts`. Custom stores must pass `describeIdempotencyStoreContract`. `leaseMs` must cover the client's whole retry and timeout budget. `examples/idempotency-*` are excluded from vitest and run against real servers.
+Codes: `Idempotency.InFlight` (Conflict, 409 + Retry-After), `Idempotency.KeyReused` (Validation, 422), `KeyMissing` / `KeyInvalid` / `ScopeRequired` (Validation, 400), `Idempotency.ResultUnavailable` (Conflict, 409, no Retry-After). `RedisLike` needs only `eval`; the Lua scripts are `RedisIdempotencyScripts`. Custom stores must pass `describeIdempotencyStoreContract`. `leaseMs` must cover the client's whole retry and timeout budget. Stores with the optional `extend(key, token, leaseMs)` (InMemory, Redis) get a heartbeat every `leaseMs / 3` while the handler runs; a lost lease logs `Idempotency.ReservationLost` and in `enforce` aborts the handler's signal with `IdempotencyReservationLostError` (name `ReservationLost`): mediator `ctx.signal`, `idempotent({ bindSignal })`, `withIdempotency`'s rebuilt `request.signal`. `examples/idempotency-*` are excluded from vitest and run against real servers.
 
 ## TypeScript configuration
 - `strict: true`, `exactOptionalPropertyTypes: true`, `noUncheckedIndexedAccess: true`
@@ -693,7 +693,7 @@ Codes: `Idempotency.InFlight` (Conflict, 409 + Retry-After), `Idempotency.KeyReu
 - `"sideEffects": false` in package.json for full tree-shaking
 
 ## Testing
-Vitest. `npm test` runs all 2969 tests across 80 test files.
+Vitest. `npm test` runs all 3018 tests across 82 test files.
 Test files mirror src/ structure under `tests/`.
 
 ## Publishing

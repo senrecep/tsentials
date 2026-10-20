@@ -90,6 +90,7 @@ await capture(cmd); // the same Result, capturePayment does not run again
 - A key without a scope → Validation `Idempotency.ScopeRequired`. `unscopedKeyBehavior: 'skip'` runs without idempotency instead, and `'global'` uses one shared scope.
 - Successes are kept for `retentionMs`. Failures whose first error is `Unexpected` are kept for `serverErrorRetentionMs`, other failures for `retentionMs`. `storeFailures: false` releases every failure so a retry runs again.
 - A function that throws or is aborted keeps the key in flight until the lease ends, and the error propagates. A store that throws rejects the call in `enforce` mode and is logged in `observe` mode.
+- `bindSignal: (signal, cmd) => [{ ...cmd, signal }]` hands the function the lease signal, which aborts when the reservation is lost (see [Lease extension](#lease-extension)). Without it the function gets its original arguments.
 
 ## Mediator: `idempotencyBehavior`
 
@@ -113,6 +114,7 @@ await mediator.send('CapturePayment', { orderId, idempotencyKey, idempotencyScop
 - By default it reads `idempotencyKey`, `idempotencyScope`, `idempotencyRetentionMs` and `idempotencyLeaseMs` from the request. These fields are trusted input: set them in server code (the scope from the authenticated principal), never copy them from a client payload. A `settings(request, context)` function can read them from somewhere else.
 - The namespace is the request name. A missing scope gives `Idempotency.ScopeRequired`, because the key comes from code and a missing scope is a bug.
 - A failure of a request with `transactional: true` is released, since its work rolled back; other failures are stored.
+- With a store that has `extend`, the handler's `ctx.signal` in `enforce` is a new signal that aborts with the caller's reason or when the reservation is lost (see [Lease extension](#lease-extension)).
 
 ## HTTP handlers: `withIdempotency`
 
@@ -163,6 +165,7 @@ Notes:
 - The request body is buffered to compute the fingerprint, because Web Crypto has no streaming digest. Enforce a request body size limit before this wrapper.
 - Put rate limiting, timeouts and load shedding outside the wrapper, so their responses are not stored.
 - Do not wrap streaming routes.
+- With a store that has `extend` (the built-in stores do), the handler in `enforce` receives a new `Request` with the same method, URL, headers and body, whose `signal` aborts with the caller's reason or when the reservation is lost (see [Lease extension](#lease-extension)). It keeps a `Request` subclass whose constructor accepts `(request, init)`, otherwise it is a plain `Request`. The body moves to the new request, so read the request the handler receives, not the original object; properties set on the original object are not copied. Without `extend`, or in `observe`, the handler gets the original request.
 
 ## Keys and scopes
 
@@ -233,16 +236,27 @@ await policy.execute((signal) => builder.signal(signal).send<Order>());
 The lease is how long a reservation blocks other calls. When it ends while the first call is still running, the next retry takes the key over and the operation runs twice; the first call's `complete` then fails (event `Idempotency.ReservationLost`). So:
 
 - Budget = attempts × per-attempt timeout + the retry delays. A client with 3 retries, a 10 s timeout and up to 5 s of backoff needs a lease of at least `4 × 10 s + 3 × 5 s = 55 s`.
-- A handler that can run for 2 minutes needs a lease above 2 minutes, whatever the client does.
+- A handler that can run for 2 minutes needs a lease above 2 minutes, whatever the client does, unless the store has `extend`, which keeps the reservation alive while the handler runs (see [Lease extension](#lease-extension)).
 - The lease is capped at 15 minutes. A longer operation should accept the request, return 202 and finish in the background under its own idempotency key.
 
 A crash or a 503/504 keeps the key in flight until the lease ends. A long lease therefore also blocks a client that retries after a crash; pick the shortest lease that satisfies the rule.
+
+### Lease extension
+
+When the store has `extend` (the in-memory and Redis stores do, and so does the SQL example), the engine extends the lease while the handler runs: every `leaseMs / 3` (at least 1 ms) it calls `extend(key, token, leaseMs)`, and the next beat starts only after the previous one settled. So a slow handler keeps its key in flight past `leaseMs`, while a crashed process stops beating and its key frees up one lease after the last beat. The client-side rule above still holds: the lease must cover the client's retry and timeout budget, since the lease is also how long a retry after a crash waits.
+
+The heartbeat starts after a reservation and stops when the handler settles or the caller aborts. Its timer is `unref`ed, so it never keeps a process alive. When `extend` returns `false` (the token no longer holds the record) or throws, the engine logs `Idempotency.ReservationLost` (with the error, if any) and stops beating:
+
+- In `enforce`, the handler's signal aborts with an `IdempotencyReservationLostError` (`name` `'ReservationLost'`, `cause` the error `extend` threw). Hand the signal on to the database and HTTP calls of the handler so they stop: `ctx.signal` for the mediator, `bindSignal` for `idempotent`, `request.signal` for `withIdempotency`. A handler that ignores the signal runs to the end as before.
+- In `observe`, the lost lease is only logged; the handler keeps running.
+
+The outcome is completed as before: if the record was taken over, `complete` fails and nothing is stored; if the lease only expired and nobody took it over, `complete` can still store the handler's outcome, including a failure caused by the abort. `Idempotency.ReservationLost` is logged once per call. A store without `extend` behaves as before: no timer, no new signal, the original request and arguments.
 
 `retentionMs` is how long a client may retry and still get the stored outcome; it must cover the longest time a client keeps a pending operation (24 h by default). `serverErrorRetentionMs` keeps a 5xx outcome only briefly, so a client is not locked out of its key for a day after an outage.
 
 ## Stores
 
-A store implements `IdempotencyStore`: an atomic `reserve`, plus `complete` and `release` that act only when the stored token still matches (compare-and-set).
+A store implements `IdempotencyStore`: an atomic `reserve`, plus `complete` and `release` that act only when the stored token still matches (compare-and-set). The optional `extend(key, token, leaseMs, signal?)` moves the lease end to now + `leaseMs` and returns `true` only while the record is live, in flight and holds the token; it never revives an expired lease and never touches a completed record. A store without it still works, without [lease extension](#lease-extension).
 
 | Store | Use for |
 |-------|---------|
@@ -263,7 +277,7 @@ const redis: RedisLike = { eval: (s, keys, args) => client.eval(s, { keys, argum
 const store = new RedisIdempotencyStore(redis, { prefix: 'idem:v3:' });
 ```
 
-A record is a hash with the fields `t` (token), `f` (fingerprint) and `p` (payload, set once completed). Its TTL is the lease or the retention, so Redis cleans up by itself. The scripts are exported as `RedisIdempotencyScripts`. [`examples/idempotency-redis`](../examples/idempotency-redis) runs the contract suite against a real Redis.
+A record is a hash with the fields `t` (token), `f` (fingerprint) and `p` (payload, set once completed). Its TTL is the lease or the retention, so Redis cleans up by itself; `extend` resets the TTL with `PEXPIRE` while the hash holds the token and no payload, and an expired key is already gone, so it is never revived. The scripts are exported as `RedisIdempotencyScripts`. [`examples/idempotency-redis`](../examples/idempotency-redis) runs the contract suite against a real Redis.
 
 **Key-value stores without compare-and-set are not suitable.** Cloudflare KV, for example, is eventually consistent and has no atomic insert: two requests can both "reserve" the same key, so the operation runs twice. Do not use such a store for idempotency or as a lock; use Redis, a SQL database or Durable Objects instead.
 
@@ -332,6 +346,12 @@ RETURNING 1;
 -- release: delete our in-flight reservation, never a completed record.
 DELETE FROM idempotency_records
 WHERE namespace = $1 AND scope = $2 AND key = $3 AND token = $4 AND payload IS NULL;
+
+-- extend: move the lease end of our live, in-flight reservation ($5 = now + leaseMs, $6 = now).
+UPDATE idempotency_records SET expires_at = $5
+WHERE namespace = $1 AND scope = $2 AND key = $3 AND token = $4
+  AND payload IS NULL AND expires_at > $6
+RETURNING 1;
 ```
 
 Use it inside the transaction of the business work:
@@ -472,4 +492,4 @@ const idem = createIdempotency({
 | `Idempotency.ScopeRequired` | Validation | 400 | No, a server-side bug |
 | `Idempotency.ResultUnavailable` | Conflict | 409, no `Retry-After` | Never. The key completed but its result could not be stored (a 2xx that is too large, encoded or an event stream), so it cannot be replayed. Use a new key only if repeating the side effect is intended |
 
-`IdempotencyEventNames` also has `Idempotency.Decision` (decisions without a fixed name, such as `reserved` and `stored`), `Idempotency.UnscopedKeySkipped`, `Idempotency.Observe.ResolutionFailed`, `Idempotency.StoreFailed`, `Idempotency.CompleteFailed`, `Idempotency.ReservationLost`, `Idempotency.ResponseTooLarge`, `Idempotency.ResponseNotReplayable` (a 2xx could not be stored, so a marker was stored instead) and `Idempotency.StoredResponseUnreadable`.
+`IdempotencyEventNames` also has `Idempotency.Decision` (decisions without a fixed name, such as `reserved` and `stored`), `Idempotency.UnscopedKeySkipped`, `Idempotency.Observe.ResolutionFailed`, `Idempotency.StoreFailed`, `Idempotency.CompleteFailed`, `Idempotency.ReservationLost` (the lease could not be extended, or `complete` found the record taken over), `Idempotency.ResponseTooLarge`, `Idempotency.ResponseNotReplayable` (a 2xx could not be stored, so a marker was stored instead) and `Idempotency.StoredResponseUnreadable`.

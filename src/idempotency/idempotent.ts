@@ -29,8 +29,19 @@ export interface IdempotentOptions<A extends readonly unknown[]> extends Idempot
   ) => IdempotencyScope | null | undefined | Promise<IdempotencyScope | null | undefined>;
   /** Value whose hash detects a reused key. Default: the arguments. */
   readonly fingerprint?: ((...args: A) => unknown) | undefined;
-  /** Abort signal passed to the store's `reserve`. */
+  /** The caller's abort signal, passed to the store's `reserve`. */
   readonly signal?: ((...args: A) => AbortSignal | undefined) | undefined;
+  /**
+   * Hands the lease signal to `fn`: returns the arguments to call `fn` with. Called only in
+   * `enforce` mode, after a reservation, with a store that has `extend`; the signal aborts with
+   * the caller's reason (from `signal`) or when the reservation is lost (reason name
+   * `ReservationLost`). Without it `fn` gets the original arguments.
+   *
+   * ```ts
+   * bindSignal: (signal, cmd) => [{ ...cmd, signal }]
+   * ```
+   */
+  readonly bindSignal?: ((signal: AbortSignal, ...args: A) => A) | undefined;
   /** Profile of the `createIdempotency` defaults to apply. */
   readonly profile?: string | undefined;
   /** What a key without a scope does. Default: `reject` (`Idempotency.ScopeRequired`). */
@@ -75,7 +86,10 @@ export function makeIdempotent<A extends readonly unknown[], T>(
         },
         scope: () => options.scope(...args),
         fingerprint: () => fingerprintOf(options.fingerprint ? options.fingerprint(...args) : args),
-        run,
+        run: async (signal) =>
+          signal === undefined || options.bindSignal === undefined
+            ? fn(...args)
+            : fn(...options.bindSignal(signal, ...args)),
         complete: (result) => resultCompletion(result, policy, settings),
         replay: (payload) => replayResult<T>(payload, policy.serializer),
         reject: (code) => Result.failure<T>(idempotencyErrors.forCode(code, settings.retryAfterMs)),
@@ -105,6 +119,9 @@ export function makeIdempotent<A extends readonly unknown[], T>(
  * - Key without scope → Validation `Idempotency.ScopeRequired` (see `unscopedKeyBehavior`).
  * - A function that throws (or is aborted) keeps the key in flight until the lease ends; the
  *   error propagates.
+ * - With a store that has `extend` (the built-in stores do), the lease is extended while the
+ *   function runs; `bindSignal` passes it a signal that also aborts when the reservation is
+ *   lost.
  * - Success results are kept for `retentionMs`; failures whose first error is `Unexpected` for
  *   `serverErrorRetentionMs`, other failures for `retentionMs` (or released with
  *   `storeFailures: false`).

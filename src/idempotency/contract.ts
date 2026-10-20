@@ -70,6 +70,8 @@ function tokenOf(reservation: IdempotencyReservation, step: string): string {
  * Registers the scenarios every {@link IdempotencyStore} must pass: reserve, complete and
  * release with token fencing, lease and retention expiry, fingerprint mismatch, isolation by
  * namespace, scope and key, a single winner among parallel reserves, and argument checks.
+ * The `extend` scenarios (lease extension with token fencing, no revival of an expired lease,
+ * completed records untouched) pass without checking anything when the store has no `extend`.
  * Runner-agnostic: pass your runner's `describe` and `it`.
  *
  * ```ts
@@ -106,6 +108,18 @@ export function describeIdempotencyStoreContract(
         key: suffix,
       });
       await body({ store, advance, key });
+    });
+
+  // Passes without checks for a store without `extend`, which is optional.
+  const extendScenario = (title: string, body: (ctx: ExtendScenario) => Promise<void>) =>
+    scenario(title, async (ctx) => {
+      const { store } = ctx;
+      if (store.extend === undefined) return;
+      const extend = store.extend;
+      await body({
+        ...ctx,
+        extend: (key, token, leaseMs, signal) => extend.call(store, key, token, leaseMs, signal),
+      });
     });
 
   api.describe(`${name} (idempotency store contract)`, () => {
@@ -278,6 +292,68 @@ export function describeIdempotencyStoreContract(
       await checkRejects(() => store.complete(key(), token, '', 'p', retention), 'empty fp');
       await checkRejects(() => store.release(key(), ''), 'release with empty token');
     });
+
+    extendScenario('extend keeps a reservation in flight past its lease', async (ctx) => {
+      const { store, key, advance, extend } = ctx;
+      const token = tokenOf(await store.reserve(key(), 'fp', lease), 'reserve');
+      check(await extend(key(), token, lease * 4), 'extend with the right token returned false');
+      await advance(lease + 1);
+      checkStatus(await store.reserve(key(), 'fp', lease), 'inFlight', 'after extend');
+      check(await store.complete(key(), token, 'fp', 'p', retention), 'complete after extend');
+    });
+
+    extendScenario('refuses extend with another token', async (ctx) => {
+      const { store, key, advance, extend } = ctx;
+      await store.reserve(key(), 'fp', lease);
+      check(!(await extend(key(), 'not-the-token', lease * 4)), 'extend with another token');
+      await advance(lease + 1);
+      tokenOf(await store.reserve(key(), 'fp', lease), 'reserve after refused extend');
+    });
+
+    extendScenario('fences the old token after a take over', async (ctx) => {
+      const { store, key, advance, extend } = ctx;
+      const first = tokenOf(await store.reserve(key(), 'fp', lease), 'first reserve');
+      await advance(lease + 1);
+      const second = tokenOf(await store.reserve(key(), 'other', lease), 'take over');
+      check(!(await extend(key(), first, lease)), 'stale extend returned true');
+      check(await extend(key(), second, lease), 'extend of the new reservation returned false');
+    });
+
+    extendScenario('extend of an unknown key returns false', async ({ key, extend }) => {
+      check(!(await extend(key('missing'), 'token', lease)), 'extend of an unknown key');
+    });
+
+    extendScenario('never extends a completed record', async (ctx) => {
+      const { store, key, advance, extend } = ctx;
+      const token = tokenOf(await store.reserve(key(), 'fp', lease), 'reserve');
+      check(await store.complete(key(), token, 'fp', 'payload-1', retention), 'complete');
+      check(!(await extend(key(), token, lease)), 'extend after complete returned true');
+      await advance(lease + 1);
+      const replay = await store.reserve(key(), 'fp', lease);
+      check(
+        replay.status === 'completed' && replay.payload === 'payload-1',
+        'extend after complete changed the completed record',
+      );
+    });
+
+    extendScenario('never revives an expired lease', async (ctx) => {
+      const { store, key, advance, extend } = ctx;
+      const token = tokenOf(await store.reserve(key(), 'fp', lease), 'reserve');
+      await advance(lease + 1);
+      check(!(await extend(key(), token, lease * 4)), 'extend of an expired lease returned true');
+      const again = tokenOf(await store.reserve(key(), 'fp', lease), 'reserve after expiry');
+      check(again !== token, 'reserve after expiry reused the old token');
+    });
+
+    extendScenario('rejects invalid extend arguments and an aborted extend', async (ctx) => {
+      const { store, key, extend } = ctx;
+      const token = tokenOf(await store.reserve(key(), 'fp', lease), 'reserve');
+      await checkRejects(() => extend(key(), '', lease), 'extend with empty token');
+      await checkRejects(() => extend(key(), token, 0), 'extend with leaseMs 0');
+      const controller = new AbortController();
+      controller.abort();
+      await checkRejects(() => extend(key(), token, lease, controller.signal), 'aborted extend');
+    });
   });
 }
 
@@ -285,4 +361,8 @@ interface Scenario {
   readonly store: IdempotencyStore;
   readonly advance: (ms: number) => Promise<void>;
   readonly key: (suffix?: string) => IdempotencyRecordKey;
+}
+
+interface ExtendScenario extends Scenario {
+  readonly extend: NonNullable<IdempotencyStore['extend']>;
 }

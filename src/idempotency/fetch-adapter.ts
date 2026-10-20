@@ -223,6 +223,19 @@ function replayResponse(payload: string): Response | undefined {
   }
 }
 
+/**
+ * The request with another signal. The fingerprint read a clone, so the body is still unread
+ * and moves to the new request. Keeps a `Request` subclass when its constructor accepts
+ * `(request, init)`, otherwise falls back to a plain `Request`.
+ */
+function withSignal(request: Request, signal: AbortSignal): Request {
+  try {
+    return new (request.constructor as typeof Request)(request, { signal });
+  } catch {
+    return new Request(request, { signal });
+  }
+}
+
 function warn(settings: ResolvedIdempotencySettings, name: string, target: string): void {
   const { logger } = settings;
   try {
@@ -320,7 +333,8 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
       },
       scope: () => options.scope?.(request),
       fingerprint: () => requestFingerprint(request),
-      run: async () => handler(request, ...rest),
+      run: async (signal) =>
+        handler(signal === undefined ? request : withSignal(request, signal), ...rest),
       complete,
       replay: (payload) => {
         if (payload === RESULT_UNAVAILABLE_PAYLOAD) {
@@ -367,6 +381,14 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  *   marker is stored for `retentionMs` (a retry gets 409 `Idempotency.ResultUnavailable`), a 4xx
  *   is released, any other status is kept in flight until the lease ends;
  * - the handler throws → kept in flight until the lease ends.
+ *
+ * With a store that has `extend` (the built-in stores do), the lease is extended while the
+ * handler runs. In `enforce` the handler then receives a new `Request` (same method, URL,
+ * headers and body; the same class when its constructor accepts `(request, init)`) whose
+ * `signal` aborts with the caller's reason or when the reservation is lost (reason name
+ * `ReservationLost`). The original request's body is moved to it, and properties set on the
+ * original object are not copied. Without `extend`, or in `observe`, the handler gets the
+ * original request.
  *
  * The request body is buffered to hash it (Web Crypto has no streaming digest), so enforce a
  * request body size limit before this wrapper. The response body is buffered before the

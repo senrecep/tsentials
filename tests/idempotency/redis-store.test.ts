@@ -13,7 +13,7 @@ interface Hash {
   expiresAt: number;
 }
 
-/** Runs the three scripts in JavaScript over hashes with a TTL; the Lua itself runs in examples/. */
+/** Runs the four scripts in JavaScript over hashes with a TTL; the Lua itself runs in examples/. */
 function fakeRedis(clock: ContractClock) {
   const data = new Map<string, Hash>();
   const calls: { script: string; keys: string[]; args: string[] }[] = [];
@@ -48,6 +48,13 @@ function fakeRedis(clock: ContractClock) {
         write(key, { t: token, f: fingerprint, p: payload }, retention);
         return 1;
       }
+      if (script === RedisIdempotencyScripts.extend) {
+        const [token, lease] = args as [string, string];
+        if (h?.get('t') !== token || h.has('p')) return 0;
+        data.set(key, { fields: h, expiresAt: clock.utcNowMs() + Number(lease) });
+        return 1;
+      }
+      if (script !== RedisIdempotencyScripts.release) throw new Error('unknown script');
       if (h?.get('t') === args[0] && !h.has('p')) {
         data.delete(key);
         return 1;
@@ -78,12 +85,18 @@ describe('RedisIdempotencyStore', () => {
       status: 'reserved',
       token: 'tok',
     });
+    expect(await store.extend(recordKey, 'tok', 2000.2)).toBe(true);
     expect(await store.complete(recordKey, 'tok', 'fp', 'payload', 500.5)).toBe(true);
     expect(calls).toEqual([
       {
         script: RedisIdempotencyScripts.reserve,
         keys: [`${IDEMPOTENCY_STORAGE_PREFIX}6:orders|8:tenant:1|1:k`],
         args: ['fp', '1001', 'tok'],
+      },
+      {
+        script: RedisIdempotencyScripts.extend,
+        keys: [`${IDEMPOTENCY_STORAGE_PREFIX}6:orders|8:tenant:1|1:k`],
+        args: ['tok', '2001'],
       },
       {
         script: RedisIdempotencyScripts.complete,
@@ -109,6 +122,8 @@ describe('RedisIdempotencyStore', () => {
       status: 'inFlight',
     });
     expect(await storeWith(1n).release(recordKey, 't')).toBe(true);
+    expect(await storeWith(1n).extend(recordKey, 't', 1)).toBe(true);
+    expect(await storeWith(0).extend(recordKey, 't', 1)).toBe(false);
     expect(await storeWith(0).complete(recordKey, 't', 'fp', 'p', 1)).toBe(false);
   });
 
@@ -130,6 +145,9 @@ describe('RedisIdempotencyStore', () => {
     await expect(storeWith(reply).release(recordKey, 't')).rejects.toThrow(
       /unexpected release reply/,
     );
+    await expect(storeWith(reply).extend(recordKey, 't', 1)).rejects.toThrow(
+      /unexpected extend reply/,
+    );
   });
 
   it('checks the arguments before calling Redis', async () => {
@@ -142,6 +160,11 @@ describe('RedisIdempotencyStore', () => {
     });
     await expect(store.reserve(recordKey, 'fp', Number.NaN)).rejects.toThrow(RangeError);
     await expect(store.release(recordKey, '')).rejects.toThrow(TypeError);
+    await expect(store.extend(recordKey, '', 1)).rejects.toThrow(TypeError);
+    await expect(store.extend(recordKey, 't', 0)).rejects.toThrow(RangeError);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(store.extend(recordKey, 't', 1, controller.signal)).rejects.toThrow();
     expect(called).toBe(false);
   });
 });

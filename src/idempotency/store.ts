@@ -20,8 +20,8 @@ export type IdempotencyReservation =
   | { readonly status: 'mismatch' };
 
 /**
- * Record store. `reserve` must be one atomic operation; `complete` and `release` act only
- * when the stored token matches (compare-and-set / compare-and-delete).
+ * Record store. `reserve` must be one atomic operation; `complete`, `release` and `extend` act
+ * only when the stored token matches (compare-and-set / compare-and-delete).
  */
 export interface IdempotencyStore {
   /**
@@ -49,6 +49,23 @@ export interface IdempotencyStore {
   ): Promise<boolean>;
   /** Deletes an in-flight reservation that still holds `token`; `false` otherwise. */
   release(key: IdempotencyRecordKey, token: string): Promise<boolean>;
+  /**
+   * Optional lease extension (heartbeat). Sets the reservation's expiry to now + `leaseMs`, but
+   * only while the record is live, still in flight (no payload) and holds `token`; one atomic
+   * compare-and-set. Returns `false` when the token differs, the record is missing or completed,
+   * or its lease already ran out: an expired reservation is never revived, even when nobody took
+   * it over. Never touches a completed record. Rejects for an aborted `signal`, an empty `token`
+   * or a `leaseMs` that is not a positive finite number.
+   *
+   * With it, the engine extends the lease every `leaseMs / 3` while the handler runs; without
+   * it, a handler that outlives its lease can be run again by another call.
+   */
+  extend?(
+    key: IdempotencyRecordKey,
+    token: string,
+    leaseMs: number,
+    signal?: AbortSignal,
+  ): Promise<boolean>;
 }
 
 /** Default prefix of {@link idempotencyStorageKey}; the version changes with the record format. */
@@ -190,6 +207,32 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
         return false;
       }
       this.#entries.delete(storageKey);
+      return true;
+    });
+  }
+
+  extend(
+    key: IdempotencyRecordKey,
+    token: string,
+    leaseMs: number,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    return Promise.resolve().then(() => {
+      throwIfAborted(signal);
+      assertNonEmpty('token', token);
+      assertPositive('leaseMs', leaseMs);
+      const now = this.#clock.utcNowMs();
+      const storageKey = idempotencyStorageKey(key);
+      const existing = this.#entries.get(storageKey);
+      if (
+        existing === undefined ||
+        existing.payload !== undefined ||
+        existing.token !== token ||
+        existing.expiresAt <= now
+      ) {
+        return false;
+      }
+      this.#entries.set(storageKey, { ...existing, expiresAt: now + leaseMs });
       return true;
     });
   }

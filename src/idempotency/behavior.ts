@@ -175,7 +175,8 @@ export function makeIdempotencyBehavior(
           scope: () => (revive && scope != null ? idempotencyScopes.fromJSON(scope) : scope),
           fingerprint: () =>
             fingerprintOf('fingerprint' in requestSettings ? requestSettings.fingerprint : request),
-          run,
+          // A lease signal replaces the context signal for the rest of the pipeline.
+          run: (signal) => (signal === undefined ? next() : next(undefined, signal)),
           complete: (result) => resultCompletion(result, policy, settings),
           replay: (payload) => replayResult<TRes>(payload, serializer),
           reject: (code) =>
@@ -213,6 +214,9 @@ export function makeIdempotencyBehavior(
  * - A failure of a transactional request is released (its work was rolled back), so a retry
  *   runs it again; other failures are stored (`Unexpected` ones for `serverErrorRetentionMs`).
  * - A handler that throws or is aborted keeps the key in flight until the lease ends.
+ * - With a store that has `extend` (the built-in stores do), the lease is extended while the
+ *   handler runs, and in `enforce` the handler's `ctx.signal` is a new signal that also aborts
+ *   (reason name `ReservationLost`) when the reservation is lost.
  * - An invalid key or out-of-range request duration throws (`TypeError` / `RangeError`) in
  *   `enforce`; `observe` logs it (`Idempotency.Observe.ResolutionFailed`) and runs the handler
  *   without idempotency, as it does when `settings` or `releaseFailures` throws.

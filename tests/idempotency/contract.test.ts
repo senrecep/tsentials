@@ -48,7 +48,7 @@ describe('describeIdempotencyStoreContract', () => {
       it: () => undefined,
     });
     expect(names).toEqual(['X (idempotency store contract)']);
-    expect(collect(() => new InMemoryIdempotencyStore()).length).toBe(19);
+    expect(collect(() => new InMemoryIdempotencyStore()).length).toBe(26);
   });
 
   it('fails a store whose keys ignore trailing spaces, like a PAD SPACE collation', async () => {
@@ -87,6 +87,7 @@ describe('describeIdempotencyStoreContract', () => {
     expect(result['rejects an aborted reserve']).toContain('expected the call to reject');
     expect(result['release of an unknown key returns false']).toBeDefined();
     expect(result['reserves a new key with a non-empty token']).toBeUndefined();
+    expect(result['never revives an expired lease']).toBeUndefined();
   });
 
   it('fails a store that returns empty tokens or non-reserved results', async () => {
@@ -117,8 +118,10 @@ describe('describeIdempotencyStoreContract', () => {
         },
         complete: (...args) => inner.complete(...args),
         release: (...args) => inner.release(...args),
+        extend: async () => false,
       };
     });
+    expect(result['never extends a completed record']).toContain('changed the completed record');
     expect(result['replays the payload after complete']).toContain('stored payload');
     expect(result['refuses a second complete']).toContain('changed the stored payload');
     expect(result['gives one winner among parallel reserves']).toContain('expected 1 winner');
@@ -148,6 +151,58 @@ describe('describeIdempotencyStoreContract', () => {
     expect(result['release frees the key for a new reservation']).toContain('reused the old token');
     expect(result['an expired lease can be taken over, fencing the old token']).toContain(
       'reused the old token',
+    );
+  });
+
+  it('fails a store whose extend always returns true', async () => {
+    const result = await failures((clock) => {
+      const inner = new InMemoryIdempotencyStore({ clock });
+      return {
+        reserve: (...args) => inner.reserve(...args),
+        complete: (...args) => inner.complete(...args),
+        release: (...args) => inner.release(...args),
+        extend: async () => true,
+      };
+    });
+    expect(result['extend keeps a reservation in flight past its lease']).toContain(
+      "after extend: expected reservation 'inFlight', got 'reserved'",
+    );
+    expect(result['refuses extend with another token']).toContain('extend with another token');
+    expect(result['fences the old token after a take over']).toContain('stale extend');
+    expect(result['extend of an unknown key returns false']).toContain('unknown key');
+    expect(result['never extends a completed record']).toContain('extend after complete');
+    expect(result['never revives an expired lease']).toContain('expired lease');
+    expect(result['rejects invalid extend arguments and an aborted extend']).toContain(
+      'extend with empty token',
+    );
+  });
+
+  it('fails a store whose extend ignores the token and reports false', async () => {
+    const result = await failures((clock) => {
+      const inner = new InMemoryIdempotencyStore({ clock });
+      let last = 'none';
+      return {
+        reserve: async (...args) => {
+          const r = await inner.reserve(...args);
+          if (r.status === 'reserved') last = r.token;
+          return r;
+        },
+        complete: (...args) => inner.complete(...args),
+        release: (...args) => inner.release(...args),
+        extend: async (key, _token, leaseMs) => {
+          await inner.extend(key, last, leaseMs);
+          return false;
+        },
+      };
+    });
+    expect(result['extend keeps a reservation in flight past its lease']).toContain(
+      'extend with the right token returned false',
+    );
+    expect(result['refuses extend with another token']).toContain(
+      "reserve after refused extend: expected 'reserved', got 'inFlight'",
+    );
+    expect(result['fences the old token after a take over']).toContain(
+      'extend of the new reservation returned false',
     );
   });
 

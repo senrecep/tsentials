@@ -33,6 +33,15 @@ try {
 }
 ```
 
+## Lease extension
+
+`extend` is one `UPDATE` that moves `expires_at` only while the row is live, in flight and holds
+the caller's token, so an expired lease is never revived and a completed record is never touched.
+The engine calls it every `leaseMs / 3` while the handler runs. On a transaction's client the
+heartbeat statements run inside that transaction; there the uncommitted row already blocks other
+reserves until commit, and a failed statement that aborts the transaction also makes the next
+`extend` fail, which aborts the handler with `ReservationLost` in `enforce`.
+
 ## Observe mode
 
 In `observe` every call runs. Create the store with the pool, not the transaction's client: each
