@@ -109,7 +109,14 @@ const rejections: Readonly<Record<IdempotencyErrorCode, { status: number; title:
   [IdempotencyErrorCodes.KeyInvalid]: { status: 400, title: 'Invalid idempotency key' },
   [IdempotencyErrorCodes.ScopeRequired]: { status: 400, title: 'Idempotency scope required' },
   [IdempotencyErrorCodes.ResultUnavailable]: { status: 409, title: 'Result unavailable' },
+  [IdempotencyErrorCodes.ReservationLost]: { status: 503, title: 'Reservation lost' },
 };
+
+/** Codes answered with `Retry-After`: a retry with the same key can succeed. */
+const RETRY_AFTER_CODES: ReadonlySet<IdempotencyErrorCode> = new Set([
+  IdempotencyErrorCodes.InFlight,
+  IdempotencyErrorCodes.ReservationLost,
+]);
 
 function positiveInteger(name: string, value: number): number {
   if (!Number.isSafeInteger(value) || value < 1) {
@@ -138,7 +145,7 @@ function problem(
 function rejection(code: IdempotencyErrorCode, retryAfterMs: number | null): Response {
   const { status, title } = rejections[code];
   const retryAfter =
-    code === IdempotencyErrorCodes.InFlight && retryAfterMs !== null
+    RETRY_AFTER_CODES.has(code) && retryAfterMs !== null
       ? { 'retry-after': String(Math.max(1, Math.ceil(retryAfterMs / 1000))) }
       : {};
   return problem(status, title, idempotencyErrors.forCode(code, retryAfterMs), retryAfter);

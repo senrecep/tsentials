@@ -35,7 +35,8 @@ export interface IdempotentOptions<A extends readonly unknown[]> extends Idempot
    * Hands the lease signal to `fn`: returns the arguments to call `fn` with. Called only in
    * `enforce` mode, after a reservation, with a store that has `extend`; the signal aborts with
    * the caller's reason (from `signal`) or when the reservation is lost (reason name
-   * `ReservationLost`). Without it `fn` gets the original arguments.
+   * `ReservationLost`). Without it `fn` gets the original arguments. If it throws, the
+   * reservation is released and the error is rethrown.
    *
    * ```ts
    * bindSignal: (signal, cmd) => [{ ...cmd, signal }]
@@ -86,10 +87,14 @@ export function makeIdempotent<A extends readonly unknown[], T>(
         },
         scope: () => options.scope(...args),
         fingerprint: () => fingerprintOf(options.fingerprint ? options.fingerprint(...args) : args),
-        run: async (signal) =>
-          signal === undefined || options.bindSignal === undefined
-            ? fn(...args)
-            : fn(...options.bindSignal(signal, ...args)),
+        // `bindSignal` runs synchronously: if it throws, the engine releases the reservation.
+        run: (signal) => {
+          const bound =
+            signal === undefined || options.bindSignal === undefined
+              ? args
+              : options.bindSignal(signal, ...args);
+          return (async () => fn(...bound))();
+        },
         complete: (result) => resultCompletion(result, policy, settings),
         replay: (payload) => replayResult<T>(payload, policy.serializer),
         reject: (code) => Result.failure<T>(idempotencyErrors.forCode(code, settings.retryAfterMs)),
@@ -121,7 +126,8 @@ export function makeIdempotent<A extends readonly unknown[], T>(
  *   error propagates.
  * - With a store that has `extend` (the built-in stores do), the lease is extended while the
  *   function runs; `bindSignal` passes it a signal that also aborts when the reservation is
- *   lost.
+ *   lost. A function that rejects after the loss (in `enforce`, without a caller abort) gets
+ *   Unexpected `Idempotency.ReservationLost` and the key is released.
  * - Success results are kept for `retentionMs`; failures whose first error is `Unexpected` for
  *   `serverErrorRetentionMs`, other failures for `retentionMs` (or released with
  *   `storeFailures: false`).

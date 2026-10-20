@@ -18,6 +18,7 @@ describe('idempotency constants on tsentials/http', () => {
       KeyInvalid: 'Idempotency.KeyInvalid',
       ScopeRequired: 'Idempotency.ScopeRequired',
       ResultUnavailable: 'Idempotency.ResultUnavailable',
+      ReservationLost: 'Idempotency.ReservationLost',
     });
   });
 });

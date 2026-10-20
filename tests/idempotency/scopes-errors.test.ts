@@ -210,6 +210,7 @@ describe('idempotencyErrors', () => {
       [IdempotencyErrorCodes.KeyInvalid, ErrorType.Validation],
       [IdempotencyErrorCodes.ScopeRequired, ErrorType.Validation],
       [IdempotencyErrorCodes.ResultUnavailable, ErrorType.Conflict],
+      [IdempotencyErrorCodes.ReservationLost, ErrorType.Unexpected],
     ] as const;
     for (const [code, type] of cases) {
       const error = idempotencyErrors.forCode(code);

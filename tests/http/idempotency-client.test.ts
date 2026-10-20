@@ -172,6 +172,13 @@ describe('idempotentRetryClassifier', () => {
     expect(classify(status(409, { problemCode: 'Other' }))).toBe(false);
   });
 
+  it('retries 503 Idempotency.ReservationLost (the key was released)', () => {
+    const classify = idempotentRetryClassifier('POST', true);
+    expect(classify(status(503, { problemCode: IdempotencyErrorCodes.ReservationLost }))).toBe(
+      true,
+    );
+  });
+
   it('never retries 409 Idempotency.ResultUnavailable', () => {
     const classify = idempotentRetryClassifier('POST', true);
     expect(classify(status(409, { problemCode: IdempotencyErrorCodes.ResultUnavailable }))).toBe(

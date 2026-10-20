@@ -8,7 +8,11 @@ import {
   InMemoryIdempotencyStore,
   idempotencyScopes,
 } from '../../src/idempotency/index.js';
-import { type IdempotencySettings, resolveSettings } from '../../src/idempotency/options.js';
+import {
+  type IdempotencySettings,
+  MAX_LEASE_MS,
+  resolveSettings,
+} from '../../src/idempotency/options.js';
 
 const LEASE = 300; // heartbeat every 100 ms
 
@@ -216,37 +220,146 @@ describe('runIdempotent: lease heartbeat', () => {
     await observed;
   });
 
-  it.each([
-    ['returns false', async () => false, undefined],
-    [
-      'throws',
-      async () => {
-        throw new Error('store down');
-      },
-      'store down',
-    ],
-  ])('aborts the handler in enforce when extend %s', async (_name, extend, cause) => {
-    const { store, counts } = storeWith(extend);
+  it('answers ReservationLost and releases the key when extend returns false', async () => {
+    const { store, counts } = storeWith(async () => false);
     const h = harness({ store });
     const g = gate();
     const result = runIdempotent(h.call(g.run));
     await g.started;
-    const rejected = expect(result).rejects.toBeInstanceOf(IdempotencyReservationLostError);
     await vi.advanceTimersByTimeAsync(100);
-    await rejected;
+    expect(await result).toBe(`reject:${IdempotencyErrorCodes.ReservationLost}`);
     const reason = g.signals[0]?.reason as IdempotencyReservationLostError;
+    expect(reason).toBeInstanceOf(IdempotencyReservationLostError);
     expect(reason.name).toBe('ReservationLost');
-    expect((reason.cause as Error | undefined)?.message).toBe(cause);
+    expect(reason.cause).toBeUndefined();
     expect(h.lostLogs()).toEqual([
-      {
-        level: 'warning',
-        name: IdempotencyEventNames.ReservationLost,
-        exception: cause === undefined ? undefined : reason.cause,
-      },
+      { level: 'warning', name: IdempotencyEventNames.ReservationLost, exception: undefined },
     ]);
+    expect(h.events.map((e) => e.decision)).toEqual(['reserved', 'released']);
     expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(counts.extend).toBe(1);
+    // Released: a retry runs again.
+    expect(await runIdempotent(h.call(async () => 'retry'))).toBe('retry');
+  });
+
+  it('retries after a single thrown extend without aborting the handler', async () => {
+    let calls = 0;
+    const inner = new InMemoryIdempotencyStore();
+    const { store, counts } = storeWith(async (...args) => {
+      if (++calls === 1) throw new Error('blip');
+      return inner.extend(...args);
+    });
+    // The wrapped store shares its records with `inner`.
+    store.reserve = (...args) => inner.reserve(...args);
+    store.complete = (...args) => inner.complete(...args);
+    const h = harness({ store });
+    const g = gate();
+    const result = runIdempotent(h.call(g.run));
+    await g.started;
+    await vi.advanceTimersByTimeAsync(LEASE * 3);
+    expect(counts.extend).toBe(9);
+    expect(g.signals[0]?.aborted).toBe(false);
+    g.finish('done');
+    expect(await result).toBe('done');
+    expect(h.lostLogs()).toEqual([]);
+    expect(h.events.map((e) => e.decision)).toEqual(['reserved', 'stored']);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('loses the lease at the deadline when extend keeps throwing', async () => {
+    const { store, counts } = storeWith(async () => {
+      throw new Error('store down');
+    });
+    const h = harness({ store });
+    const g = gate();
+    const result = runIdempotent(h.call(g.run));
+    await g.started;
+    await vi.advanceTimersByTimeAsync(LEASE - 1);
+    expect(g.signals[0]?.aborted).toBe(false);
+    expect(counts.extend).toBe(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toBe(`reject:${IdempotencyErrorCodes.ReservationLost}`);
+    const reason = g.signals[0]?.reason as IdempotencyReservationLostError;
+    expect((reason.cause as Error).message).toBe('store down');
+    expect(h.lostLogs()).toEqual([
+      { level: 'warning', name: IdempotencyEventNames.ReservationLost, exception: reason.cause },
+    ]);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(counts.extend).toBe(2);
+  });
+
+  it('aborts a hung extend and the handler at the deadline', async () => {
+    const extendSignals: (AbortSignal | undefined)[] = [];
+    const { store, counts } = storeWith(
+      (_key, _token, _lease, signal) =>
+        new Promise<boolean>((_resolve, reject) => {
+          extendSignals.push(signal);
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }),
+    );
+    const h = harness({ store });
+    const g = gate();
+    const result = runIdempotent(h.call(g.run));
+    await g.started;
+    await vi.advanceTimersByTimeAsync(LEASE - 1);
+    expect(counts.extend).toBe(1);
+    expect(extendSignals[0]?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(extendSignals[0]?.aborted).toBe(true);
+    expect(await result).toBe(`reject:${IdempotencyErrorCodes.ReservationLost}`);
+    expect(h.lostLogs()).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cancels an extend in flight when the handler settles', async () => {
+    const extendSignals: (AbortSignal | undefined)[] = [];
+    const { store } = storeWith(
+      (_key, _token, _lease, signal) =>
+        new Promise<boolean>((_resolve, reject) => {
+          extendSignals.push(signal);
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }),
+    );
+    const h = harness({ store });
+    const g = gate();
+    const result = runIdempotent(h.call(g.run));
+    await g.started;
+    await vi.advanceTimersByTimeAsync(150);
+    g.finish('done');
+    expect(await result).toBe('done');
+    expect(extendSignals[0]?.aborted).toBe(true);
+    expect(h.lostLogs()).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    ['enforce', `reject:${IdempotencyErrorCodes.ReservationLost}`, true],
+    ['observe', 'done', false],
+  ] as const)('stops extending at MAX_LEASE_MS in %s', async (mode, expected, aborts) => {
+    const { store, counts } = storeWith(async () => true);
+    const h = harness({ store, mode, leaseMs: 90_000 });
+    const g = gate();
+    const result = runIdempotent(h.call(g.run));
+    await g.started;
+    await vi.advanceTimersByTimeAsync(MAX_LEASE_MS - 1);
+    expect(counts.extend).toBe(29);
+    expect(h.logs).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.logs).toEqual([
+      { level: 'warning', name: IdempotencyEventNames.LeaseLimitReached, exception: undefined },
+    ]);
+    expect(vi.getTimerCount()).toBe(0);
+    if (!aborts) g.finish('done');
+    expect(await result).toBe(expected);
+    if (aborts) {
+      const reason = g.signals[0]?.reason as IdempotencyReservationLostError;
+      expect(reason).toBeInstanceOf(IdempotencyReservationLostError);
+      expect(reason.cause).toBeInstanceOf(RangeError);
+    }
+    await vi.advanceTimersByTimeAsync(100_000);
+    expect(counts.extend).toBe(29);
   });
 
   it('logs a lost lease once even when complete is then refused', async () => {
@@ -318,7 +431,7 @@ describe('runIdempotent: lease heartbeat', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('stops on a caller abort and passes the caller reason through the combined signal', async () => {
+  it('keeps beating after a caller abort and passes the caller reason through', async () => {
     const { store, counts } = storeWith();
     const h = harness({ store });
     const controller = new AbortController();
@@ -329,16 +442,46 @@ describe('runIdempotent: lease heartbeat', () => {
     await vi.advanceTimersByTimeAsync(150);
     expect(counts.extend).toBe(1);
     controller.abort('stop');
-    expect(vi.getTimerCount()).toBe(0);
     await rejected;
     expect(g.signals[0]?.reason).toBe('stop');
+    expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(counts.extend).toBe(1);
     expect(h.lostLogs()).toEqual([]);
   });
 
-  it('never starts beating when the caller aborted between reserve and run', async () => {
-    const { store, counts } = storeWith();
+  it('holds the key while a handler that ignores the caller abort keeps running', async () => {
+    const { store } = storeWith();
+    const h = harness({ store });
+    const controller = new AbortController();
+    let runs = 0;
+    let finish: (value: string) => void = () => undefined;
+    const first = started(() => {
+      runs++;
+      return new Promise<string>((resolve) => {
+        finish = resolve;
+      });
+    });
+    const result = runIdempotent(h.call(first.run, { signal: controller.signal }));
+    await first.started;
+    controller.abort('gone');
+    await vi.advanceTimersByTimeAsync(LEASE * 4);
+    const second = await runIdempotent(
+      h.call(async () => {
+        runs++;
+        return 'second';
+      }),
+    );
+    expect(second).toBe(`reject:${IdempotencyErrorCodes.InFlight}`);
+    expect(runs).toBe(1);
+    finish('first');
+    expect(await result).toBe('first');
+    expect(h.lostLogs()).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('starts beating even when the caller aborted between reserve and run', async () => {
+    const { store } = storeWith();
     const controller = new AbortController();
     const h = harness({ store });
     const call = h.call(async (signal) => (signal?.aborted === true ? 'saw abort' : 'ran'), {
@@ -353,8 +496,116 @@ describe('runIdempotent: lease heartbeat', () => {
     };
     expect(await runIdempotent(aborting)).toBe('saw abort');
     expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect(counts.extend).toBe(0);
+  });
+
+  it('does not convert a handler error after a lost lease when the caller aborted', async () => {
+    const { store } = storeWith(async () => false);
+    const h = harness({ store });
+    const controller = new AbortController();
+    const handler = started(
+      (signal) =>
+        new Promise<string>((_resolve, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => setTimeout(() => reject(new Error('after both')), 50),
+            { once: true },
+          );
+        }),
+    );
+    const result = runIdempotent(h.call(handler.run, { signal: controller.signal }));
+    await handler.started;
+    const rejected = expect(result).rejects.toThrow('after both');
+    await vi.advanceTimersByTimeAsync(100);
+    controller.abort('caller');
+    await vi.advanceTimersByTimeAsync(50);
+    await rejected;
+    expect(h.events.map((e) => e.decision)).toEqual(['reserved']);
+  });
+
+  it('converts any handler error after a lost lease, logging the error', async () => {
+    const { store } = storeWith(async () => false);
+    const h = harness({ store });
+    const handler = started(
+      (signal) =>
+        new Promise<string>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new Error('wrapped')), { once: true });
+        }),
+    );
+    const result = runIdempotent(h.call(handler.run));
+    await handler.started;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await result).toBe(`reject:${IdempotencyErrorCodes.ReservationLost}`);
+    expect(h.lostLogs().map((l) => (l.exception as Error | undefined)?.message)).toEqual([
+      undefined,
+      'wrapped',
+    ]);
+  });
+
+  it('rethrows a handler error after a lost lease in observe', async () => {
+    const { store } = storeWith(async () => false);
+    const h = harness({ store, mode: 'observe' });
+    const handler = started(
+      () =>
+        new Promise<string>((_resolve, reject) => {
+          setTimeout(() => reject(new Error('late failure')), 200);
+        }),
+    );
+    const result = runIdempotent(h.call(handler.run));
+    const rejected = expect(result).rejects.toThrow('late failure');
+    await handler.started;
+    await vi.advanceTimersByTimeAsync(200);
+    await rejected;
+  });
+
+  it('ignores a failing release after a lost lease', async () => {
+    const { store } = storeWith(async () => false);
+    store.release = async () => {
+      throw new Error('release down');
+    };
+    const h = harness({ store });
+    const g = gate();
+    const result = runIdempotent(h.call(g.run));
+    await g.started;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await result).toBe(`reject:${IdempotencyErrorCodes.ReservationLost}`);
+    expect(h.events.map((e) => e.decision)).toEqual(['reserved']);
+  });
+
+  it('releases the reservation when the handler setup throws', async () => {
+    const { store, inner } = storeWith();
+    const h = harness({ store });
+    const run = () => {
+      throw new TypeError('bind failed');
+    };
+    await expect(runIdempotent(h.call(run))).rejects.toThrow('bind failed');
+    expect(h.events.map((e) => e.decision)).toEqual(['reserved', 'released']);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(await runIdempotent(harness({ store: inner }).call(async () => 'again'))).toBe('again');
+  });
+
+  it('releases the reservation when the caller signal cannot be combined', async () => {
+    const { store } = storeWith();
+    // A store that ignores the signal, so only `AbortSignal.any` sees the foreign object.
+    const inner = new InMemoryIdempotencyStore();
+    store.reserve = (key, fingerprint, leaseMs) => inner.reserve(key, fingerprint, leaseMs);
+    store.release = (...args) => inner.release(...args);
+    const h = harness({ store });
+    const foreign = { aborted: false } as AbortSignal;
+    let ran = false;
+    await expect(
+      runIdempotent(
+        h.call(
+          async () => {
+            ran = true;
+            return 'x';
+          },
+          { signal: foreign },
+        ),
+      ),
+    ).rejects.toThrow(TypeError);
+    expect(ran).toBe(false);
+    expect(h.events.map((e) => e.decision)).toEqual(['reserved', 'released']);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('ignores an extend result that arrives after the handler settled', async () => {
@@ -397,7 +648,7 @@ describe('runIdempotent: lease heartbeat', () => {
     const { store, counts } = storeWith(async () => {
       active++;
       maxActive = Math.max(maxActive, active);
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await new Promise((resolve) => setTimeout(resolve, 80));
       active--;
       return true;
     });
@@ -406,7 +657,8 @@ describe('runIdempotent: lease heartbeat', () => {
     await g.started;
     await vi.advanceTimersByTimeAsync(1_000);
     expect(maxActive).toBe(1);
-    expect(counts.extend).toBe(3); // beats at 100, 450, 800
+    expect(counts.extend).toBe(6); // beats at 100, 280, 460, 640, 820, 1000
+    expect(g.signals[0]?.aborted).toBe(false);
     g.finish('done');
     await result;
     await vi.advanceTimersByTimeAsync(1_000);

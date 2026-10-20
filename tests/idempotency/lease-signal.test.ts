@@ -1,4 +1,5 @@
 import {
+  IdempotencyErrorCodes,
   type IdempotencyStore,
   InMemoryIdempotencyStore,
   idempotencyBehavior,
@@ -7,7 +8,7 @@ import {
   idempotent,
   withIdempotency,
 } from '../../src/idempotency/index.js';
-import { createMediator } from '../../src/mediator/index.js';
+import { createMediator, exceptionHandlingBehavior } from '../../src/mediator/index.js';
 import { Result } from '../../src/result/index.js';
 
 /** An in-memory store whose `extend` always reports a lost lease (or that has no `extend`). */
@@ -21,7 +22,12 @@ function store(extend: 'lost' | 'none' | 'real'): IdempotencyStore {
   if (extend === 'none') return base;
   return {
     ...base,
-    extend: extend === 'lost' ? async () => false : (...args) => inner.extend(...args),
+    extend:
+      extend === 'lost'
+        ? async function lost() {
+            return false;
+          }
+        : (...args) => inner.extend(...args),
   };
 }
 
@@ -33,8 +39,10 @@ const aborted = (signal: AbortSignal) =>
 
 const reasonName = (reason: unknown) => (reason as Error).name;
 
-// leaseMs 3: the heartbeat beats every millisecond.
-const LEASE = 3;
+// The first beat runs after 10 ms. A 'real' store uses a long lease, so a slow machine never
+// misses a deadline.
+const LEASE = 30;
+const leaseOf = (s: IdempotencyStore) => (s.extend?.name === 'lost' ? LEASE : 60_000);
 
 describe('lease signal: mediator', () => {
   type Requests = {
@@ -42,11 +50,63 @@ describe('lease signal: mediator', () => {
   };
   const request = { idempotencyKey: 'k1', idempotencyScope: idempotencyScopes.tenant('t1') };
 
-  function mediator(s: IdempotencyStore, onSignal: (signal: AbortSignal) => Promise<unknown>) {
-    return createMediator<Requests>({
-      behaviors: [idempotencyBehavior({ store: s, leaseMs: LEASE })],
-    }).register('Capture', async (_req, ctx) => Result.success(String(await onSignal(ctx.signal))));
+  function mediator(
+    s: IdempotencyStore,
+    onSignal: (signal: AbortSignal) => Promise<unknown>,
+    order: 'none' | 'inner' | 'outer' = 'none',
+  ) {
+    const idem = idempotencyBehavior({ store: s, leaseMs: leaseOf(s) });
+    const behaviors =
+      order === 'none'
+        ? [idem]
+        : order === 'inner'
+          ? [idem, exceptionHandlingBehavior()]
+          : [exceptionHandlingBehavior(), idem];
+    return createMediator<Requests>({ behaviors }).register('Capture', async (_req, ctx) =>
+      Result.success(String(await onSignal(ctx.signal))),
+    );
   }
+
+  it.each([
+    'inner',
+    'outer',
+  ] as const)('answers ReservationLost when the handler rethrows the lease abort (exception handling %s)', async (order) => {
+    const s = store('lost');
+    const send = mediator(
+      s,
+      async (signal) => {
+        await aborted(signal);
+        signal.throwIfAborted();
+      },
+      order,
+    );
+    const result = await send.send('Capture', request);
+    expect(result.ok).toBe(false);
+    expect(Result.firstError(result)?.code).toBe(IdempotencyErrorCodes.ReservationLost);
+    // The key was released: a retry runs the handler again.
+    const again = await createMediator<Requests>({
+      behaviors: [idempotencyBehavior({ store: s, leaseMs: 60_000 })],
+    })
+      .register('Capture', async () => Result.success('again'))
+      .send('Capture', request);
+    expect(again).toEqual(Result.success('again'));
+  });
+
+  it('still rejects with the caller reason when the caller aborts', async () => {
+    const controller = new AbortController();
+    const send = mediator(
+      store('real'),
+      async (signal) => {
+        queueMicrotask(() => controller.abort('caller'));
+        await aborted(signal);
+        signal.throwIfAborted();
+      },
+      'inner',
+    );
+    await expect(send.send('Capture', request, { signal: controller.signal })).rejects.toBe(
+      'caller',
+    );
+  });
 
   it('aborts ctx.signal with ReservationLost when the lease is lost', async () => {
     const result = await mediator(store('lost'), async (signal) =>
@@ -82,7 +142,7 @@ describe('lease signal: idempotent', () => {
   }
   const options = (s: IdempotencyStore) => ({
     store: s,
-    leaseMs: LEASE,
+    leaseMs: leaseOf(s),
     namespace: 'capture',
     key: (cmd: Cmd) => idempotencyKeys.for('capture', cmd.orderId),
     scope: () => idempotencyScopes.tenant('t1'),
@@ -95,6 +155,34 @@ describe('lease signal: idempotent', () => {
       { ...options(store('lost')), bindSignal: (signal, cmd) => [{ ...cmd, signal }] },
     );
     expect(await capture({ orderId: 'o1' })).toEqual(Result.success('ReservationLost'));
+  });
+
+  it('answers ReservationLost when fn rejects after the loss', async () => {
+    const capture = idempotent(
+      async (cmd: Cmd) => {
+        await aborted(cmd.signal!);
+        cmd.signal!.throwIfAborted();
+        return Result.success('unreachable');
+      },
+      { ...options(store('lost')), bindSignal: (signal, cmd) => [{ ...cmd, signal }] },
+    );
+    const result = await capture({ orderId: 'o1' });
+    expect(Result.firstError(result)?.code).toBe(IdempotencyErrorCodes.ReservationLost);
+  });
+
+  it('releases the key when bindSignal throws', async () => {
+    const s = store('real');
+    let fail = true;
+    const capture = idempotent(async (cmd: Cmd) => Result.success(cmd.orderId), {
+      ...options(s),
+      bindSignal: (signal, cmd) => {
+        if (fail) throw new TypeError('cannot bind');
+        return [{ ...cmd, signal }];
+      },
+    });
+    await expect(capture({ orderId: 'o1' })).rejects.toThrow('cannot bind');
+    fail = false;
+    expect(await capture({ orderId: 'o1' })).toEqual(Result.success('o1'));
   });
 
   it('calls fn with the original arguments without bindSignal or without extend', async () => {
@@ -126,7 +214,7 @@ describe('lease signal: withIdempotency', () => {
   const wrap = (s: IdempotencyStore, handler: (request: Request) => Promise<Response>) =>
     withIdempotency(handler, {
       store: s,
-      leaseMs: LEASE,
+      leaseMs: leaseOf(s),
       scope: () => idempotencyScopes.tenant('1'),
     });
 

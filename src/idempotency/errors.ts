@@ -48,6 +48,16 @@ export const idempotencyErrors = {
       'The request with this idempotency key completed, but its result cannot be replayed.',
     );
   },
+  /**
+   * The reservation was lost while the operation ran (Unexpected). The outcome was not stored and
+   * the key was released, so a retry runs the operation again.
+   */
+  reservationLost(): AppError {
+    return Err.unexpected(
+      IdempotencyErrorCodes.ReservationLost,
+      'The idempotency reservation was lost while the operation ran.',
+    );
+  },
   /** The error of a code; `retryAfterMs` is used by `InFlight` only. */
   forCode(code: IdempotencyErrorCode, retryAfterMs?: number | null): AppError {
     return byCode[code](retryAfterMs);
@@ -63,4 +73,5 @@ const byCode: Readonly<
   [IdempotencyErrorCodes.KeyInvalid]: () => idempotencyErrors.keyInvalid(),
   [IdempotencyErrorCodes.ScopeRequired]: () => idempotencyErrors.scopeRequired(),
   [IdempotencyErrorCodes.ResultUnavailable]: () => idempotencyErrors.resultUnavailable(),
+  [IdempotencyErrorCodes.ReservationLost]: () => idempotencyErrors.reservationLost(),
 };

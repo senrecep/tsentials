@@ -24,6 +24,11 @@ export const IdempotencyErrorCodes = {
    * 409, never retried). Use a new key only if repeating the side effect is intended.
    */
   ResultUnavailable: 'Idempotency.ResultUnavailable',
+  /**
+   * The reservation was lost while the operation ran, so its outcome is not stored (Unexpected,
+   * 503 over HTTP, retryable: the key was released).
+   */
+  ReservationLost: 'Idempotency.ReservationLost',
 } as const;
 
 /** One of the {@link IdempotencyErrorCodes} values. */
@@ -45,8 +50,17 @@ export const IdempotencyEventNames = {
   StoreFailed: 'Idempotency.StoreFailed',
   /** Writing the outcome (`complete` or `release`) threw; the handler's output was returned. */
   CompleteFailed: 'Idempotency.CompleteFailed',
-  /** `complete` found another reservation (the lease ran out and another call took over). */
+  /**
+   * The reservation was lost: `extend` returned `false`, no `extend` succeeded before the lease
+   * deadline, or `complete` found another reservation (the lease ran out and another call took
+   * over).
+   */
   ReservationLost: 'Idempotency.ReservationLost',
+  /**
+   * The heartbeat stopped extending the lease `MAX_LEASE_MS` (15 minutes) after the reservation;
+   * in `enforce` the handler's signal aborts with `ReservationLost`.
+   */
+  LeaseLimitReached: 'Idempotency.LeaseLimitReached',
   /** An HTTP response was not stored: its body exceeded `maxResponseBodyBytes`. */
   ResponseTooLarge: 'Idempotency.ResponseTooLarge',
   /**
