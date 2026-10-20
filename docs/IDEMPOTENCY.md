@@ -157,6 +157,7 @@ The wrapper guards `POST` and `PATCH` (`methods` changes this) and reads the `Id
 | Same key, other method, path, query or body | 422 `Idempotency.KeyReused` |
 | Same key, same request, completed with a 2xx that could not be stored | 409 `Idempotency.ResultUnavailable` without `Retry-After`; the handler does not run |
 | Same key, same request, completed | The stored status, whitelisted headers and body, plus `Idempotency-Replayed: true` |
+| The reservation was lost while the handler ran and the handler threw (`enforce`) | 503 `Idempotency.ReservationLost` with `Retry-After`; the key is released, so a retry runs the handler again |
 
 Errors are `application/problem+json` bodies `{ title, status, detail, code }`. The `code` is the contract, so clients classify on it.
 
@@ -170,7 +171,7 @@ What is stored:
 | Body larger than `maxResponseBodyBytes` (1 MiB) | Like above: a marker for a 2xx, released for a 4xx, in flight otherwise; logs `Idempotency.ResponseTooLarge` |
 | 5xx | Yes, for `serverErrorRetentionMs` |
 | Anything else | Yes, for `retentionMs` |
-| The handler throws | No, the key stays in flight until the lease ends |
+| The handler throws | No, the key stays in flight until the lease ends. After a lost reservation in `enforce` the key is released instead and the client gets 503 `Idempotency.ReservationLost` |
 
 `idempotencyStorePolicies.successOnly` stores only 2xx and releases every other response, so a retry after a 3xx or 5xx runs the handler again even if its work already happened. Replayed headers are `content-type`, `content-language`, `location`, `etag`, `cache-control` and `retry-after` by default (`replayedHeaders`); `set-cookie` is never replayed.
 
@@ -179,7 +180,7 @@ Notes:
 - The request body is buffered to compute the fingerprint, because Web Crypto has no streaming digest. Enforce a request body size limit before this wrapper.
 - Put rate limiting, timeouts and load shedding outside the wrapper, so their responses are not stored.
 - Do not wrap streaming routes.
-- With a store that has `extend` (the built-in stores do), the handler in `enforce` receives a new `Request` with the same method, URL, headers and body, whose `signal` aborts with the caller's reason or when the reservation is lost (see [Lease extension](#lease-extension)). It keeps a `Request` subclass whose constructor accepts `(request, init)`, otherwise it is a plain `Request`. The body moves to the new request, so read the request the handler receives, not the original object; properties set on the original object are not copied. Without `extend`, or in `observe`, the handler gets the original request.
+- The handler receives the original `Request`. To let it see the lease signal (see [Lease extension](#lease-extension)), set `bindRequest`, for example `bindRequest: (req, signal) => new Request(req, { signal })`. It is called only in `enforce` with a store that has `extend`, and the signal aborts with the caller's reason or when the reservation is lost. A `new Request(req, ...)` moves the body from `req`, so the handler must read the request it receives; properties set on the original object are not copied, and a `Request` subclass needs its own rebuild.
 
 ## Keys and scopes
 
@@ -261,7 +262,7 @@ When the store has `extend` (the in-memory and Redis stores do, and so does the 
 
 The heartbeat starts after a reservation and stops when the handler settles or the caller aborts. Its timer is `unref`ed, so it never keeps a process alive. When `extend` returns `false` (the token no longer holds the record) or throws, the engine logs `Idempotency.ReservationLost` (with the error, if any) and stops beating:
 
-- In `enforce`, the handler's signal aborts with an `IdempotencyReservationLostError` (`name` `'ReservationLost'`, `cause` the error `extend` threw). Hand the signal on to the database and HTTP calls of the handler so they stop: `ctx.signal` for the mediator, `bindSignal` for `idempotent`, `request.signal` for `withIdempotency`. A handler that ignores the signal runs to the end as before.
+- In `enforce`, the handler's signal aborts with an `IdempotencyReservationLostError` (`name` `'ReservationLost'`, `cause` the error `extend` threw). Hand the signal on to the database and HTTP calls of the handler so they stop: `ctx.signal` for the mediator, `bindSignal` for `idempotent`, `bindRequest` for `withIdempotency`. A handler that ignores the signal runs to the end as before.
 - In `observe`, the lost lease is only logged; the handler keeps running.
 
 The outcome is completed as before: if the record was taken over, `complete` fails and nothing is stored; if the lease only expired and nobody took it over, `complete` can still store the handler's outcome, including a failure caused by the abort. `Idempotency.ReservationLost` is logged once per call. A store without `extend` behaves as before: no timer, no new signal, the original request and arguments.

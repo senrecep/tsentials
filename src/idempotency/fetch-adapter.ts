@@ -83,6 +83,21 @@ export interface WithIdempotencyOptions extends IdempotencySettings {
   readonly maxResponseBodyBytes?: number | undefined;
   /** Response headers stored with the body. Default: {@link DEFAULT_REPLAYED_HEADERS}. */
   readonly replayedHeaders?: readonly string[] | undefined;
+  /**
+   * Hands the lease signal to the handler: returns the request the handler gets. Called only in
+   * `enforce` mode, after a reservation, with a store that has `extend`; the signal aborts with
+   * the caller's reason or when the reservation is lost (reason name `ReservationLost`). Without
+   * it the handler gets the original request object. If it throws, the reservation is released
+   * and the error is rethrown.
+   *
+   * ```ts
+   * bindRequest: (req, signal) => new Request(req, { signal })
+   * ```
+   *
+   * `new Request(req, ...)` moves the unread body to the new request (the fingerprint read a
+   * clone) and does not copy properties set on the original object or keep its class.
+   */
+  readonly bindRequest?: ((request: Request, signal: AbortSignal) => Request) | undefined;
 }
 
 interface StoredResponse {
@@ -230,19 +245,6 @@ function replayResponse(payload: string): Response | undefined {
   }
 }
 
-/**
- * The request with another signal. The fingerprint read a clone, so the body is still unread
- * and moves to the new request. Keeps a `Request` subclass when its constructor accepts
- * `(request, init)`, otherwise falls back to a plain `Request`.
- */
-function withSignal(request: Request, signal: AbortSignal): Request {
-  try {
-    return new (request.constructor as typeof Request)(request, { signal });
-  } catch {
-    return new Request(request, { signal });
-  }
-}
-
 function warn(settings: ResolvedIdempotencySettings, name: string, target: string): void {
   const { logger } = settings;
   try {
@@ -340,8 +342,14 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
       },
       scope: () => options.scope?.(request),
       fingerprint: () => requestFingerprint(request),
-      run: async (signal) =>
-        handler(signal === undefined ? request : withSignal(request, signal), ...rest),
+      // `bindRequest` runs synchronously: if it throws, the engine releases the reservation.
+      run: (signal) => {
+        const bound =
+          signal === undefined || options.bindRequest === undefined
+            ? request
+            : options.bindRequest(request, signal);
+        return (async () => handler(bound, ...rest))();
+      },
       complete,
       replay: (payload) => {
         if (payload === RESULT_UNAVAILABLE_PAYLOAD) {
@@ -378,7 +386,9 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  *   without `Retry-After` (never retried; the handler does not run again);
  * - same key with another method, path, query or body → 422 `Idempotency.KeyReused`;
  * - key without a scope (the default `unscopedKeyBehavior: 'reject'`) → 400 `Idempotency.ScopeRequired`;
- *   `'skip'` runs the handler without idempotency instead, `'global'` uses one shared scope.
+ *   `'skip'` runs the handler without idempotency instead, `'global'` uses one shared scope;
+ * - the reservation was lost while the handler ran and the handler then threw (`enforce`, no
+ *   caller abort) → 503 `Idempotency.ReservationLost` with `Retry-After`.
  *
  * What happens to the key after the handler returned:
  * - 2xx and 3xx → stored for `retentionMs`; 5xx → stored for `serverErrorRetentionMs`;
@@ -387,15 +397,13 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  * - a body over `maxResponseBodyBytes`, a `Content-Encoding` or an event stream → for a 2xx a
  *   marker is stored for `retentionMs` (a retry gets 409 `Idempotency.ResultUnavailable`), a 4xx
  *   is released, any other status is kept in flight until the lease ends;
- * - the handler throws → kept in flight until the lease ends.
+ * - the handler throws → kept in flight until the lease ends; after a lost reservation the key
+ *   is released instead and the call gets 503 `Idempotency.ReservationLost` with `Retry-After`.
  *
  * With a store that has `extend` (the built-in stores do), the lease is extended while the
- * handler runs. In `enforce` the handler then receives a new `Request` (same method, URL,
- * headers and body; the same class when its constructor accepts `(request, init)`) whose
- * `signal` aborts with the caller's reason or when the reservation is lost (reason name
- * `ReservationLost`). The original request's body is moved to it, and properties set on the
- * original object are not copied. Without `extend`, or in `observe`, the handler gets the
- * original request.
+ * handler runs. The handler gets the original request; to let it observe a lost reservation,
+ * pass `bindRequest: (req, signal) => new Request(req, { signal })`, whose signal aborts with the
+ * caller's reason or when the reservation is lost (reason name `ReservationLost`).
  *
  * The request body is buffered to hash it (Web Crypto has no streaming digest), so enforce a
  * request body size limit before this wrapper. The response body is buffered before the

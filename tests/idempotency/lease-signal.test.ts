@@ -6,6 +6,7 @@ import {
   idempotencyKeys,
   idempotencyScopes,
   idempotent,
+  type WithIdempotencyOptions,
   withIdempotency,
 } from '../../src/idempotency/index.js';
 import { createMediator, exceptionHandlingBehavior } from '../../src/mediator/index.js';
@@ -211,14 +212,45 @@ describe('lease signal: withIdempotency', () => {
       ...(signal === undefined ? {} : { signal }),
       ...(body instanceof ReadableStream ? { duplex: 'half' } : {}),
     } as RequestInit);
-  const wrap = (s: IdempotencyStore, handler: (request: Request) => Promise<Response>) =>
+  const bindRequest = (req: Request, signal: AbortSignal) => new Request(req, { signal });
+  const wrap = (
+    s: IdempotencyStore,
+    handler: (request: Request) => Promise<Response>,
+    bind: WithIdempotencyOptions['bindRequest'] = bindRequest,
+  ) =>
     withIdempotency(handler, {
       store: s,
       leaseMs: leaseOf(s),
       scope: () => idempotencyScopes.tenant('1'),
+      bindRequest: bind,
     });
 
-  it('gives the handler a request whose signal aborts when the lease is lost', async () => {
+  it('passes the original request by default, with the heartbeat still running', async () => {
+    const original = post();
+    let seen: Request | undefined;
+    const s = store('real');
+    let extendCalls = 0;
+    const counting: IdempotencyStore = {
+      ...s,
+      extend: (...args) => {
+        extendCalls++;
+        return s.extend!(...args);
+      },
+    };
+    const handler = withIdempotency(
+      async (request) => {
+        seen = request;
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        return new Response('ok', { status: 201 });
+      },
+      { store: counting, leaseMs: 30, scope: () => idempotencyScopes.tenant('1') },
+    );
+    await handler(original);
+    expect(seen).toBe(original);
+    expect(extendCalls).toBeGreaterThan(0);
+  });
+
+  it('gives the bound request a signal that aborts when the lease is lost', async () => {
     const handler = wrap(
       store('lost'),
       async (request) => new Response(reasonName(await aborted(request.signal))),
@@ -226,7 +258,26 @@ describe('lease signal: withIdempotency', () => {
     expect(await (await handler(post())).text()).toBe('ReservationLost');
   });
 
-  it('propagates the caller abort to the rebound request', async () => {
+  it('answers 503 ReservationLost with Retry-After when the handler throws after the loss', async () => {
+    const s = store('lost');
+    const handler = wrap(s, async (request) => {
+      await aborted(request.signal);
+      request.signal.throwIfAborted();
+      return new Response('unreachable');
+    });
+    const response = await handler(post());
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('1');
+    expect(await response.json()).toMatchObject({
+      status: 503,
+      code: IdempotencyErrorCodes.ReservationLost,
+    });
+    // Released: a retry runs again.
+    const retry = await wrap(s, async () => new Response('again', { status: 201 }))(post());
+    expect(await retry.text()).toBe('again');
+  });
+
+  it('propagates the caller abort to the bound request', async () => {
     const controller = new AbortController();
     const handler = wrap(store('real'), async (request) => {
       queueMicrotask(() => controller.abort('caller'));
@@ -235,7 +286,7 @@ describe('lease signal: withIdempotency', () => {
     expect(await (await handler(post(undefined, controller.signal))).text()).toBe('caller');
   });
 
-  it('keeps the body readable after the rebind, for a string and a streamed body', async () => {
+  it('keeps the body readable after the bind, for a string and a streamed body', async () => {
     const echo = async (request: Request) => new Response(await request.text(), { status: 201 });
     const original = post();
     let seen: Request | undefined;
@@ -258,34 +309,36 @@ describe('lease signal: withIdempotency', () => {
     expect(await streamed.text()).toBe('{"sku":"b"}');
   });
 
-  it('passes the original request when the store has no extend', async () => {
+  it('never calls bindRequest when the store has no extend', async () => {
     const original = post();
     let seen: Request | undefined;
-    await wrap(store('none'), async (request) => {
-      seen = request;
-      return new Response('ok', { status: 201 });
-    })(original);
+    const bind = vi.fn(bindRequest);
+    await wrap(
+      store('none'),
+      async (request) => {
+        seen = request;
+        return new Response('ok', { status: 201 });
+      },
+      bind,
+    )(original);
     expect(seen).toBe(original);
+    expect(bind).not.toHaveBeenCalled();
   });
 
-  it('keeps a Request subclass, and falls back to Request when it cannot be rebuilt', async () => {
-    class Tagged extends Request {}
-    let rebuilt = 0;
-    class Strict extends Request {
-      constructor(input: RequestInfo, init?: RequestInit) {
-        if (rebuilt++ > 0) throw new TypeError('not rebuildable');
-        super(input, init);
-      }
-    }
-    const classes: string[] = [];
-    const handler = wrap(store('real'), async (request) => {
-      classes.push(request.constructor.name);
-      return new Response(await request.text(), { status: 201 });
+  it('releases the key and rethrows when bindRequest throws', async () => {
+    const s = store('real');
+    let runs = 0;
+    const handler = async () => {
+      runs++;
+      return new Response('ok', { status: 201 });
+    };
+    const failing = wrap(s, handler, () => {
+      throw new TypeError('cannot bind');
     });
-    const tagged = new Tagged(post());
-    expect(await (await handler(tagged)).text()).toBe('{"sku":"a"}');
-    const strict = new Strict(post(), { headers: { 'Idempotency-Key': 'k2' } });
-    expect(await (await handler(strict)).text()).toBe('{"sku":"a"}');
-    expect(classes).toEqual(['Tagged', 'Request']);
+    await expect(failing(post())).rejects.toThrow('cannot bind');
+    expect(runs).toBe(0);
+    const response = await wrap(s, handler)(post());
+    expect(response.status).toBe(201);
+    expect(runs).toBe(1);
   });
 });

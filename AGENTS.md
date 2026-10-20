@@ -660,7 +660,7 @@ export const POST = idem.withIdempotency(createOrder, { scope: (req) => idempote
 - Key without scope → `Idempotency.ScopeRequired` in every wrapper, `withIdempotency` included (or `unscopedKeyBehavior: 'skip' | 'global'`). Set scope and key fields in server code, never from a client payload.
 - `RedisIdempotencyStore` takes a `RedisLike` (`eval` only): adapt ioredis or node-redis. Cloudflare KV is not atomic and is not safe as a store. Custom stores must pass `describeIdempotencyStoreContract`.
 - `leaseMs` must cover the client's whole retry and timeout budget. Roll out `observe` before `enforce`.
-- Stores with the optional `extend` (InMemory, Redis) extend the lease while the handler runs; a lost lease logs `Idempotency.ReservationLost` and, in `enforce`, aborts the handler's signal (reason name `ReservationLost`): mediator `ctx.signal`, `idempotent({ bindSignal })`, `withIdempotency`'s rebuilt `request.signal`.
+- Stores with the optional `extend` (InMemory, Redis) extend the lease while the handler runs; a lost lease logs `Idempotency.ReservationLost` and, in `enforce`, aborts the handler's signal (reason name `ReservationLost`): mediator `ctx.signal`, `idempotent({ bindSignal })`, `withIdempotency({ bindRequest: (req, signal) => new Request(req, { signal }) })` (opt-in; the original request otherwise).
 - Client side (`tsentials/http`): `RequestBuilder.post(url).idempotencyKey()`, `withIdempotencyKey(init)`, `idempotentRetryClassifier(method, hasKey)` as `withRetry({ shouldRetry })`.
 - Full guide: `docs/IDEMPOTENCY.md`.
 
