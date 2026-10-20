@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.1] - 2026-10-20
 
 ### Fixed
 
@@ -88,6 +88,6 @@ First stable release. It adds five new subpath modules, cancellation support acr
 
 - Version bumped to 1.0.0; the five new subpath modules are marked stable.
 
-[Unreleased]: https://github.com/senrecep/tsentials/compare/v2.0.0...HEAD
+[2.0.1]: https://github.com/senrecep/tsentials/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/senrecep/tsentials/releases/tag/v2.0.0
 [1.0.0]: https://github.com/senrecep/tsentials/releases/tag/v1.0.0

@@ -2,6 +2,10 @@
 
 This guide lists every change that alters the runtime behaviour of an existing tsentials API. Read the 2.0.0 section when upgrading from 1.x and the 1.0.0 section when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](../CHANGELOG.md).
 
+## Behaviour changes in 2.0.1
+
+* **idempotency:** in `observe`, a call whose setup throws (invalid key, out-of-range request `leaseMs` / `retentionMs`, a throwing `settings`, `releaseFailures` or `signal` resolver) logs `Idempotency.Observe.ResolutionFailed` and runs without idempotency instead of failing. In `enforce`, a throwing `signal` resolver of `idempotent()` now rejects the returned promise instead of throwing synchronously; in `off` it is not called.
+
 ## Behaviour changes in 2.0.0
 
 * **runtime:** the minimum Node.js version is 22 (`engines.node` is `>=22.0.0`). The library uses the global Web Crypto API (`crypto.subtle`, `crypto.randomUUID`).
