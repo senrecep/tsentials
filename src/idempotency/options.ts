@@ -15,6 +15,7 @@ export type IdempotencyModeSetting = IdempotencyMode | (() => IdempotencyMode);
 export type IdempotencyDecision =
   | 'reserved'
   | 'replay'
+  | 'result_unavailable'
   | 'key_reused'
   | 'in_flight'
   | 'unscoped'

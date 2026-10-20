@@ -376,12 +376,55 @@ describe('withIdempotency', () => {
       await expectResultUnavailable(await s.handler(post('k')));
       await expectResultUnavailable(await s.handler(post('k')));
       expect(s.runs()).toBe(1);
+      expect(s.logs).toHaveLength(1);
+      expect(s.logs[0]).toMatchObject({
+        level: 'warning',
+        properties: {
+          EventName: IdempotencyEventNames.ResponseNotReplayable,
+          Reason: 'too_large',
+          Mode: 'enforce',
+          Source: 'http',
+          KeyHash: expect.any(String),
+        },
+      });
+      expect(s.events.map((e) => e.decision)).toEqual([
+        'reserved',
+        'stored',
+        'result_unavailable',
+        'result_unavailable',
+      ]);
+    });
+
+    it('logs ResponseNotReplayable only after the marker was stored', async () => {
+      let logsAtComplete = -1;
+      const store = new InMemoryIdempotencyStore();
+      const complete = store.complete.bind(store);
+      const s = setup(() => new Response('x'.repeat(10), { status: 201 }), {
+        maxResponseBodyBytes: 4,
+        store: Object.assign(store, {
+          complete: async (...args: Parameters<typeof complete>) => {
+            logsAtComplete = s.logs.length;
+            return complete(...args);
+          },
+        }),
+      });
+      await s.handler(post('k'));
+      expect(logsAtComplete).toBe(0);
       expect(s.logs.map((l) => l.properties.EventName)).toEqual([
-        IdempotencyEventNames.ResponseTooLarge,
         IdempotencyEventNames.ResponseNotReplayable,
       ]);
-      expect(s.logs.every((l) => l.level === 'warning')).toBe(true);
-      expect(s.events.map((e) => e.decision)).toEqual(['reserved', 'stored', 'replay', 'replay']);
+    });
+
+    it('does not log ResponseNotReplayable when the marker could not be stored', async () => {
+      const store = new InMemoryIdempotencyStore();
+      const s = setup(() => new Response('x'.repeat(10), { status: 201 }), {
+        maxResponseBodyBytes: 4,
+        store: Object.assign(store, { complete: async () => false }),
+      });
+      expect((await s.handler(post('k'))).status).toBe(201);
+      expect(s.logs.map((l) => l.properties.EventName)).toEqual([
+        IdempotencyEventNames.ReservationLost,
+      ]);
     });
 
     it('answers 422 KeyReused for another request with the key of a marker', async () => {
@@ -433,15 +476,15 @@ describe('withIdempotency', () => {
     });
 
     it.each([
-      ['an encoded body', { 'content-encoding': 'gzip' }],
-      ['an event stream', { 'content-type': 'text/event-stream' }],
-    ])('stores a marker for a 2xx with %s', async (_name, headers) => {
+      ['an encoded body', { 'content-encoding': 'gzip' }, 'encoded'],
+      ['an event stream', { 'content-type': 'text/event-stream' }, 'event_stream'],
+    ])('stores a marker for a 2xx with %s', async (_name, headers, reason) => {
       const s = setup(() => new Response('x', { status: 201, headers }));
       await s.handler(post('k'));
       await expectResultUnavailable(await s.handler(post('k')));
       expect(s.runs()).toBe(1);
-      expect(s.logs.map((l) => l.properties.EventName)).toEqual([
-        IdempotencyEventNames.ResponseNotReplayable,
+      expect(s.logs.map((l) => [l.properties.EventName, l.properties.Reason])).toEqual([
+        [IdempotencyEventNames.ResponseNotReplayable, reason],
       ]);
     });
 
@@ -724,7 +767,11 @@ describe('withIdempotency', () => {
       expect(second.status).toBe(201);
       expect(await second.text()).toBe('body2');
       expect(s.runs()).toBe(2);
-      expect(s.events.map((e) => e.name)).toContain(IdempotencyEventNames.WouldReplay);
+      expect(s.events.map((e) => [e.decision, e.name])).toContainEqual([
+        'result_unavailable',
+        IdempotencyEventNames.WouldRejectResultUnavailable,
+      ]);
+      expect(s.events.map((e) => e.name)).not.toContain(IdempotencyEventNames.WouldReplay);
     });
   });
 

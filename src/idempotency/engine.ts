@@ -32,7 +32,16 @@ export class IdempotencyReservationLostError extends Error {
 
 /** What to do with the record once the handler has returned. */
 export type IdempotencyCompletion =
-  | { readonly action: 'store'; readonly payload: string; readonly retentionMs: number }
+  | {
+      readonly action: 'store';
+      readonly payload: string;
+      readonly retentionMs: number;
+      /**
+       * A warning logged once the payload was stored (`complete` returned `true`), with the
+       * reason as the `Reason` property.
+       */
+      readonly notice?: { readonly name: string; readonly reason: string } | undefined;
+    }
   | { readonly action: 'release' }
   /** Neither store nor release: the reservation stays in flight until its lease ends. */
   | { readonly action: 'keep' };
@@ -84,6 +93,11 @@ export interface IdempotencyCall<O> {
   readonly run: (signal?: AbortSignal) => Promise<O>;
   /** Decides what happens to the record after the handler returned `output`. */
   readonly complete: (output: O) => IdempotencyCompletion | Promise<IdempotencyCompletion>;
+  /**
+   * Whether a stored payload marks a result that could not be stored. Such a record is answered
+   * with `Idempotency.ResultUnavailable` (decision `result_unavailable`) instead of a replay.
+   */
+  readonly unavailable?: ((payload: string) => boolean) | undefined;
   /** Rebuilds a stored output (`enforce` only). */
   readonly replay: (payload: string) => O | Promise<O>;
   /** Output of a rejected call (`enforce` only). */
@@ -105,6 +119,7 @@ function logEvent(
   level: 'information' | 'warning',
   name: string,
   exception: unknown,
+  properties?: Readonly<Record<string, unknown>>,
 ): void {
   const { logger } = call.settings;
   try {
@@ -117,6 +132,7 @@ function logEvent(
       Target: call.target,
       ...(keyHash === undefined ? {} : { KeyHash: keyHash }),
       ...(exception === undefined ? {} : { Exception: exception }),
+      ...properties,
     });
   } catch {
     // Ignored: logging is best effort.
@@ -148,8 +164,13 @@ class Reporter {
     if (name !== undefined) this.log(warn ? 'warning' : 'information', name, undefined);
   }
 
-  log(level: 'information' | 'warning', name: string, exception: unknown): void {
-    logEvent(this.call, this.mode, this.keyHash, level, name, exception);
+  log(
+    level: 'information' | 'warning',
+    name: string,
+    exception: unknown,
+    properties?: Readonly<Record<string, unknown>>,
+  ): void {
+    logEvent(this.call, this.mode, this.keyHash, level, name, exception, properties);
   }
 }
 
@@ -162,6 +183,12 @@ const conflictEvents: Readonly<
   completed: { decision: 'replay', observeName: IdempotencyEventNames.WouldReplay },
   mismatch: { decision: 'key_reused', observeName: IdempotencyEventNames.WouldRejectKeyReused },
   inFlight: { decision: 'in_flight', observeName: IdempotencyEventNames.WouldRejectInFlight },
+};
+
+/** A completed record whose result could not be stored (see `IdempotencyCall.unavailable`). */
+const unavailableEvent: { decision: IdempotencyDecision; observeName: string } = {
+  decision: 'result_unavailable',
+  observeName: IdempotencyEventNames.WouldRejectResultUnavailable,
 };
 
 /** Outcome of resolving key, scope and fingerprint, before anything is reserved. */
@@ -263,12 +290,18 @@ export async function runIdempotent<O>(
   }
 
   if (reservation.status !== 'reserved') {
-    const conflict = conflictEvents[reservation.status];
+    const conflict =
+      reservation.status === 'completed' && call.unavailable?.(reservation.payload) === true
+        ? unavailableEvent
+        : conflictEvents[reservation.status];
     if (mode === 'observe') {
       reporter.decision(conflict.decision, conflict.observeName);
       return call.run();
     }
     reporter.decision(conflict.decision);
+    if (conflict === unavailableEvent) {
+      return call.reject(IdempotencyErrorCodes.ResultUnavailable);
+    }
     if (reservation.status === 'completed') return call.replay(reservation.payload);
     return call.reject(
       reservation.status === 'mismatch'
@@ -335,8 +368,13 @@ export async function runIdempotent<O>(
         completion.payload,
         completion.retentionMs,
       );
-      if (stored) reporter.decision('stored');
-      else if (lease?.lost !== true) {
+      if (stored) {
+        reporter.decision('stored');
+        const { notice } = completion;
+        if (notice !== undefined) {
+          reporter.log('warning', notice.name, undefined, { Reason: notice.reason });
+        }
+      } else if (lease?.lost !== true) {
         reporter.log('warning', IdempotencyEventNames.ReservationLost, undefined);
       }
     } else if (completion.action === 'release') {

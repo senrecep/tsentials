@@ -203,13 +203,15 @@ async function readBody(response: Response, limit: number): Promise<Uint8Array |
   return bytes;
 }
 
+/** Why a response cannot be stored: the `Reason` of `Idempotency.ResponseNotReplayable`. */
+type UnstorableReason = 'too_large' | 'encoded' | 'event_stream';
+
 /** Encoded or streamed bodies cannot be replayed byte for byte, so they are never stored. */
-function isReplayable(response: Response): boolean {
+function unreplayableReason(response: Response): UnstorableReason | undefined {
   const encoding = response.headers.get('content-encoding')?.trim().toLowerCase();
+  if (encoding !== undefined && encoding !== 'identity') return 'encoded';
   const type = response.headers.get('content-type')?.toLowerCase() ?? '';
-  return (
-    (encoding === undefined || encoding === 'identity') && !type.startsWith('text/event-stream')
-  );
+  return type.startsWith('text/event-stream') ? 'event_stream' : undefined;
 }
 
 function parseStored(payload: string): StoredResponse | undefined {
@@ -281,30 +283,31 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
     .filter((h) => h !== 'set-cookie');
 
   // The handler did its work but the response cannot be stored. A 2xx stores a marker so a
-  // retry gets 409 ResultUnavailable instead of repeating the side effect after the lease; a 4xx
-  // is released; any other status keeps the key in flight until the lease ends.
-  const unstorable = (status: number): IdempotencyCompletion => {
-    if (status >= 400 && status < 500) return RELEASE;
-    if (status < 200 || status >= 300) return KEEP;
-    warn(settings, IdempotencyEventNames.ResponseNotReplayable, namespace);
+  // retry gets 409 ResultUnavailable instead of repeating the side effect after the lease; the
+  // engine logs ResponseNotReplayable once the marker is stored. A 4xx is released; any other
+  // status keeps the key in flight until the lease ends.
+  const unstorable = (status: number, reason: UnstorableReason): IdempotencyCompletion => {
+    if (status < 200 || status >= 300) {
+      if (reason === 'too_large') warn(settings, IdempotencyEventNames.ResponseTooLarge, namespace);
+      return status >= 400 && status < 500 ? RELEASE : KEEP;
+    }
     return {
       action: 'store',
       payload: RESULT_UNAVAILABLE_PAYLOAD,
       retentionMs: settings.retentionMs,
+      notice: { name: IdempotencyEventNames.ResponseNotReplayable, reason },
     };
   };
 
   const complete = async (response: Response): Promise<IdempotencyCompletion> => {
     if (neverStore.has(response.status)) return KEEP;
     if (!shouldStore(response)) return RELEASE;
-    if (!isReplayable(response)) return unstorable(response.status);
+    const reason = unreplayableReason(response);
+    if (reason !== undefined) return unstorable(response.status, reason);
     const body = NULL_BODY_STATUSES.has(response.status)
       ? new Uint8Array(0)
       : await readBody(response, maxBodyBytes);
-    if (body === undefined) {
-      warn(settings, IdempotencyEventNames.ResponseTooLarge, namespace);
-      return unstorable(response.status);
-    }
+    if (body === undefined) return unstorable(response.status, 'too_large');
     const headers: [string, string][] = [];
     for (const name of replayedHeaders) {
       const value = response.headers.get(name);
@@ -351,10 +354,8 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
         return (async () => handler(bound, ...rest))();
       },
       complete,
+      unavailable: (payload) => payload === RESULT_UNAVAILABLE_PAYLOAD,
       replay: (payload) => {
-        if (payload === RESULT_UNAVAILABLE_PAYLOAD) {
-          return rejection(IdempotencyErrorCodes.ResultUnavailable, null);
-        }
         const replayed = replayResponse(payload);
         if (replayed !== undefined) return replayed;
         // Neither replayed nor run again: running it again could repeat the side effect.

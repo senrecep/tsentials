@@ -222,4 +222,69 @@ describe('describeIdempotencyStoreContract', () => {
     );
     for (const c of cases) await c.body();
   });
+
+  describe('a store without extend', () => {
+    const withoutExtend = (clock: ContractClock): IdempotencyStore => {
+      const inner = new InMemoryIdempotencyStore({ clock });
+      return {
+        reserve: (...a) => inner.reserve(...a),
+        complete: (...a) => inner.complete(...a),
+        release: (...a) => inner.release(...a),
+      };
+    };
+    type Body = (this: unknown, ...args: unknown[]) => Promise<void>;
+    const register = () => {
+      const cases: { name: string; body: Body }[] = [];
+      describeIdempotencyStoreContract('NoExtend', withoutExtend, {
+        describe: (_name, body) => body(),
+        it: (name, body) => cases.push({ name, body }),
+      });
+      return cases;
+    };
+    it('skips the extend scenarios through the context argument (vitest, node:test)', async () => {
+      const skipped: string[] = [];
+      for (const c of register()) {
+        await c.body.call(undefined, { skip: () => skipped.push(c.name) });
+      }
+      expect(skipped).toHaveLength(7);
+      expect(skipped).toContain('never revives an expired lease');
+      expect(skipped).not.toContain('reserves a new key with a non-empty token');
+    });
+
+    it('skips them through this (mocha) and stops when skip throws', async () => {
+      const pending = new Error('pending');
+      const skipped: string[] = [];
+      for (const c of register()) {
+        const context = {
+          skip() {
+            skipped.push(c.name);
+            throw pending;
+          },
+        };
+        const outcome = await c.body.call(context).then(
+          () => 'passed',
+          (error: unknown) => error,
+        );
+        expect(outcome).toBe(skipped.includes(c.name) ? pending : 'passed');
+      }
+      expect(skipped).toHaveLength(7);
+    });
+
+    it('passes them on a runner without skip', async () => {
+      for (const c of register()) await c.body.call(undefined);
+      for (const c of register()) await c.body.call({});
+    });
+
+    it('never calls skip for a store with extend', async () => {
+      const cases: { name: string; body: Body }[] = [];
+      describeIdempotencyStoreContract(
+        'WithExtend',
+        (clock) => new InMemoryIdempotencyStore({ clock }),
+        { describe: (_name, body) => body(), it: (name, body) => cases.push({ name, body }) },
+      );
+      const skip = vi.fn();
+      for (const c of cases) await c.body.call({ skip }, { skip });
+      expect(skip).not.toHaveBeenCalled();
+    });
+  });
 });

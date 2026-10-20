@@ -1,7 +1,11 @@
 import { createFakeDateTimeProvider, type DateTimeProvider } from '../time/index.js';
 import type { IdempotencyRecordKey, IdempotencyReservation, IdempotencyStore } from './store.js';
 
-/** The test functions of any runner with a `describe`/`it` API (vitest, jest, mocha, node:test). */
+/**
+ * The test functions of any runner with a `describe`/`it` API (vitest, jest, mocha, node:test).
+ * A scenario that does not apply calls `skip()` on the test context (the first argument, as in
+ * vitest and node:test, or `this`, as in mocha); a runner without one sees it pass.
+ */
 export interface ContractTestApi {
   describe(name: string, body: () => void): void;
   it(name: string, body: () => Promise<void>): void;
@@ -71,7 +75,8 @@ function tokenOf(reservation: IdempotencyReservation, step: string): string {
  * release with token fencing, lease and retention expiry, fingerprint mismatch, isolation by
  * namespace, scope and key, a single winner among parallel reserves, and argument checks.
  * The `extend` scenarios (lease extension with token fencing, no revival of an expired lease,
- * completed records untouched) pass without checking anything when the store has no `extend`.
+ * completed records untouched) are skipped when the store has no `extend`; a runner without a
+ * `skip()` on its test context reports them as passed.
  * Runner-agnostic: pass your runner's `describe` and `it`.
  *
  * ```ts
@@ -92,10 +97,18 @@ export function describeIdempotencyStoreContract(
   const parallelism = options.parallelism ?? 20;
   let counter = 0;
 
-  const scenario = (title: string, body: (ctx: Scenario) => Promise<void>) =>
-    api.it(title, async () => {
+  const scenario = (title: string, body: (ctx: Scenario) => Promise<void>, needsExtend = false) =>
+    // A plain function (not an arrow) so mocha's `this` is the test context. The rest parameter
+    // keeps `length` 0, so no runner treats the body as callback style.
+    api.it(title, async function (this: unknown, ...args: unknown[]) {
       const clock = createFakeDateTimeProvider(new Date('2026-01-01T00:00:00Z'));
       const store = await factory(clock);
+      // The store is only known here, so the check runs inside the test.
+      if (needsExtend && store.extend === undefined) {
+        const context = (args[0] ?? this) as { skip?: () => void } | undefined;
+        context?.skip?.();
+        return;
+      }
       const advance = async (ms: number) => {
         await (options.advance ? options.advance(ms, clock) : clock.advance(ms));
       };
@@ -110,17 +123,20 @@ export function describeIdempotencyStoreContract(
       await body({ store, advance, key });
     });
 
-  // Passes without checks for a store without `extend`, which is optional.
+  // Skipped for a store without `extend`, which is optional.
   const extendScenario = (title: string, body: (ctx: ExtendScenario) => Promise<void>) =>
-    scenario(title, async (ctx) => {
-      const { store } = ctx;
-      if (store.extend === undefined) return;
-      const extend = store.extend;
-      await body({
-        ...ctx,
-        extend: (key, token, leaseMs, signal) => extend.call(store, key, token, leaseMs, signal),
-      });
-    });
+    scenario(
+      title,
+      async (ctx) => {
+        const { store } = ctx;
+        const extend = store.extend as NonNullable<IdempotencyStore['extend']>;
+        await body({
+          ...ctx,
+          extend: (key, token, leaseMs, signal) => extend.call(store, key, token, leaseMs, signal),
+        });
+      },
+      true,
+    );
 
   api.describe(`${name} (idempotency store contract)`, () => {
     scenario('reserves a new key with a non-empty token', async ({ store, key }) => {

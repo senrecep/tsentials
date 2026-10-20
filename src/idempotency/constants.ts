@@ -41,6 +41,8 @@ export const IdempotencyEventNames = {
   WouldRejectKeyReused: 'Idempotency.Observe.WouldRejectKeyReused',
   WouldRejectInFlight: 'Idempotency.Observe.WouldRejectInFlight',
   WouldRejectScopeRequired: 'Idempotency.Observe.WouldRejectScopeRequired',
+  /** `observe` found a key whose result could not be stored; `enforce` would answer `ResultUnavailable`. */
+  WouldRejectResultUnavailable: 'Idempotency.Observe.WouldRejectResultUnavailable',
   /** The key, scope or fingerprint resolver threw in `observe` mode; the handler ran without idempotency. */
   ResolutionFailed: 'Idempotency.Observe.ResolutionFailed',
   UnscopedKeySkipped: 'Idempotency.UnscopedKeySkipped',
@@ -61,11 +63,15 @@ export const IdempotencyEventNames = {
    * in `enforce` the handler's signal aborts with `ReservationLost`.
    */
   LeaseLimitReached: 'Idempotency.LeaseLimitReached',
-  /** An HTTP response was not stored: its body exceeded `maxResponseBodyBytes`. */
+  /**
+   * A non-2xx HTTP response was not stored: its body exceeded `maxResponseBodyBytes`. A 2xx logs
+   * `ResponseNotReplayable` with reason `too_large` instead.
+   */
   ResponseTooLarge: 'Idempotency.ResponseTooLarge',
   /**
-   * A 2xx HTTP response could not be stored (too large, encoded or an event stream); a marker was
-   * stored instead, so a retry gets 409 `Idempotency.ResultUnavailable` for `retentionMs`.
+   * A 2xx HTTP response could not be stored; a marker was stored instead, so a retry gets 409
+   * `Idempotency.ResultUnavailable` for `retentionMs`. Logged once the marker is stored, with the
+   * `Reason` property `too_large`, `encoded` or `event_stream`.
    */
   ResponseNotReplayable: 'Idempotency.ResponseNotReplayable',
   /** A stored HTTP response cannot be read; the call got 500 and the handler did not run. */
