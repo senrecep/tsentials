@@ -232,6 +232,19 @@ export function describeIdempotencyStoreContract(
       );
     });
 
+    scenario('keeps parts that differ only by trailing spaces apart', async ({ store, key }) => {
+      const base = key();
+      await store.reserve({ ...base, scope: 'tenant:a', key: 'k' }, 'fp', lease);
+      tokenOf(
+        await store.reserve({ ...base, scope: 'tenant:a ', key: 'k' }, 'fp', lease),
+        'scope with a trailing space',
+      );
+      tokenOf(
+        await store.reserve({ ...base, scope: 'tenant:a', key: 'k ' }, 'fp', lease),
+        'key with a trailing space',
+      );
+    });
+
     scenario('gives one winner among parallel reserves', async ({ store, key }) => {
       const results = await Promise.all(
         Array.from({ length: parallelism }, () => store.reserve(key(), 'fp', lease)),

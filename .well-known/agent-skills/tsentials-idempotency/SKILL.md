@@ -110,7 +110,7 @@ Scope builders return `undefined` for a missing id. A scope is an `IdempotencySc
 
 - `InMemoryIdempotencyStore`: tests and one process.
 - `RedisIdempotencyStore(redis, { prefix })`: `RedisLike` needs only `eval(script, keys, args)`. ioredis: `client.eval(s, keys.length, ...keys, ...args)`; node-redis: `client.eval(s, { keys, arguments: args })`.
-- Own store: compare keys byte for byte (binary collation); implement `IdempotencyStore` (`reserve`, `complete`, `release` with token compare-and-set) and run `describeIdempotencyStoreContract(name, (clock) => store, { describe, it })`.
+- Own store: compare keys byte for byte (binary no-pad collation: a PAD SPACE one merges `a` and `a `; or key the row by the SHA-256 of `idempotencyStorageKey`); implement `IdempotencyStore` (`reserve`, `complete`, `release` with token compare-and-set) and run `describeIdempotencyStoreContract(name, (clock) => store, { describe, it })`.
 - SQL in the same transaction as the business change: see `docs/IDEMPOTENCY.md` and `examples/idempotency-sql`.
 
 ## Client side
