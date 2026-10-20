@@ -1296,7 +1296,7 @@ The [idempotency guide](./docs/IDEMPOTENCY.md) covers settings, the HTTP respons
 
 ## Design Notes
 
-- **`Result<T>`**: discriminated union, no class, zero runtime overhead
+- **`Result<T>`**: discriminated union, no class or wrapper; each result is a plain object frozen with `Object.freeze`
 - **`ResultAsync<T>`**: implements `PromiseLike<Result<T>>` for direct `await`; monadic bind named `andThen` to avoid thenable collision
 - **`ResultChain<T>`**: fluent sync wrapper; monadic bind named `bind` (not `then`) for the same reason
 - **`Maybe<T>`**: pure functional namespace, all operations are static functions
