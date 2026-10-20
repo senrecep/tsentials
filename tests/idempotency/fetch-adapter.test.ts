@@ -446,8 +446,28 @@ describe('withIdempotency', () => {
   });
 
   describe('scope', () => {
-    it('skips a key without a scope by default and logs it', async () => {
+    it('rejects a key without a scope by default and does not run the handler', async () => {
       const s = setup((_req, run) => created(run), { scope: () => undefined });
+      const response = await s.handler(post('k'));
+      expect(response.status).toBe(400);
+      expect(await problemOf(response)).toMatchObject({
+        code: IdempotencyErrorCodes.ScopeRequired,
+      });
+      expect(s.runs()).toBe(0);
+    });
+
+    it('runs the handler in observe mode with the default and logs the would-reject', async () => {
+      const s = setup((_req, run) => created(run), { scope: () => undefined, mode: 'observe' });
+      expect((await s.handler(post('k'))).status).toBe(201);
+      expect(s.runs()).toBe(1);
+      expect(s.events.map((e) => e.name)).toEqual([IdempotencyEventNames.WouldRejectScopeRequired]);
+    });
+
+    it('skips a key without a scope with skip and logs it', async () => {
+      const s = setup((_req, run) => created(run), {
+        scope: () => undefined,
+        unscopedKeyBehavior: 'skip',
+      });
       await s.handler(post('k'));
       await s.handler(post('k'));
       expect(s.runs()).toBe(2);
@@ -457,11 +477,16 @@ describe('withIdempotency', () => {
       ]);
     });
 
-    it('skips when no scope function is given', async () => {
+    it('rejects when no scope function is given, and skips with skip', async () => {
       const store = new InMemoryIdempotencyStore();
       const reserve = vi.spyOn(store, 'reserve');
       const handler = withIdempotency(async () => new Response('x'), { store });
-      await handler(post('k'));
+      expect((await handler(post('k'))).status).toBe(400);
+      const skipping = withIdempotency(async () => new Response('x'), {
+        store,
+        unscopedKeyBehavior: 'skip',
+      });
+      expect((await skipping(post('k'))).status).toBe(200);
       expect(reserve).not.toHaveBeenCalled();
     });
 
@@ -483,7 +508,10 @@ describe('withIdempotency', () => {
         unscopedKeyBehavior: 'reject',
       });
       expect((await s.handler(post('k'))).status).toBe(400);
-      const skipped = setup((_req, run) => created(run), { scope: async () => null });
+      const skipped = setup((_req, run) => created(run), {
+        scope: async () => null,
+        unscopedKeyBehavior: 'skip',
+      });
       await skipped.handler(post('k'));
       await skipped.handler(post('k'));
       expect(skipped.runs()).toBe(2);
@@ -783,7 +811,9 @@ describe('withIdempotency', () => {
       await handler(post('k'));
       expect(complete.mock.calls[0]?.[4]).toBe(120_000);
 
-      const plain = idem.withIdempotency(async () => new Response('y'));
+      const plain = idem.withIdempotency(async () => new Response('y'), {
+        unscopedKeyBehavior: 'skip',
+      });
       expect(await (await plain(post('k'))).text()).toBe('y');
       expect(() => idem.withIdempotency(async () => new Response(), { profile: 'nope' })).toThrow(
         RangeError,

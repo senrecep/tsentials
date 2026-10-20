@@ -63,7 +63,7 @@ export interface WithIdempotencyOptions extends IdempotencySettings {
   readonly namespace?: string | undefined;
   /** Profile of the `createIdempotency` defaults. */
   readonly profile?: string | undefined;
-  /** What a key without a scope does. Default: `skip` (logs `Idempotency.UnscopedKeySkipped`). */
+  /** What a key without a scope does. Default: `reject` (400 `Idempotency.ScopeRequired`); `skip` logs `Idempotency.UnscopedKeySkipped`. */
   readonly unscopedKeyBehavior?: UnscopedKeyBehavior | undefined;
   /** Guarded methods (case-insensitive). Default: `POST`, `PATCH`. */
   readonly methods?: readonly string[] | undefined;
@@ -284,7 +284,7 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
       source: 'http',
       target: namespace,
       namespace,
-      unscopedKeyBehavior: options.unscopedKeyBehavior ?? 'skip',
+      unscopedKeyBehavior: options.unscopedKeyBehavior ?? 'reject',
       signal: request.signal,
       key: () => {
         const raw = request.headers.get(IDEMPOTENCY_KEY_HEADER);
@@ -332,7 +332,8 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  *   keys → 400 `Idempotency.KeyInvalid`;
  * - same key still running → 409 `Idempotency.InFlight` with `Retry-After`;
  * - same key with another method, path, query or body → 422 `Idempotency.KeyReused`;
- * - key without a scope and `unscopedKeyBehavior: 'reject'` → 400 `Idempotency.ScopeRequired`.
+ * - key without a scope (the default `unscopedKeyBehavior: 'reject'`) → 400 `Idempotency.ScopeRequired`;
+ *   `'skip'` runs the handler without idempotency instead, `'global'` uses one shared scope.
  *
  * What happens to the key after the handler returned:
  * - 2xx and 3xx → stored for `retentionMs`; 5xx → stored for `serverErrorRetentionMs`;

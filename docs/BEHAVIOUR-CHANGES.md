@@ -2,6 +2,10 @@
 
 This guide lists every change that alters the runtime behaviour of an existing tsentials API. Read the 2.0.0 section when upgrading from 1.x and the 1.0.0 section when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](../CHANGELOG.md).
 
+## Behaviour changes in the next release (unreleased)
+
+* **idempotency:** `withIdempotency` now defaults `unscopedKeyBehavior` to `'reject'`: a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) gets 400 `Idempotency.ScopeRequired` in `enforce`; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. It used to run without idempotency (`'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to restore the old behaviour.
+
 ## Behaviour changes in 2.0.1
 
 * **idempotency:** in `observe`, a call whose setup throws (invalid key, out-of-range request `leaseMs` / `retentionMs`, a throwing `settings`, `releaseFailures` or `signal` resolver) logs `Idempotency.Observe.ResolutionFailed` and runs without idempotency instead of failing. In `enforce`, a throwing `signal` resolver of `idempotent()` now rejects the returned promise instead of throwing synchronously; in `off` it is not called.

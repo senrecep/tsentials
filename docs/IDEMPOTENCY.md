@@ -135,8 +135,8 @@ The wrapper guards `POST` and `PATCH` (`methods` changes this) and reads the `Id
 |-----------|----------|
 | No key and `requireKey: true` | 400 `Idempotency.KeyMissing` |
 | Malformed key (not 1–255 printable ASCII without `"` and `\`, or a list) | 400 `Idempotency.KeyInvalid` |
-| Key without scope, `unscopedKeyBehavior: 'reject'` | 400 `Idempotency.ScopeRequired` |
-| Key without scope, `unscopedKeyBehavior: 'skip'` (default) | Handler runs; event `Idempotency.UnscopedKeySkipped` |
+| Key without scope, `unscopedKeyBehavior: 'reject'` (default) | 400 `Idempotency.ScopeRequired` |
+| Key without scope, `unscopedKeyBehavior: 'skip'` | Handler runs; event `Idempotency.UnscopedKeySkipped` |
 | Same key still running | 409 `Idempotency.InFlight` with `Retry-After` |
 | Same key, other method, path, query or body | 422 `Idempotency.KeyReused` |
 | Same key, same request, completed | The stored status, whitelisted headers and body, plus `Idempotency-Replayed: true` |

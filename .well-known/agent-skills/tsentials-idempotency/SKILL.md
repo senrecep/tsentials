@@ -89,7 +89,7 @@ export const POST = withIdempotency(createOrder, {
 |-----------|----------|
 | No key, `requireKey: true` | 400 `Idempotency.KeyMissing` |
 | Malformed key | 400 `Idempotency.KeyInvalid` |
-| Key without scope, `unscopedKeyBehavior: 'reject'` | 400 `Idempotency.ScopeRequired` (default `'skip'` runs the handler) |
+| Key without scope, `unscopedKeyBehavior: 'reject'` (default) | 400 `Idempotency.ScopeRequired` (`'skip'` runs the handler) |
 | Same key running | 409 `Idempotency.InFlight` + `Retry-After` |
 | Same key, other method/path/query/body | 422 `Idempotency.KeyReused` |
 | Same key, completed | stored status, whitelisted headers, body + `Idempotency-Replayed: true` |
