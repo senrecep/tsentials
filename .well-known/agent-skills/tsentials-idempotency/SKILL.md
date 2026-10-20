@@ -73,6 +73,7 @@ createMediator<Requests>({
 await mediator.send('CapturePayment', { orderId, idempotencyKey, idempotencyScope: idempotencyScopes.tenant(tenantId) });
 ```
 
+Fingerprint defaults to the whole request: if it has per-retry fields (`requestedAt`, trace id), return an explicit `fingerprint` of the business fields from `settings`, or retries get 422 `KeyReused`. Fingerprints are not canonicalized (key order, whitespace, number formatting matter): clients resend the identical request.
 Reads `idempotencyKey`, `idempotencyScope`, `idempotencyRetentionMs`, `idempotencyLeaseMs` from the request (or `settings(request, ctx)`). Namespace = request name. A failure of a `transactional: true` request is released.
 
 ## Fetch API handlers
@@ -128,7 +129,7 @@ await ResiliencePolicy.create()
 ## Patterns and pitfalls
 
 - Import from `tsentials/idempotency`, never from the root `tsentials` entry.
-- **Lease rule:** `leaseMs` ≥ the client's total retry and timeout budget, and longer than the slowest run. Otherwise a retry takes the key over and the operation runs twice (`Idempotency.ReservationLost`).
+- **Lease rule:** `leaseMs` ≥ the slowest handler run plus the client's whole retry and timeout budget; the heartbeat keeps a live run alive, but `leaseMs` still bounds how long a crashed run blocks the key. Otherwise a retry takes the key over and the operation runs twice (`Idempotency.ReservationLost`).
 - **Lease extension:** with a store that has the optional `extend` (InMemory, Redis, the SQL example), the lease is extended every `leaseMs / 3` while the handler runs. If `extend` returns `false` or throws, `Idempotency.ReservationLost` is logged and, in `enforce`, the handler's signal aborts with reason name `ReservationLost` (`IdempotencyReservationLostError`): mediator `ctx.signal`, `idempotent({ bindSignal: (signal, cmd) => [{ ...cmd, signal }] })`, and `withIdempotency` passes a rebuilt `Request` whose `signal` aborts (its body moved from the original). `observe` only logs.
 - Take the scope from the authenticated principal, never from the request body. Mediator `idempotencyKey`/`idempotencyScope` fields are trusted input.
 - One key per logical operation: create it when the user starts the operation, reuse it on every retry, never reuse it for another payload (422 `KeyReused` is final).

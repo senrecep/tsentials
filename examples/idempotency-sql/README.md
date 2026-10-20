@@ -10,8 +10,20 @@ npm test
 ```
 
 `DATABASE_URL` overrides `postgres://postgres:postgres@localhost:5432/postgres`. The table is in
-`schema.sql`; the test creates it. Time comes from the store's `clock` option, so the suite needs no
-real waits.
+`schema.sql`; the test creates it. The store reads time from the database, so the suite uses short
+leases and waits in real time (a few seconds in total).
+
+## Database time
+
+Every lease and retention comparison uses the database clock, `(extract(epoch from clock_timestamp()) * 1000)::bigint`.
+Application servers with skewed clocks therefore agree on when a lease ends. `clock_timestamp()` is
+used instead of `now()` because `now()` is frozen for the whole transaction: a store that shares a
+long business transaction would compare against stale time. `leaseMs` and `retentionMs` stay query
+parameters.
+
+When the store shares a transaction's client, its queries run one at a time on that connection, so
+a heartbeat `extend` can wait behind a slow business query. For long handlers prefer a separate
+pool or client for the store (see Observe mode for the trade-off).
 
 ## Use in a transaction
 

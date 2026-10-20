@@ -12,6 +12,10 @@ function assertPositive(name, value) {
   }
 }
 
+// Database time in epoch milliseconds. clock_timestamp(), not now(): now() is frozen at the start
+// of a transaction, so a store that shares a long business transaction would see stale time.
+const DB_NOW_MS = '(extract(epoch from clock_timestamp()) * 1000)::bigint';
+
 /**
  * IdempotencyStore on PostgreSQL (table: see schema.sql).
  *
@@ -20,23 +24,21 @@ function assertPositive(name, value) {
  * or rolls back together with the business work; with a pool each call autocommits.
  *
  * The reservation is a single atomic statement (`INSERT ... ON CONFLICT`), so parallel reserves
- * have exactly one winner; classifying a conflict re-reads the row. All time comparisons use
- * `clock`, never the database clock, so keep the application servers' clocks in sync.
+ * have exactly one winner; classifying a conflict re-reads the row. All time comparisons use the
+ * database clock (`clock_timestamp()`), so skew between application servers does not matter.
  *
  * @implements {import('tsentials/idempotency').IdempotencyStore}
  */
 export class PostgresIdempotencyStore {
   #client;
-  #clock;
   #tokenFactory;
 
   /**
    * @param {{ query(text: string, values?: unknown[]): Promise<{ rows: any[], rowCount: number | null }> }} client
-   * @param {{ clock?: { utcNowMs(): number }, tokenFactory?: () => string }} [options]
+   * @param {{ tokenFactory?: () => string }} [options]
    */
-  constructor(client, { clock, tokenFactory } = {}) {
+  constructor(client, { tokenFactory } = {}) {
     this.#client = client;
-    this.#clock = clock ?? { utcNowMs: () => Date.now() };
     this.#tokenFactory = tokenFactory ?? (() => randomUUID());
   }
 
@@ -44,24 +46,23 @@ export class PostgresIdempotencyStore {
     signal?.throwIfAborted();
     assertNonEmpty('fingerprint', fingerprint);
     assertPositive('leaseMs', leaseMs);
-    const now = this.#clock.utcNowMs();
     const token = this.#tokenFactory();
     for (let attempt = 0; attempt < 3; attempt++) {
       const inserted = await this.#client.query(
         `INSERT INTO idempotency_records AS r (namespace, scope, key, token, fingerprint, payload, expires_at)
-         VALUES ($1, $2, $3, $4, $5, NULL, $6)
+         VALUES ($1, $2, $3, $4, $5, NULL, ${DB_NOW_MS} + $6::bigint)
          ON CONFLICT (namespace, scope, key) DO UPDATE
            SET token = excluded.token, fingerprint = excluded.fingerprint,
                payload = NULL, expires_at = excluded.expires_at
-           WHERE r.expires_at <= $7
+           WHERE r.expires_at <= ${DB_NOW_MS}
          RETURNING token`,
-        [key.namespace, key.scope, key.key, token, fingerprint, now + Math.ceil(leaseMs), now],
+        [key.namespace, key.scope, key.key, token, fingerprint, Math.ceil(leaseMs)],
       );
       if (inserted.rows.length > 0) return { status: 'reserved', token: inserted.rows[0].token };
       const live = await this.#client.query(
         `SELECT fingerprint, payload FROM idempotency_records
-         WHERE namespace = $1 AND scope = $2 AND key = $3 AND expires_at > $4`,
-        [key.namespace, key.scope, key.key, now],
+         WHERE namespace = $1 AND scope = $2 AND key = $3 AND expires_at > ${DB_NOW_MS}`,
+        [key.namespace, key.scope, key.key],
       );
       const row = live.rows[0];
       if (row === undefined) continue; // removed between the two statements: try again
@@ -79,7 +80,7 @@ export class PostgresIdempotencyStore {
     assertPositive('retentionMs', retentionMs);
     const result = await this.#client.query(
       `INSERT INTO idempotency_records AS r (namespace, scope, key, token, fingerprint, payload, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       VALUES ($1, $2, $3, $4, $5, $6, ${DB_NOW_MS} + $7::bigint)
        ON CONFLICT (namespace, scope, key) DO UPDATE
          SET fingerprint = excluded.fingerprint, payload = excluded.payload,
              expires_at = excluded.expires_at
@@ -92,7 +93,7 @@ export class PostgresIdempotencyStore {
         token,
         fingerprint,
         payload,
-        this.#clock.utcNowMs() + Math.ceil(retentionMs),
+        Math.ceil(retentionMs),
       ],
     );
     return result.rows.length === 1;
@@ -112,13 +113,12 @@ export class PostgresIdempotencyStore {
     signal?.throwIfAborted();
     assertNonEmpty('token', token);
     assertPositive('leaseMs', leaseMs);
-    const now = this.#clock.utcNowMs();
     const result = await this.#client.query(
-      `UPDATE idempotency_records SET expires_at = $5
+      `UPDATE idempotency_records SET expires_at = ${DB_NOW_MS} + $5::bigint
        WHERE namespace = $1 AND scope = $2 AND key = $3 AND token = $4
-         AND payload IS NULL AND expires_at > $6
+         AND payload IS NULL AND expires_at > ${DB_NOW_MS}
        RETURNING 1`,
-      [key.namespace, key.scope, key.key, token, now + Math.ceil(leaseMs), now],
+      [key.namespace, key.scope, key.key, token, Math.ceil(leaseMs)],
     );
     return result.rows.length === 1;
   }

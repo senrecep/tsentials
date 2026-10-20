@@ -87,6 +87,7 @@ await capture(cmd); // the same Result, capturePayment does not run again
 
 - A running call with the same key → Conflict `Idempotency.InFlight` (retryable).
 - The same key with other arguments → Validation `Idempotency.KeyReused`. The fingerprint is the arguments by default; `fingerprint: (cmd) => cmd.amount` narrows it.
+- Fingerprints are deliberately not canonicalized: key order, whitespace and number formatting change the fingerprint, the same model as Stripe, so a client must resend the identical request.
 - A key without a scope → Validation `Idempotency.ScopeRequired`. `unscopedKeyBehavior: 'skip'` runs without idempotency instead, and `'global'` uses one shared scope.
 - Successes are kept for `retentionMs`. Failures whose first error is `Unexpected` are kept for `serverErrorRetentionMs`, other failures for `retentionMs`. `storeFailures: false` releases every failure so a retry runs again.
 - A function that throws or is aborted keeps the key in flight until the lease ends, and the error propagates. A store that throws rejects the call in `enforce` mode and is logged in `observe` mode.
@@ -113,6 +114,19 @@ await mediator.send('CapturePayment', { orderId, idempotencyKey, idempotencyScop
 - Place it after validation and before lock and transaction behaviors.
 - By default it reads `idempotencyKey`, `idempotencyScope`, `idempotencyRetentionMs` and `idempotencyLeaseMs` from the request. These fields are trusted input: set them in server code (the scope from the authenticated principal), never copy them from a client payload. A `settings(request, context)` function can read them from somewhere else.
 - The namespace is the request name. A missing scope gives `Idempotency.ScopeRequired`, because the key comes from code and a missing scope is a bug.
+- The fingerprint is the whole request by default. A request that carries fields that change on every retry (`requestedAt`, a trace id, a generated timestamp) gets a different fingerprint each time and a retry fails with 422 `Idempotency.KeyReused`. Return an explicit `fingerprint` from `settings` that covers only the business fields:
+
+  ```ts
+  idempotencyBehavior({
+    store,
+    settings: (request: CapturePaymentRequest) => ({
+      key: request.idempotencyKey,
+      scope: request.idempotencyScope,
+      fingerprint: { orderId: request.orderId, amount: request.amount }, // not requestedAt or traceId
+    }),
+  });
+  ```
+
 - A failure of a request with `transactional: true` is released, since its work rolled back; other failures are stored.
 - With a store that has `extend`, the handler's `ctx.signal` in `enforce` is a new signal that aborts with the caller's reason or when the reservation is lost (see [Lease extension](#lease-extension)).
 
@@ -231,7 +245,7 @@ await policy.execute((signal) => builder.signal(signal).send<Order>());
 
 ## Lease, retention and the retry budget
 
-**Rule: `leaseMs` must be at least the client's total retry and timeout budget, and longer than the slowest run of the operation.**
+**Rule: `leaseMs` must be at least the slowest run of the handler plus the client's whole retry and timeout budget.**
 
 The lease is how long a reservation blocks other calls. When it ends while the first call is still running, the next retry takes the key over and the operation runs twice; the first call's `complete` then fails (event `Idempotency.ReservationLost`). So:
 
@@ -243,7 +257,7 @@ A crash or a 503/504 keeps the key in flight until the lease ends. A long lease 
 
 ### Lease extension
 
-When the store has `extend` (the in-memory and Redis stores do, and so does the SQL example), the engine extends the lease while the handler runs: every `leaseMs / 3` (at least 1 ms) it calls `extend(key, token, leaseMs)`, and the next beat starts only after the previous one settled. So a slow handler keeps its key in flight past `leaseMs`, while a crashed process stops beating and its key frees up one lease after the last beat. The client-side rule above still holds: the lease must cover the client's retry and timeout budget, since the lease is also how long a retry after a crash waits.
+When the store has `extend` (the in-memory and Redis stores do, and so does the SQL example), the engine extends the lease while the handler runs: every `leaseMs / 3` (at least 1 ms) it calls `extend(key, token, leaseMs)`, and the next beat starts only after the previous one settled. So a slow handler keeps its key in flight past `leaseMs`, while a crashed process stops beating and its key frees up one lease after the last beat. With such a store the heartbeat keeps a live run's lease alive, but `leaseMs` still bounds how long a crashed run blocks the key and how quickly a stalled heartbeat is detected. The client-side rule above still holds: the lease must cover the client's retry and timeout budget, since the lease is also how long a retry after a crash waits.
 
 The heartbeat starts after a reservation and stops when the handler settles or the caller aborts. Its timer is `unref`ed, so it never keeps a process alive. When `extend` returns `false` (the token no longer holds the record) or throws, the engine logs `Idempotency.ReservationLost` (with the error, if any) and stops beating:
 
@@ -319,25 +333,25 @@ CREATE TABLE idempotency_records (
   PRIMARY KEY (namespace, scope, key)
 );
 CREATE INDEX idempotency_records_expires_at_idx ON idempotency_records (expires_at);
--- Periodic cleanup; the store already ignores and replaces expired rows:
--- DELETE FROM idempotency_records WHERE expires_at <= $1;
+-- Periodic cleanup with the database clock; the store already ignores and replaces expired rows:
+-- DELETE FROM idempotency_records WHERE expires_at <= (extract(epoch from clock_timestamp()) * 1000)::bigint;
 ```
 
-The reservation is a single atomic statement, so parallel reserves have exactly one winner; classifying a conflict (mismatch, completed, in flight) re-reads the row. The example compares `expires_at` with the application clock, so keep the application servers' clocks in sync (NTP). The statements:
+The reservation is a single atomic statement, so parallel reserves have exactly one winner; classifying a conflict (mismatch, completed, in flight) re-reads the row. The example computes and compares `expires_at` with the database clock, `(extract(epoch from clock_timestamp()) * 1000)::bigint`, so skew between application servers does not matter. It uses `clock_timestamp()`, not `now()`, because `now()` is frozen for the whole transaction and a store that shares a long business transaction would see stale time. Such a store runs its queries on the transaction's connection one at a time, so a heartbeat `extend` can wait behind a slow business query; prefer a separate pool or client for the store. `leaseMs` and `retentionMs` are parameters. The statements:
 
 ```sql
 -- reserve: insert, or take over an expired record. No row returned → read the live record
 -- (other fingerprint → mismatch, payload → completed, otherwise in flight).
 INSERT INTO idempotency_records AS r (namespace, scope, key, token, fingerprint, payload, expires_at)
-VALUES ($1, $2, $3, $4, $5, NULL, $6)
+VALUES ($1, $2, $3, $4, $5, NULL, (extract(epoch from clock_timestamp()) * 1000)::bigint + $6::bigint)
 ON CONFLICT (namespace, scope, key) DO UPDATE
   SET token = excluded.token, fingerprint = excluded.fingerprint, payload = NULL, expires_at = excluded.expires_at
-  WHERE r.expires_at <= $7
+  WHERE r.expires_at <= (extract(epoch from clock_timestamp()) * 1000)::bigint
 RETURNING token;
 
 -- complete: store the payload only while our reservation holds (or after it was swept).
 INSERT INTO idempotency_records AS r (namespace, scope, key, token, fingerprint, payload, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES ($1, $2, $3, $4, $5, $6, (extract(epoch from clock_timestamp()) * 1000)::bigint + $7::bigint)
 ON CONFLICT (namespace, scope, key) DO UPDATE
   SET fingerprint = excluded.fingerprint, payload = excluded.payload, expires_at = excluded.expires_at
   WHERE r.token = $4 AND r.payload IS NULL
@@ -347,10 +361,10 @@ RETURNING 1;
 DELETE FROM idempotency_records
 WHERE namespace = $1 AND scope = $2 AND key = $3 AND token = $4 AND payload IS NULL;
 
--- extend: move the lease end of our live, in-flight reservation ($5 = now + leaseMs, $6 = now).
-UPDATE idempotency_records SET expires_at = $5
+-- extend: move the lease end of our live, in-flight reservation ($5 = leaseMs).
+UPDATE idempotency_records SET expires_at = (extract(epoch from clock_timestamp()) * 1000)::bigint + $5::bigint
 WHERE namespace = $1 AND scope = $2 AND key = $3 AND token = $4
-  AND payload IS NULL AND expires_at > $6
+  AND payload IS NULL AND expires_at > (extract(epoch from clock_timestamp()) * 1000)::bigint
 RETURNING 1;
 ```
 

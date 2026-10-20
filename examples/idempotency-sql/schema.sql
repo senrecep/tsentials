@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS idempotency_records (
 CREATE INDEX IF NOT EXISTS idempotency_records_expires_at_idx
   ON idempotency_records (expires_at);
 
--- Cleanup (run periodically; $1 = current epoch milliseconds). Expired rows are already
--- ignored and replaced by the store, so this only reclaims space:
--- DELETE FROM idempotency_records WHERE expires_at <= $1;
+-- Cleanup (run periodically). Expired rows are already ignored and replaced by the store, so
+-- this only reclaims space. It uses the database clock, like the store:
+-- DELETE FROM idempotency_records
+-- WHERE expires_at <= (extract(epoch from clock_timestamp()) * 1000)::bigint;

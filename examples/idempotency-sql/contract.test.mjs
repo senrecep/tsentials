@@ -16,9 +16,14 @@ before(async () => {
 });
 after(() => pool.end());
 
-// The store reads the suite's fake clock, so no scenario waits in real time.
+// The store uses the database clock, so the suite waits in real time with short leases.
 describeIdempotencyStoreContract(
   'PostgresIdempotencyStore (pg)',
-  (clock) => new PostgresIdempotencyStore(pool, { clock }),
+  () => new PostgresIdempotencyStore(pool),
   { describe, it },
+  {
+    leaseMs: 100,
+    retentionMs: 300,
+    advance: (ms) => new Promise((resolve) => setTimeout(resolve, ms + 50)),
+  },
 );
