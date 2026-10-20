@@ -157,7 +157,7 @@ The wrapper guards `POST` and `PATCH` (`methods` changes this) and reads the `Id
 | Same key, other method, path, query or body | 422 `Idempotency.KeyReused` |
 | Same key, same request, completed with a 2xx that could not be stored | 409 `Idempotency.ResultUnavailable` without `Retry-After`; the handler does not run |
 | Same key, same request, completed | The stored status, whitelisted headers and body, plus `Idempotency-Replayed: true` |
-| The reservation was lost while the handler ran and the handler threw the abort of its `bindRequest` signal (`enforce`) | 503 `Idempotency.ReservationLost` with `Retry-After`; the key is released, so a retry runs the handler again |
+| The reservation was lost while the handler ran and the handler threw an abort error after the loss, such as the abort of its `bindRequest` signal (`enforce`) | 503 `Idempotency.ReservationLost` with `Retry-After`; the key is released, so a retry runs the handler again |
 
 Errors are `application/problem+json` bodies `{ title, status, detail, code }`. The `code` is the contract, so clients classify on it.
 

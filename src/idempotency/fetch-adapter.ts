@@ -402,7 +402,7 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  *   is released, any other status is kept in flight until the lease ends;
  * - the handler throws → kept in flight until the lease ends; when it threw because the
  *   reservation was lost (see above) the key is released instead;
- * - a 5xx that would be stored, returned after a lost reservation (`enforce`) → released.
+ * - an error response (status 400 or above) that would be stored, returned after a lost reservation (`enforce`) → released.
  *
  * With a store that has `extend` (the built-in stores do), the lease is extended while the
  * handler runs. The handler gets the original request; to let it observe a lost reservation,
