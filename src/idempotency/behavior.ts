@@ -177,6 +177,7 @@ export function makeIdempotencyBehavior(
             fingerprintOf('fingerprint' in requestSettings ? requestSettings.fingerprint : request),
           // A lease signal replaces the context signal for the rest of the pipeline.
           run: async (signal) => (signal === undefined ? next() : next(undefined, signal)),
+          receivesSignal: true,
           complete: (result) => resultCompletion(result, policy, settings),
           replay: (payload) => replayResult<TRes>(payload, serializer),
           reject: (code) =>

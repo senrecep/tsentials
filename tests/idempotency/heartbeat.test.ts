@@ -50,6 +50,8 @@ function harness(settings: IdempotencySettings) {
     complete: (output) => ({ action: 'store', payload: String(output), retentionMs: 10_000 }),
     replay: (payload) => `replay:${payload}` as O,
     reject: (code) => `reject:${code}` as O,
+    // These handlers take the signal `run` hands them, like a bound handler.
+    receivesSignal: true,
     ...overrides,
   });
   const lostLogs = () => logs.filter((l) => l.name === IdempotencyEventNames.ReservationLost);
@@ -131,6 +133,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('runIdempotent: lease heartbeat', () => {
@@ -617,6 +620,89 @@ describe('runIdempotent: lease heartbeat', () => {
     expect(h.lostLogs()).toHaveLength(1);
   });
 
+  it('rethrows an abort-like error after a lost lease when the handler did not receive the signal', async () => {
+    const { store } = storeWith(async () => false);
+    const h = harness({ store });
+    const handler = started(
+      () =>
+        new Promise<string>((_resolve, reject) => {
+          setTimeout(() => reject(new DOMException('t', 'TimeoutError')), 200);
+        }),
+    );
+    const result = runIdempotent(h.call(handler.run, { receivesSignal: false }));
+    const rejected = expect(result).rejects.toThrow('t');
+    await handler.started;
+    await vi.advanceTimersByTimeAsync(200);
+    await rejected;
+    await expect(result).rejects.toBeInstanceOf(DOMException);
+    expect(h.events.map((e) => e.decision)).toEqual(['reserved']);
+    expect(h.lostLogs()).toHaveLength(1);
+  });
+
+  it('still converts the lease reason after a lost lease when the handler did not receive the signal', async () => {
+    const { store } = storeWith(async () => false);
+    const h = harness({ store });
+    const g = gate();
+    const result = runIdempotent(h.call(g.run, { receivesSignal: false }));
+    await g.started;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await result).toBe(`reject:${IdempotencyErrorCodes.ReservationLost}`);
+    expect(h.events.map((e) => e.decision)).toEqual(['reserved', 'released']);
+  });
+
+  it('stores a failure output after a lost lease when the handler did not receive the signal', async () => {
+    const { store } = storeWith(async () => false);
+    const h = harness({ store });
+    const handler = started(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return 'failed';
+    });
+    const result = runIdempotent(
+      h.call(handler.run, {
+        receivesSignal: false,
+        complete: (output) => ({
+          action: 'store',
+          payload: output,
+          retentionMs: 10,
+          failure: true,
+        }),
+      }),
+    );
+    await handler.started;
+    await vi.advanceTimersByTimeAsync(200);
+    expect(await result).toBe('failed');
+    expect(h.events.map((e) => e.decision)).toEqual(['reserved', 'stored']);
+  });
+
+  it('logs CompleteFailed when releasing a failure output after a lost lease throws', async () => {
+    const { store } = storeWith(async () => false);
+    store.release = async () => {
+      throw new Error('release down');
+    };
+    const h = harness({ store });
+    const handler = started(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return 'failed';
+    });
+    const result = runIdempotent(
+      h.call(handler.run, {
+        complete: (output) => ({
+          action: 'store',
+          payload: output,
+          retentionMs: 10,
+          failure: true,
+        }),
+      }),
+    );
+    await handler.started;
+    await vi.advanceTimersByTimeAsync(200);
+    expect(await result).toBe('failed');
+    expect(h.events.map((e) => e.decision)).toEqual(['reserved']);
+    const failed = h.logs.filter((l) => l.name === IdempotencyEventNames.CompleteFailed);
+    expect(failed).toHaveLength(1);
+    expect((failed[0]?.exception as Error).message).toBe('release down');
+  });
+
   it('stores a success output after a lost lease (token-fenced)', async () => {
     const { store } = storeWith(async () => false);
     const h = harness({ store });
@@ -706,7 +792,7 @@ describe('runIdempotent: lease heartbeat', () => {
         ),
       ),
     ).rejects.toThrow(TypeError);
-    any.mockRestore();
+    expect(any).toHaveBeenCalled();
     expect(ran).toBe(false);
     expect(h.events.map((e) => e.decision)).toEqual(['reserved', 'released']);
     expect(vi.getTimerCount()).toBe(0);

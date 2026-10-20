@@ -354,6 +354,7 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
             : options.bindRequest(request, signal);
         return (async () => handler(bound, ...rest))();
       },
+      receivesSignal: options.bindRequest !== undefined,
       complete,
       unavailable: (payload) => payload === RESULT_UNAVAILABLE_PAYLOAD,
       replay: (payload) => {
@@ -387,11 +388,13 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  * - same key completed with a 2xx that could not be stored → 409 `Idempotency.ResultUnavailable`
  *   without `Retry-After` (never retried; the handler does not run again);
  * - same key with another method, path, query or body → 422 `Idempotency.KeyReused`;
- * - key without a scope (the default `unscopedKeyBehavior: 'reject'`) → 400 `Idempotency.ScopeRequired`;
- *   `'skip'` runs the handler without idempotency instead, `'global'` uses one shared scope;
+ * - key without a scope (the default `unscopedKeyBehavior: 'reject'`) → 400
+ *   `Idempotency.ScopeRequired`; `'skip'` runs the handler without idempotency instead,
+ *   `'global'` uses one shared scope;
  * - the reservation was lost while the handler ran and the handler then threw the lease signal's
- *   reason or an abort-like error (`enforce`, no caller abort) → 503
- *   `Idempotency.ReservationLost` with `Retry-After`; any other error is rethrown.
+ *   reason, or an abort-like error when it got the signal through `bindRequest` (`enforce`, no
+ *   caller abort) → 503 `Idempotency.ReservationLost` with `Retry-After`; any other error is
+ *   rethrown.
  *
  * What happens to the key after the handler returned:
  * - 2xx and 3xx → stored for `retentionMs`; 5xx → stored for `serverErrorRetentionMs`;
@@ -402,7 +405,9 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  *   is released, any other status is kept in flight until the lease ends;
  * - the handler throws → kept in flight until the lease ends; when it threw because the
  *   reservation was lost (see above) the key is released instead;
- * - an error response (status 400 or above) that would be stored, returned after a lost reservation (`enforce`) → released.
+ * - an error response (status 400 or above) that would be stored, returned after a lost
+ *   reservation (`enforce`, with `bindRequest` only) → released; without `bindRequest` the
+ *   handler never saw the loss, so the response is stored as usual.
  *
  * With a store that has `extend` (the built-in stores do), the lease is extended while the
  * handler runs. The handler gets the original request; to let it observe a lost reservation,

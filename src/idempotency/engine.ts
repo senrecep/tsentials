@@ -99,6 +99,12 @@ export interface IdempotencyCall<O> {
    * and is rethrown, a rejection is the handler's.
    */
   readonly run: (signal?: AbortSignal) => Promise<O>;
+  /**
+   * Whether `run` hands its signal to the handler. Only then can an abort-like error or a
+   * failure output after a lost lease be blamed on the loss; otherwise only an error that is the
+   * lease signal's own reason is.
+   */
+  readonly receivesSignal?: boolean | undefined;
   /** Decides what happens to the record after the handler returned `output`. */
   readonly complete: (output: O) => IdempotencyCompletion | Promise<IdempotencyCompletion>;
   /**
@@ -354,9 +360,15 @@ export async function runIdempotent<O>(
     output = await pending;
   } catch (error) {
     lease?.stop();
-    // Only an error the lease signal can explain (its reason, or abort-like once it aborted) is
-    // about the lost lease; any other error is the handler's and is rethrown as is.
-    if (lease?.lost === true && isCallerAbort(error, lease.signal)) {
+    // Only an error the lease signal can explain is about the lost lease: its own reason, or an
+    // abort-like error from a handler that received the signal. Any other error is the
+    // handler's and is rethrown as is.
+    if (
+      lease?.lost === true &&
+      lease.signal !== undefined &&
+      (error === lease.signal.reason ||
+        (call.receivesSignal === true && isCallerAbort(error, lease.signal)))
+    ) {
       // A caller abort still rejects with the caller's reason, even when the lease went first.
       if (call.signal?.aborted === true) throw call.signal.reason;
       // The reservation is gone, so the outcome cannot be recorded: release what may be left of
@@ -369,14 +381,17 @@ export async function runIdempotent<O>(
   lease?.stop();
   try {
     const completion = await call.complete(output);
-    // Only `enforce` aborts the handler's signal, so only there can the loss cause a failure.
+    // Only `enforce` aborts the handler's signal, so only there, and only for a handler that
+    // received it, can the loss cause a failure.
     const lostFailure =
       mode === 'enforce' &&
+      call.receivesSignal === true &&
       lease?.lost === true &&
       completion.action === 'store' &&
       completion.failure === true;
     if (lostFailure) {
-      await releaseQuietly();
+      // A throw here is logged as CompleteFailed below, like any other release.
+      if (await store.release(recordKey, token)) reporter.decision('released');
     } else if (completion.action === 'store') {
       const stored = await store.complete(
         recordKey,

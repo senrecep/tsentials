@@ -95,6 +95,7 @@ export function makeIdempotent<A extends readonly unknown[], T>(
               : options.bindSignal(signal, ...args);
           return (async () => fn(...bound))();
         },
+        receivesSignal: options.bindSignal !== undefined,
         complete: (result) => resultCompletion(result, policy, settings),
         replay: (payload) => replayResult<T>(payload, policy.serializer),
         reject: (code) => Result.failure<T>(idempotencyErrors.forCode(code, settings.retryAfterMs)),

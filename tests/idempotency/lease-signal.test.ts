@@ -97,6 +97,15 @@ describe('lease signal: mediator', () => {
     expect(again).toEqual(Result.success('again'));
   });
 
+  it('answers ReservationLost when the handler throws an abort-like error after the loss', async () => {
+    const send = mediator(store('lost'), async (signal) => {
+      await aborted(signal);
+      throw new DOMException('t', 'TimeoutError');
+    });
+    const result = await send.send('Capture', request);
+    expect(Result.firstError(result)?.code).toBe(IdempotencyErrorCodes.ReservationLost);
+  });
+
   it('still rejects with the caller reason when the caller aborts', async () => {
     const controller = new AbortController();
     const send = mediator(
@@ -184,6 +193,17 @@ describe('lease signal: idempotent', () => {
       options(store('lost')),
     );
     await expect(capture({ orderId: 'o1' })).rejects.toThrow('db');
+  });
+
+  it('rethrows an abort-like error after the loss without bindSignal', async () => {
+    const capture = idempotent(
+      async (_cmd: Cmd) => {
+        await afterLoss();
+        throw new DOMException('t', 'TimeoutError');
+      },
+      options(store('lost')),
+    );
+    await expect(capture({ orderId: 'o1' })).rejects.toMatchObject({ name: 'TimeoutError' });
   });
 
   it('releases a failure returned after the loss, so a retry runs again', async () => {
@@ -320,6 +340,35 @@ describe('lease signal: withIdempotency', () => {
     });
     await expect(unbound(post())).rejects.toThrow('db');
     await expect(wrap(store('lost'), failing)(post())).rejects.toThrow('db');
+  });
+
+  it('rethrows an abort-like error after the loss without bindRequest', async () => {
+    const unbound = withIdempotency(
+      async () => {
+        await afterLoss();
+        throw new DOMException('t', 'TimeoutError');
+      },
+      { store: store('lost'), leaseMs: LEASE, scope: () => idempotencyScopes.tenant('1') },
+    );
+    await expect(unbound(post())).rejects.toMatchObject({ name: 'TimeoutError' });
+  });
+
+  it('stores a 500 returned after the loss without bindRequest, so a retry replays it', async () => {
+    const s = store('lost');
+    let runs = 0;
+    const unbound = withIdempotency(
+      async () => {
+        runs++;
+        await afterLoss();
+        return new Response('failed', { status: 500 });
+      },
+      { store: s, leaseMs: LEASE, scope: () => idempotencyScopes.tenant('1') },
+    );
+    expect((await unbound(post())).status).toBe(500);
+    const retry = await unbound(post());
+    expect(retry.status).toBe(500);
+    expect(await retry.text()).toBe('failed');
+    expect(runs).toBe(1);
   });
 
   it('releases a 500 returned after the loss, so a retry runs again', async () => {
