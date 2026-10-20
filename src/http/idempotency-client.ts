@@ -58,10 +58,11 @@ const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([408, 429, 503, 504]);
  * 2. A replayed response (`Idempotency-Replayed: true`) → not retried, it will not change.
  * 3. No response (network error, timeout: no `httpStatus` metadata, type Unexpected) → retried.
  *    A response whose body cannot be read, parsed or finished before the timeout carries
- *    `httpStatus`, so rules 4–6 apply to it.
+ *    `httpStatus`, so rules 4 to 7 apply to it.
  * 4. 409 `Idempotency.InFlight` → retried (after `Retry-After`).
- * 5. 408, 429, 503, 504 → retried.
- * 6. Anything else, 500 and 502 included → not retried.
+ * 5. 409 `Idempotency.ResultUnavailable`, or any other 409 → not retried.
+ * 6. 408, 429, 503, 504 → retried.
+ * 7. Anything else, 500 and 502 included → not retried.
  *
  * ```ts
  * const init = withIdempotencyKey({ method: 'POST', body });

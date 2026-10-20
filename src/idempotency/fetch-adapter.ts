@@ -76,8 +76,9 @@ export interface WithIdempotencyOptions extends IdempotencySettings {
   /** Responses that are neither stored nor released. Default: 503, 504. */
   readonly neverStoreStatuses?: readonly number[] | undefined;
   /**
-   * A larger response is sent unchanged and not stored; its key stays in flight until the lease
-   * ends (a 4xx is released). Default: 1 MiB.
+   * A larger response is sent unchanged and not stored. For a 2xx a marker is stored instead, so
+   * a retry gets 409 `Idempotency.ResultUnavailable`; a 4xx is released; any other status stays
+   * in flight until the lease ends. Default: 1 MiB.
    */
   readonly maxResponseBodyBytes?: number | undefined;
   /** Response headers stored with the body. Default: {@link DEFAULT_REPLAYED_HEADERS}. */
@@ -92,6 +93,12 @@ interface StoredResponse {
 
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
+/**
+ * Stored instead of a 2xx response that cannot be stored. It has no numeric `status`, so it can
+ * never be read as a stored response.
+ */
+const RESULT_UNAVAILABLE_PAYLOAD = '{"tsentials":"idempotency.result-unavailable","v":1}';
+
 const KEEP: IdempotencyCompletion = { action: 'keep' };
 const RELEASE: IdempotencyCompletion = { action: 'release' };
 
@@ -101,6 +108,7 @@ const rejections: Readonly<Record<IdempotencyErrorCode, { status: number; title:
   [IdempotencyErrorCodes.KeyMissing]: { status: 400, title: 'Missing idempotency key' },
   [IdempotencyErrorCodes.KeyInvalid]: { status: 400, title: 'Invalid idempotency key' },
   [IdempotencyErrorCodes.ScopeRequired]: { status: 400, title: 'Idempotency scope required' },
+  [IdempotencyErrorCodes.ResultUnavailable]: { status: 409, title: 'Result unavailable' },
 };
 
 function positiveInteger(name: string, value: number): number {
@@ -250,19 +258,30 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
     .map((h) => h.toLowerCase())
     .filter((h) => h !== 'set-cookie');
 
+  // The handler did its work but the response cannot be stored. A 2xx stores a marker so a
+  // retry gets 409 ResultUnavailable instead of repeating the side effect after the lease; a 4xx
+  // is released; any other status keeps the key in flight until the lease ends.
+  const unstorable = (status: number): IdempotencyCompletion => {
+    if (status >= 400 && status < 500) return RELEASE;
+    if (status < 200 || status >= 300) return KEEP;
+    warn(settings, IdempotencyEventNames.ResponseNotReplayable, namespace);
+    return {
+      action: 'store',
+      payload: RESULT_UNAVAILABLE_PAYLOAD,
+      retentionMs: settings.retentionMs,
+    };
+  };
+
   const complete = async (response: Response): Promise<IdempotencyCompletion> => {
     if (neverStore.has(response.status)) return KEEP;
     if (!shouldStore(response)) return RELEASE;
-    // The handler did its work but the response cannot be stored: only a 4xx is released, any
-    // other status keeps the key in flight so a retry cannot repeat the side effect.
-    const unstorable = response.status >= 400 && response.status < 500 ? RELEASE : KEEP;
-    if (!isReplayable(response)) return unstorable;
+    if (!isReplayable(response)) return unstorable(response.status);
     const body = NULL_BODY_STATUSES.has(response.status)
       ? new Uint8Array(0)
       : await readBody(response, maxBodyBytes);
     if (body === undefined) {
       warn(settings, IdempotencyEventNames.ResponseTooLarge, namespace);
-      return unstorable;
+      return unstorable(response.status);
     }
     const headers: [string, string][] = [];
     for (const name of replayedHeaders) {
@@ -304,6 +323,9 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
       run: async () => handler(request, ...rest),
       complete,
       replay: (payload) => {
+        if (payload === RESULT_UNAVAILABLE_PAYLOAD) {
+          return rejection(IdempotencyErrorCodes.ResultUnavailable, null);
+        }
         const replayed = replayResponse(payload);
         if (replayed !== undefined) return replayed;
         // Neither replayed nor run again: running it again could repeat the side effect.
@@ -331,6 +353,8 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  * - missing key with `requireKey` → 400 `Idempotency.KeyMissing`; malformed key, or several
  *   keys → 400 `Idempotency.KeyInvalid`;
  * - same key still running → 409 `Idempotency.InFlight` with `Retry-After`;
+ * - same key completed with a 2xx that could not be stored → 409 `Idempotency.ResultUnavailable`
+ *   without `Retry-After` (never retried; the handler does not run again);
  * - same key with another method, path, query or body → 422 `Idempotency.KeyReused`;
  * - key without a scope (the default `unscopedKeyBehavior: 'reject'`) → 400 `Idempotency.ScopeRequired`;
  *   `'skip'` runs the handler without idempotency instead, `'global'` uses one shared scope.
@@ -339,8 +363,9 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
  * - 2xx and 3xx → stored for `retentionMs`; 5xx → stored for `serverErrorRetentionMs`;
  * - 4xx → released, so a corrected retry with the same key runs again;
  * - 503 and 504 (`neverStoreStatuses`) → kept in flight until the lease ends;
- * - a body over `maxResponseBodyBytes`, a `Content-Encoding` or an event stream → kept in flight
- *   until the lease ends (a 4xx is released);
+ * - a body over `maxResponseBodyBytes`, a `Content-Encoding` or an event stream → for a 2xx a
+ *   marker is stored for `retentionMs` (a retry gets 409 `Idempotency.ResultUnavailable`), a 4xx
+ *   is released, any other status is kept in flight until the lease ends;
  * - the handler throws → kept in flight until the lease ends.
  *
  * The request body is buffered to hash it (Web Crypto has no streaming digest), so enforce a

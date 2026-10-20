@@ -17,6 +17,7 @@ describe('idempotency constants on tsentials/http', () => {
       KeyMissing: 'Idempotency.KeyMissing',
       KeyInvalid: 'Idempotency.KeyInvalid',
       ScopeRequired: 'Idempotency.ScopeRequired',
+      ResultUnavailable: 'Idempotency.ResultUnavailable',
     });
   });
 });

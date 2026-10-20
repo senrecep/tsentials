@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - **Behaviour change, Idempotency (HTTP):** `withIdempotency` now rejects a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) with 400 `Idempotency.ScopeRequired` in `enforce` mode; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. Before, such a request ran without idempotency (`unscopedKeyBehavior` defaulted to `'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to keep the old behaviour; `'global'` is unchanged. `idempotent()` and `idempotencyBehavior()` already rejected by default.
+- **Behaviour change, Idempotency (HTTP):** a 2xx response that `withIdempotency` cannot store (body over `maxResponseBodyBytes`, a `Content-Encoding` other than identity, or `text/event-stream`) now stores a marker for `retentionMs`, and a retry with the same key and request gets 409 `Idempotency.ResultUnavailable` without `Retry-After`; the handler does not run again. Before, the key stayed in flight (409 `Idempotency.InFlight`) until the lease ended, and a later retry ran the handler again and repeated the side effect. A 4xx is still released and 3xx/5xx still stay in flight. `idempotentRetryClassifier` never retries the new code.
+
+### Added
+
+- **Idempotency:** error code `Idempotency.ResultUnavailable` (Conflict, 409, never retried; `idempotencyErrors.resultUnavailable()`) and event `Idempotency.ResponseNotReplayable`, logged as a warning when a marker is stored.
 
 ## [2.0.1] - 2026-10-20
 

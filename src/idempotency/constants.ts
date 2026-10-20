@@ -19,6 +19,11 @@ export const IdempotencyErrorCodes = {
   KeyInvalid: 'Idempotency.KeyInvalid',
   /** A key was sent but no scope could be resolved and the behavior is `reject` (400). */
   ScopeRequired: 'Idempotency.ScopeRequired',
+  /**
+   * The key completed but its result could not be stored, so it can never be replayed (Conflict,
+   * 409, never retried). Use a new key only if repeating the side effect is intended.
+   */
+  ResultUnavailable: 'Idempotency.ResultUnavailable',
 } as const;
 
 /** One of the {@link IdempotencyErrorCodes} values. */
@@ -44,6 +49,11 @@ export const IdempotencyEventNames = {
   ReservationLost: 'Idempotency.ReservationLost',
   /** An HTTP response was not stored: its body exceeded `maxResponseBodyBytes`. */
   ResponseTooLarge: 'Idempotency.ResponseTooLarge',
+  /**
+   * A 2xx HTTP response could not be stored (too large, encoded or an event stream); a marker was
+   * stored instead, so a retry gets 409 `Idempotency.ResultUnavailable` for `retentionMs`.
+   */
+  ResponseNotReplayable: 'Idempotency.ResponseNotReplayable',
   /** A stored HTTP response cannot be read; the call got 500 and the handler did not run. */
   StoredResponseUnreadable: 'Idempotency.StoredResponseUnreadable',
 } as const;

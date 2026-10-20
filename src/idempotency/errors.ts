@@ -38,6 +38,16 @@ export const idempotencyErrors = {
       'An idempotency key needs a scope, but none could be resolved.',
     );
   },
+  /**
+   * The key completed but its result could not be stored, so it can never be replayed
+   * (Conflict, never retried).
+   */
+  resultUnavailable(): AppError {
+    return Err.conflict(
+      IdempotencyErrorCodes.ResultUnavailable,
+      'The request with this idempotency key completed, but its result cannot be replayed.',
+    );
+  },
   /** The error of a code; `retryAfterMs` is used by `InFlight` only. */
   forCode(code: IdempotencyErrorCode, retryAfterMs?: number | null): AppError {
     return byCode[code](retryAfterMs);
@@ -52,4 +62,5 @@ const byCode: Readonly<
   [IdempotencyErrorCodes.KeyMissing]: () => idempotencyErrors.keyMissing(),
   [IdempotencyErrorCodes.KeyInvalid]: () => idempotencyErrors.keyInvalid(),
   [IdempotencyErrorCodes.ScopeRequired]: () => idempotencyErrors.scopeRequired(),
+  [IdempotencyErrorCodes.ResultUnavailable]: () => idempotencyErrors.resultUnavailable(),
 };

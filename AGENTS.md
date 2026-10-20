@@ -656,7 +656,7 @@ export const POST = idem.withIdempotency(createOrder, { scope: (req) => idempote
 // mediator: idem.idempotencyBehavior() reads idempotencyKey / idempotencyScope from the request
 ```
 
-- Same key running → `Idempotency.InFlight` (Conflict; HTTP 409 + `Retry-After`). Same key, other payload → `Idempotency.KeyReused` (Validation; HTTP 422). Completed → stored outcome replayed (HTTP header `Idempotency-Replayed: true`).
+- Same key running → `Idempotency.InFlight` (Conflict; HTTP 409 + `Retry-After`). Same key, other payload → `Idempotency.KeyReused` (Validation; HTTP 422). HTTP 2xx completed but not storable (too large, encoded, SSE) → `Idempotency.ResultUnavailable` (Conflict, 409, no Retry-After, never retried). Completed → stored outcome replayed (HTTP header `Idempotency-Replayed: true`).
 - Key without scope → `Idempotency.ScopeRequired` in every wrapper, `withIdempotency` included (or `unscopedKeyBehavior: 'skip' | 'global'`). Set scope and key fields in server code, never from a client payload.
 - `RedisIdempotencyStore` takes a `RedisLike` (`eval` only): adapt ioredis or node-redis. Cloudflare KV is not atomic and is not safe as a store. Custom stores must pass `describeIdempotencyStoreContract`.
 - `leaseMs` must cover the client's whole retry and timeout budget. Roll out `observe` before `enforce`.

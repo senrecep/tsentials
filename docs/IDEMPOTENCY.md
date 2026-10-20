@@ -139,6 +139,7 @@ The wrapper guards `POST` and `PATCH` (`methods` changes this) and reads the `Id
 | Key without scope, `unscopedKeyBehavior: 'skip'` | Handler runs; event `Idempotency.UnscopedKeySkipped` |
 | Same key still running | 409 `Idempotency.InFlight` with `Retry-After` |
 | Same key, other method, path, query or body | 422 `Idempotency.KeyReused` |
+| Same key, same request, completed with a 2xx that could not be stored | 409 `Idempotency.ResultUnavailable` without `Retry-After`; the handler does not run |
 | Same key, same request, completed | The stored status, whitelisted headers and body, plus `Idempotency-Replayed: true` |
 
 Errors are `application/problem+json` bodies `{ title, status, detail, code }`. The `code` is the contract, so clients classify on it.
@@ -149,8 +150,8 @@ What is stored:
 |-----------------|---------|
 | 503 or 504 (`neverStoreStatuses`) | No, the key stays in flight until the lease ends |
 | 4xx (`shouldStore` default) | No, the key is released so the client can fix the request and retry |
-| `Content-Encoding` other than identity, or `text/event-stream` | No. The handler ran, so the key stays in flight until the lease ends (a 4xx is released) |
-| Body larger than `maxResponseBodyBytes` (1 MiB) | No, kept in flight like above (a 4xx is released); logs `Idempotency.ResponseTooLarge` |
+| `Content-Encoding` other than identity, or `text/event-stream` | The response cannot be stored. A 2xx stores a marker for `retentionMs`, so a retry gets 409 `Idempotency.ResultUnavailable` instead of running the handler again; logs `Idempotency.ResponseNotReplayable`. A 4xx is released; any other status keeps the key in flight until the lease ends |
+| Body larger than `maxResponseBodyBytes` (1 MiB) | Like above: a marker for a 2xx, released for a 4xx, in flight otherwise; logs `Idempotency.ResponseTooLarge` |
 | 5xx | Yes, for `serverErrorRetentionMs` |
 | Anything else | Yes, for `retentionMs` |
 | The handler throws | No, the key stays in flight until the lease ends |
@@ -223,7 +224,7 @@ const builder = RequestBuilder.post('/orders').json(order).idempotencyKey();
 await policy.execute((signal) => builder.signal(signal).send<Order>());
 ```
 
-`idempotentRetryClassifier(method, hasKey)` never retries a POST or PATCH without a key, never retries a replayed response, retries network errors and timeouts before a response, never retries a received response whose body cannot be read or parsed (2xx included), retries 409 `Idempotency.InFlight`, 408, 429, 503 and 504, and nothing else. `withRetry` waits at least the server's `Retry-After` (capped by `maxRetryAfterMs`). A failed response's first error, including a body parse failure, carries the metadata `httpStatus`, `retryAfterMs`, `idempotencyReplayed` and `problemCode` (`HttpErrorMetadataKeys`). A timeout while reading the body keeps `httpStatus` but has no `problemCode`, so a 409 whose body stalls is not retried.
+`idempotentRetryClassifier(method, hasKey)` never retries a POST or PATCH without a key, never retries a replayed response, retries network errors and timeouts before a response, never retries a received response whose body cannot be read or parsed (2xx included), retries 409 `Idempotency.InFlight`, 408, 429, 503 and 504, and nothing else (409 `Idempotency.ResultUnavailable` is never retried). Use it: a generic `withRetry` without `shouldRetry` retries a 409 Conflict, because Conflict is retryable, so it would retry `Idempotency.ResultUnavailable` until it runs out of attempts. `withRetry` waits at least the server's `Retry-After` (capped by `maxRetryAfterMs`). A failed response's first error, including a body parse failure, carries the metadata `httpStatus`, `retryAfterMs`, `idempotencyReplayed` and `problemCode` (`HttpErrorMetadataKeys`). A timeout while reading the body keeps `httpStatus` but has no `problemCode`, so a 409 whose body stalls is not retried.
 
 ## Lease, retention and the retry budget
 
@@ -469,5 +470,6 @@ const idem = createIdempotency({
 | `Idempotency.KeyMissing` | Validation | 400 | After adding a key |
 | `Idempotency.KeyInvalid` | Validation | 400 | After fixing the key |
 | `Idempotency.ScopeRequired` | Validation | 400 | No, a server-side bug |
+| `Idempotency.ResultUnavailable` | Conflict | 409, no `Retry-After` | Never. The key completed but its result could not be stored (a 2xx that is too large, encoded or an event stream), so it cannot be replayed. Use a new key only if repeating the side effect is intended |
 
-`IdempotencyEventNames` also has `Idempotency.Decision` (decisions without a fixed name, such as `reserved` and `stored`), `Idempotency.UnscopedKeySkipped`, `Idempotency.Observe.ResolutionFailed`, `Idempotency.StoreFailed`, `Idempotency.CompleteFailed`, `Idempotency.ReservationLost`, `Idempotency.ResponseTooLarge` and `Idempotency.StoredResponseUnreadable`.
+`IdempotencyEventNames` also has `Idempotency.Decision` (decisions without a fixed name, such as `reserved` and `stored`), `Idempotency.UnscopedKeySkipped`, `Idempotency.Observe.ResolutionFailed`, `Idempotency.StoreFailed`, `Idempotency.CompleteFailed`, `Idempotency.ReservationLost`, `Idempotency.ResponseTooLarge`, `Idempotency.ResponseNotReplayable` (a 2xx could not be stored, so a marker was stored instead) and `Idempotency.StoredResponseUnreadable`.

@@ -353,19 +353,63 @@ describe('withIdempotency', () => {
       expect(s.runs()).toBe(1);
     });
 
-    it('sends a too large body unchanged, keeps the key in flight and logs', async () => {
-      const s = setup((_req, run) => new Response('x'.repeat(10), { status: 201 + run - 1 }), {
+    const expectResultUnavailable = async (response: Response) => {
+      expect(response.status).toBe(409);
+      expect(response.headers.get('retry-after')).toBeNull();
+      expect(response.headers.get('idempotency-replayed')).toBeNull();
+      expect(await problemOf(response)).toMatchObject({
+        status: 409,
+        title: 'Result unavailable',
+        code: IdempotencyErrorCodes.ResultUnavailable,
+        detail: expect.any(String),
+      });
+    };
+
+    it('sends a too large 2xx body unchanged, stores a marker and answers 409 ResultUnavailable', async () => {
+      const s = setup(() => new Response('x'.repeat(10), { status: 201 }), {
         maxResponseBodyBytes: 4,
+        retryAfterMs: 1_500,
       });
       const first = await s.handler(post('k'));
+      expect(first.status).toBe(201);
       expect(await first.text()).toBe('x'.repeat(10));
+      await expectResultUnavailable(await s.handler(post('k')));
+      await expectResultUnavailable(await s.handler(post('k')));
+      expect(s.runs()).toBe(1);
+      expect(s.logs.map((l) => l.properties.EventName)).toEqual([
+        IdempotencyEventNames.ResponseTooLarge,
+        IdempotencyEventNames.ResponseNotReplayable,
+      ]);
+      expect(s.logs.every((l) => l.level === 'warning')).toBe(true);
+      expect(s.events.map((e) => e.decision)).toEqual(['reserved', 'stored', 'replay', 'replay']);
+    });
+
+    it('answers 422 KeyReused for another request with the key of a marker', async () => {
+      const s = setup(() => new Response('x'.repeat(10), { status: 200 }), {
+        maxResponseBodyBytes: 4,
+      });
+      await s.handler(post('k'));
+      const reused = await s.handler(post('k', '{"sku":"other"}'));
+      expect(reused.status).toBe(422);
+      expect(await problemOf(reused)).toMatchObject({ code: IdempotencyErrorCodes.KeyReused });
+      expect(s.runs()).toBe(1);
+    });
+
+    it.each([
+      [303, 'a 3xx'],
+      [500, 'a 5xx'],
+    ])('keeps the key in flight for a too large %s (%s)', async (status) => {
+      const s = setup(() => new Response('x'.repeat(10), { status }), {
+        maxResponseBodyBytes: 4,
+      });
+      await s.handler(post('k'));
       const retry = await s.handler(post('k'));
       expect(retry.status).toBe(409);
       expect(await problemOf(retry)).toMatchObject({ code: IdempotencyErrorCodes.InFlight });
       expect(s.runs()).toBe(1);
-      expect(s.logs.map((l) => l.properties.EventName)).toContain(
+      expect(s.logs.map((l) => l.properties.EventName)).toEqual([
         IdempotencyEventNames.ResponseTooLarge,
-      );
+      ]);
     });
 
     it('releases a too large 4xx body so a corrected retry runs again', async () => {
@@ -378,24 +422,43 @@ describe('withIdempotency', () => {
       expect(s.runs()).toBe(2);
     });
 
-    it('keeps a body whose Content-Length is over the limit in flight without reading it', async () => {
+    it('stores a marker for a 2xx whose Content-Length is over the limit without reading it', async () => {
       const s = setup(
         () => new Response('x', { status: 201, headers: { 'content-length': '100' } }),
         { maxResponseBodyBytes: 4 },
       );
       await s.handler(post('k'));
-      expect((await s.handler(post('k'))).status).toBe(409);
+      await expectResultUnavailable(await s.handler(post('k')));
       expect(s.runs()).toBe(1);
     });
 
     it.each([
       ['an encoded body', { 'content-encoding': 'gzip' }],
       ['an event stream', { 'content-type': 'text/event-stream' }],
-    ])('keeps the key in flight for %s', async (_name, headers) => {
+    ])('stores a marker for a 2xx with %s', async (_name, headers) => {
       const s = setup(() => new Response('x', { status: 201, headers }));
       await s.handler(post('k'));
-      expect((await s.handler(post('k'))).status).toBe(409);
+      await expectResultUnavailable(await s.handler(post('k')));
       expect(s.runs()).toBe(1);
+      expect(s.logs.map((l) => l.properties.EventName)).toEqual([
+        IdempotencyEventNames.ResponseNotReplayable,
+      ]);
+    });
+
+    it.each([
+      [302, 'in flight', 409],
+      [502, 'in flight', 409],
+      [422, 'released', 201],
+    ])('treats a %i event stream as %s', async (status, _what, retryStatus) => {
+      const s = setup(
+        (_req, run) =>
+          run === 1
+            ? new Response('x', { status, headers: { 'content-type': 'text/event-stream' } })
+            : created(run),
+        { shouldStore: () => true },
+      );
+      await s.handler(post('k'));
+      expect((await s.handler(post('k'))).status).toBe(retryStatus);
     });
 
     it('stores an identity encoded body', async () => {
@@ -651,6 +714,18 @@ describe('withIdempotency', () => {
         IdempotencyEventNames.WouldRejectKeyReused,
       ]);
     });
+    it('observe runs the handler again for a key that holds a marker', async () => {
+      const s = setup((_req, run) => new Response(`body${run}`, { status: 201 }), {
+        mode: 'observe',
+        maxResponseBodyBytes: 4,
+      });
+      await s.handler(post('k'));
+      const second = await s.handler(post('k'));
+      expect(second.status).toBe(201);
+      expect(await second.text()).toBe('body2');
+      expect(s.runs()).toBe(2);
+      expect(s.events.map((e) => e.name)).toContain(IdempotencyEventNames.WouldReplay);
+    });
   });
 
   describe('record expiry and lease end', () => {
@@ -696,6 +771,28 @@ describe('withIdempotency', () => {
       clock.advance(2);
       await handler(post('k'));
       expect(runs).toBe(2);
+    });
+
+    it('answers 409 ResultUnavailable until retentionMs, then runs again', async () => {
+      const { clock, store } = clockedStore();
+      const s = setup((_req, run) => new Response(`body${run}`, { status: 201 }), {
+        store,
+        retentionMs: 60_000,
+        maxResponseBodyBytes: 4,
+      });
+      await s.handler(post('k'));
+      clock.advance(60_000 - 1);
+      const unavailable = await s.handler(post('k'));
+      expect(unavailable.status).toBe(409);
+      expect(await problemOf(unavailable)).toMatchObject({
+        code: IdempotencyErrorCodes.ResultUnavailable,
+      });
+      expect(s.runs()).toBe(1);
+      clock.advance(2);
+      const again = await s.handler(post('k'));
+      expect(again.status).toBe(201);
+      expect(await again.text()).toBe('body2');
+      expect(s.runs()).toBe(2);
     });
 
     const LEASE = 10_000;
@@ -870,6 +967,36 @@ describe('withIdempotency', () => {
       expect(metadata.get('problemCode')).toBe(IdempotencyErrorCodes.InFlight);
       expect(metadata.get('retryAfterMs')).toBe(1_000);
       expect(metadata.get('httpStatus')).toBe(409);
+    });
+
+    it('does not retry 409 ResultUnavailable', async () => {
+      let runs = 0;
+      const server = withIdempotency(
+        async () => {
+          runs += 1;
+          return new Response('{"id":7}', {
+            status: 201,
+            headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+          });
+        },
+        { store: new InMemoryIdempotencyStore(), unscopedKeyBehavior: 'global' },
+      );
+      await server(post('order-7'));
+      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
+        server(new Request(input, init)),
+      );
+      const shouldRetry = vi.fn(idempotentRetryClassifier('POST', true));
+      const result = await ResiliencePolicy.create()
+        .withRetry({ maxAttempts: 3, delay: 0, shouldRetry })
+        .execute(() => fetchResult.post(URL_BASE, { sku: 'a' }, withIdempotencyKey({}, 'order-7')));
+
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.errors[0]?.metadata?.get('problemCode')).toBe(
+        IdempotencyErrorCodes.ResultUnavailable,
+      );
+      expect(!result.ok && result.errors[0]?.metadata?.get('retryAfterMs')).toBeUndefined();
+      expect(shouldRetry).toHaveBeenCalledTimes(1);
+      expect(runs).toBe(1);
     });
   });
 });

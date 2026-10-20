@@ -92,9 +92,10 @@ export const POST = withIdempotency(createOrder, {
 | Key without scope, `unscopedKeyBehavior: 'reject'` (default) | 400 `Idempotency.ScopeRequired` (`'skip'` runs the handler) |
 | Same key running | 409 `Idempotency.InFlight` + `Retry-After` |
 | Same key, other method/path/query/body | 422 `Idempotency.KeyReused` |
+| Same key, completed with a 2xx that could not be stored | 409 `Idempotency.ResultUnavailable`, no `Retry-After`, never retried |
 | Same key, completed | stored status, whitelisted headers, body + `Idempotency-Replayed: true` |
 
-Errors are `application/problem+json` with a `code`. Guards POST and PATCH by default. 4xx is released, not stored. Compressed or streaming bodies and bodies over 1 MiB are not stored and keep the key in flight (released for a 4xx), as do 503/504 and a thrown handler, until the lease ends; other 5xx is stored for `serverErrorRetentionMs`. Replayed headers: `content-type`, `content-language`, `location`, `etag`, `cache-control`, `retry-after`.
+Errors are `application/problem+json` with a `code`. Guards POST and PATCH by default. 4xx is released, not stored. Compressed or streaming bodies and bodies over 1 MiB are not stored: a 2xx stores a marker for `retentionMs` (a retry gets 409 `Idempotency.ResultUnavailable`), a 4xx is released, any other status keeps the key in flight until the lease ends, as do 503/504 and a thrown handler; other 5xx is stored for `serverErrorRetentionMs`. Replayed headers: `content-type`, `content-language`, `location`, `etag`, `cache-control`, `retry-after`.
 
 ## Keys and scopes
 
