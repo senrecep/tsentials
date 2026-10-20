@@ -52,21 +52,27 @@ describe('describeIdempotencyStoreContract', () => {
   });
 
   it('fails a store whose keys ignore trailing spaces, like a PAD SPACE collation', async () => {
-    const result = await failures((clock) => {
-      const inner = new InMemoryIdempotencyStore({ clock });
-      const pad = <K extends { scope: string; key: string }>(k: K): K => ({
-        ...k,
-        scope: k.scope.trimEnd(),
-        key: k.key.trimEnd(),
+    const padded = (trimScope: boolean) =>
+      failures((clock) => {
+        const inner = new InMemoryIdempotencyStore({ clock });
+        const pad = <K extends { scope: string; key: string }>(k: K): K => ({
+          ...k,
+          scope: trimScope ? k.scope.trimEnd() : k.scope,
+          key: k.key.trimEnd(),
+        });
+        return {
+          reserve: (k, ...rest) => inner.reserve(pad(k), ...rest),
+          complete: (k, ...rest) => inner.complete(pad(k), ...rest),
+          release: (k, ...rest) => inner.release(pad(k), ...rest),
+        };
       });
-      return {
-        reserve: (k, ...rest) => inner.reserve(pad(k), ...rest),
-        complete: (k, ...rest) => inner.complete(pad(k), ...rest),
-        release: (k, ...rest) => inner.release(pad(k), ...rest),
-      };
-    });
-    expect(Object.keys(result)).toEqual(['keeps parts that differ only by trailing spaces apart']);
-    expect(Object.values(result)[0]).toContain('scope with a trailing space');
+    const name = 'keeps parts that differ only by trailing spaces apart';
+    const both = await padded(true);
+    expect(Object.keys(both)).toEqual([name]);
+    expect(both[name]).toContain('scope with a trailing space');
+    const keyOnly = await padded(false);
+    expect(Object.keys(keyOnly)).toEqual([name]);
+    expect(keyOnly[name]).toContain('key with a trailing space');
   });
 
   it('fails every scenario of a store that always reserves with the same token', async () => {
