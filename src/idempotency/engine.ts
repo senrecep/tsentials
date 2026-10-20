@@ -463,7 +463,7 @@ function startHeartbeat(
   const extend = store.extend;
   if (extend === undefined) return undefined;
   const controller = new AbortController();
-  // Built first: it throws for a foreign signal, and nothing is scheduled yet.
+  // Built first: `AbortSignal.any` can throw for a foreign signal (Node 24 does), and nothing is scheduled yet.
   const signal =
     mode === 'observe'
       ? undefined
