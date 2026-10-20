@@ -1,9 +1,10 @@
-# Migration guide: behaviour changes in 1.0.0
+# Migration guide: behaviour changes
 
-This guide lists every change in 1.0.0 that alters the runtime behaviour of an existing tsentials API. Read it when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](../CHANGELOG.md).
+This guide lists every change that alters the runtime behaviour of an existing tsentials API. Read the 2.0.0 section when upgrading from 1.x and the 1.0.0 section when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](../CHANGELOG.md).
 
-## Unreleased
+## Behaviour changes in 2.0.0
 
+* **runtime:** the minimum Node.js version is 22 (`engines.node` is `>=22.0.0`). The library uses the global Web Crypto API (`crypto.subtle`, `crypto.randomUUID`).
 * **http:** the first error of a failed `fetchResult` / `RequestBuilder` response carries metadata: `httpStatus` (always, also when a 2xx body cannot be parsed or its read times out), `retryAfterMs` (from a valid `Retry-After`), `idempotencyReplayed` (`Idempotency-Replayed: true`) and `problemCode` (a string `code` field of the body). Keys the problem body already gave the error win. Code, type and description are unchanged; a test that compares a whole failure with `toEqual` now also sees the metadata.
 * **resilience:** `withRetry` and `retryIfFailed` wait at least the `retryAfterMs` metadata of a failure's first error before the next retry, capped by the new `maxRetryAfterMs` option (default 30 000 ms). A `fetchResult` failure with `Retry-After` therefore waits longer than the backoff when the server asks it to.
 
