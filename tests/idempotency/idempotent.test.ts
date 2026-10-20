@@ -207,6 +207,44 @@ describe('idempotent', () => {
     await expect(run(cmd)).rejects.toThrow(TypeError);
   });
 
+  it('runs without idempotency in observe mode when the key is invalid or signal throws', async () => {
+    const cases = [
+      { key: () => 'has space' },
+      {
+        signal: (): AbortSignal => {
+          throw new Error('no signal');
+        },
+      },
+    ];
+    for (const extra of cases) {
+      const log = vi.fn();
+      const fn = vi.fn((_: Cmd) => Result.success(1));
+      const store = new InMemoryIdempotencyStore();
+      const run = idempotent(fn, { ...options(store), mode: 'observe', logger: { log }, ...extra });
+      expect(await run(cmd)).toEqual(Result.success(1));
+      expect(await run(cmd)).toEqual(Result.success(1));
+      expect(fn).toHaveBeenCalledTimes(2);
+      expect(log.mock.calls[0]?.[2]).toMatchObject({
+        EventName: 'Idempotency.Observe.ResolutionFailed',
+        Mode: 'observe',
+        Source: 'function',
+        Target: 'capture',
+      });
+    }
+  });
+
+  it('throws when the signal resolver throws in enforce mode', async () => {
+    const fn = vi.fn((_: Cmd) => Result.success(1));
+    const run = idempotent(fn, {
+      ...options(new InMemoryIdempotencyStore()),
+      signal: () => {
+        throw new Error('no signal');
+      },
+    });
+    await expect(run(cmd)).rejects.toThrow('no signal');
+    expect(fn).not.toHaveBeenCalled();
+  });
+
   it('passes the signal to the store', async () => {
     const controller = new AbortController();
     controller.abort(new Error('cancelled'));

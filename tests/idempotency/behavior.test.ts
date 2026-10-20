@@ -335,6 +335,94 @@ describe('idempotencyBehavior', () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
+  it('throws for a zero request lease', async () => {
+    const { mediator, fn } = setup(
+      idempotencyBehavior({ store: new InMemoryIdempotencyStore() }),
+      charge,
+    );
+    await expect(
+      mediator.send('Capture', capture({ idempotencyLeaseMs: 0 })),
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an invalid key', { idempotencyKey: 'has space' }],
+    ['a zero request lease', { idempotencyLeaseMs: 0 }],
+    ['an out-of-range request retention', { idempotencyRetentionMs: -1 }],
+  ])('runs %s without idempotency in observe mode', async (_, overrides) => {
+    const log = vi.fn();
+    const reserve = vi.fn<IdempotencyStore['reserve']>();
+    const store: IdempotencyStore = {
+      reserve,
+      complete: async () => true,
+      release: async () => true,
+    };
+    const { mediator, fn } = setup(
+      idempotencyBehavior({ store, mode: 'observe', logger: { log } }),
+      charge,
+    );
+    expect(await mediator.send('Capture', capture(overrides))).toEqual(
+      Result.success({ charged: 10 }),
+    );
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(reserve).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls[0]?.[0]).toBe('warning');
+    expect(log.mock.calls[0]?.[2]).toMatchObject({
+      EventName: 'Idempotency.Observe.ResolutionFailed',
+      Mode: 'observe',
+      Source: 'mediator',
+      Target: 'Capture',
+    });
+    expect(log.mock.calls[0]?.[2]).not.toHaveProperty('KeyHash');
+  });
+
+  it('runs the handler in observe mode when settings or releaseFailures throws', async () => {
+    const boom = () => {
+      throw new Error('boom');
+    };
+    for (const options of [{ settings: boom }, { releaseFailures: boom }]) {
+      const log = vi.fn();
+      const { mediator, fn } = setup(
+        idempotencyBehavior({
+          store: new InMemoryIdempotencyStore(),
+          mode: 'observe',
+          logger: { log },
+          ...options,
+        }),
+        charge,
+      );
+      expect((await mediator.send('Capture', capture())).ok).toBe(true);
+      expect(fn).toHaveBeenCalledTimes(1);
+      expect(log.mock.calls[0]?.[2]).toMatchObject({
+        EventName: 'Idempotency.Observe.ResolutionFailed',
+      });
+
+      const enforced = setup(
+        idempotencyBehavior({ store: new InMemoryIdempotencyStore(), ...options }),
+        charge,
+      );
+      await expect(enforced.mediator.send('Capture', capture())).rejects.toThrow('boom');
+      expect(enforced.fn).not.toHaveBeenCalled();
+    }
+  });
+
+  it('rethrows a failed setup in observe mode when the caller aborted', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('cancelled'));
+    const { mediator, fn } = setup(
+      idempotencyBehavior({ store: new InMemoryIdempotencyStore(), mode: 'observe' }),
+      charge,
+    );
+    await expect(
+      mediator.send('Capture', capture({ idempotencyKey: 'has space' }), {
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow(/not a valid idempotency key/);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
   it('reads idempotencyScopes.global from the request and rejects the raw string global', async () => {
     const reserve = vi.fn<IdempotencyStore['reserve']>(async () => ({
       status: 'reserved',

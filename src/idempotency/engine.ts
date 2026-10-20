@@ -69,9 +69,12 @@ async function keyHashOf(key: string): Promise<string> {
   return (await sha256Hex(key)).slice(0, 16);
 }
 
+/** The parts of a call that logging reads. */
+type CallInfo = Pick<IdempotencyCall<unknown>, 'settings' | 'source' | 'target'>;
+
 /** `keyHash` is unknown only when resolving the key itself failed. */
 function logEvent(
-  call: IdempotencyCall<unknown>,
+  call: CallInfo,
   mode: Exclude<IdempotencyMode, 'off'>,
   keyHash: string | undefined,
   level: 'information' | 'warning',
@@ -191,8 +194,10 @@ async function resolve(
  * report. In `observe` mode every call runs the handler and gets its own output; conflicts
  * are only reported, and records it does not own are left untouched.
  */
-export async function runIdempotent<O>(call: IdempotencyCall<O>): Promise<O> {
-  const mode = call.settings.mode();
+export async function runIdempotent<O>(
+  call: IdempotencyCall<O>,
+  mode: IdempotencyMode = call.settings.mode(),
+): Promise<O> {
   if (mode === 'off') return call.run();
 
   let resolution: Resolution;
@@ -267,4 +272,28 @@ export async function runIdempotent<O>(call: IdempotencyCall<O>): Promise<O> {
     reporter.log('warning', IdempotencyEventNames.CompleteFailed, error);
   }
   return output;
+}
+
+/**
+ * Runs a call whose setup can throw (request settings, key check, signal): `prepare` returns
+ * the call, or `undefined` to run without idempotency. Like a resolver that throws inside the
+ * engine, a throwing `prepare` rejects in `enforce` and in `observe` is logged
+ * (`Idempotency.Observe.ResolutionFailed`) while `run` goes ahead without idempotency.
+ */
+export async function runPreparedIdempotent<O>(
+  info: CallInfo & { readonly signal?: AbortSignal | undefined },
+  prepare: () => IdempotencyCall<O> | undefined,
+  run: () => Promise<O>,
+): Promise<O> {
+  const mode = info.settings.mode();
+  if (mode === 'off') return run();
+  let call: IdempotencyCall<O> | undefined;
+  try {
+    call = prepare();
+  } catch (error) {
+    if (mode === 'enforce' || info.signal?.aborted === true) throw error;
+    logEvent(info, mode, undefined, 'warning', IdempotencyEventNames.ResolutionFailed, error);
+    return run();
+  }
+  return call === undefined ? run() : runIdempotent(call, mode);
 }

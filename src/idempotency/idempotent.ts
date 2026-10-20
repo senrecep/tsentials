@@ -1,7 +1,7 @@
 import { jsonResultSerializer, type ResultSerializer } from '../mediator/behaviors.js';
 import { Result } from '../result/index.js';
 import { fingerprintOf } from './encoding.js';
-import { runIdempotent } from './engine.js';
+import { runPreparedIdempotent } from './engine.js';
 import { idempotencyErrors } from './errors.js';
 import { isValidIdempotencyKey } from './keys.js';
 import {
@@ -55,28 +55,34 @@ export function makeIdempotent<A extends readonly unknown[], T>(
     releaseFailures: options.storeFailures === false,
     serializer: options.serializer ?? jsonResultSerializer,
   };
-  return (...args: A) =>
-    runIdempotent<Result<T>>({
-      settings,
-      source: 'function',
-      target: options.namespace,
-      namespace: options.namespace,
-      unscopedKeyBehavior: options.unscopedKeyBehavior ?? 'reject',
-      signal: options.signal?.(...args),
-      key: async () => {
-        const key = await options.key(...args);
-        if (key !== undefined && !isValidIdempotencyKey(key)) {
-          throw new TypeError('idempotent: the key is not a valid idempotency key');
-        }
-        return key;
-      },
-      scope: () => options.scope(...args),
-      fingerprint: () => fingerprintOf(options.fingerprint ? options.fingerprint(...args) : args),
-      run: async () => fn(...args),
-      complete: (result) => resultCompletion(result, policy, settings),
-      replay: (payload) => replayResult<T>(payload, policy.serializer),
-      reject: (code) => Result.failure<T>(idempotencyErrors.forCode(code, settings.retryAfterMs)),
-    });
+  return (...args: A) => {
+    const run = async () => fn(...args);
+    return runPreparedIdempotent<Result<T>>(
+      { settings, source: 'function', target: options.namespace },
+      () => ({
+        settings,
+        source: 'function',
+        target: options.namespace,
+        namespace: options.namespace,
+        unscopedKeyBehavior: options.unscopedKeyBehavior ?? 'reject',
+        signal: options.signal?.(...args),
+        key: async () => {
+          const key = await options.key(...args);
+          if (key !== undefined && !isValidIdempotencyKey(key)) {
+            throw new TypeError('idempotent: the key is not a valid idempotency key');
+          }
+          return key;
+        },
+        scope: () => options.scope(...args),
+        fingerprint: () => fingerprintOf(options.fingerprint ? options.fingerprint(...args) : args),
+        run,
+        complete: (result) => resultCompletion(result, policy, settings),
+        replay: (payload) => replayResult<T>(payload, policy.serializer),
+        reject: (code) => Result.failure<T>(idempotencyErrors.forCode(code, settings.retryAfterMs)),
+      }),
+      run,
+    );
+  };
 }
 
 /**
