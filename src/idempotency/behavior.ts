@@ -2,7 +2,7 @@ import { jsonResultSerializer, type ResultSerializer } from '../mediator/behavio
 import type { GenericBehavior, NextHandler, RequestContext } from '../mediator/mediator.js';
 import { Result } from '../result/index.js';
 import { fingerprintOf } from './encoding.js';
-import { runIdempotent } from './engine.js';
+import { runPreparedIdempotent } from './engine.js';
 import { idempotencyErrors } from './errors.js';
 import { isValidIdempotencyKey } from './keys.js';
 import {
@@ -138,46 +138,52 @@ export function makeIdempotencyBehavior(
     const name = context.requestName;
     const typeSettings = Object.hasOwn(forRequest, name) ? forRequest[name] : undefined;
     const typeResolved = perType.get(name) ?? base;
-    if (typeResolved.mode() === 'off') return next();
+    const run = () => next();
 
-    const requestSettings = settingsOf(request, context);
-    if (requestSettings === undefined || requestSettings.key === undefined) return next();
-    const { key, scope, retentionMs, leaseMs } = requestSettings;
-    if (!isValidIdempotencyKey(key)) {
-      throw new TypeError(
-        `idempotencyBehavior: the key of '${name}' is not a valid idempotency key`,
-      );
-    }
-    const settings =
-      retentionMs === undefined && leaseMs === undefined
-        ? typeResolved
-        : resolveSettings([{ retentionMs, leaseMs }, ...layersOf(typeSettings)]);
-    const revive =
-      options.settings === undefined &&
-      (typeSettings?.reviveScopeJson ?? options.reviveScopeJson ?? false);
-    const policy = {
-      releaseFailures: typeSettings?.releaseFailures ?? releaseFailuresOf(request, context),
-      serializer,
-    };
+    return runPreparedIdempotent<Result<TRes>>(
+      { settings: typeResolved, source: 'mediator', target: name, signal: context.signal },
+      () => {
+        const requestSettings = settingsOf(request, context);
+        if (requestSettings === undefined || requestSettings.key === undefined) return undefined;
+        const { key, scope, retentionMs, leaseMs } = requestSettings;
+        if (!isValidIdempotencyKey(key)) {
+          throw new TypeError(
+            `idempotencyBehavior: the key of '${name}' is not a valid idempotency key`,
+          );
+        }
+        const settings =
+          retentionMs === undefined && leaseMs === undefined
+            ? typeResolved
+            : resolveSettings([{ retentionMs, leaseMs }, ...layersOf(typeSettings)]);
+        const revive =
+          options.settings === undefined &&
+          (typeSettings?.reviveScopeJson ?? options.reviveScopeJson ?? false);
+        const policy = {
+          releaseFailures: typeSettings?.releaseFailures ?? releaseFailuresOf(request, context),
+          serializer,
+        };
 
-    return runIdempotent<Result<TRes>>({
-      settings,
-      source: 'mediator',
-      target: name,
-      namespace: typeSettings?.namespace ?? name,
-      unscopedKeyBehavior:
-        typeSettings?.unscopedKeyBehavior ?? options.unscopedKeyBehavior ?? 'reject',
-      signal: context.signal,
-      key: () => key,
-      scope: () => (revive && scope != null ? idempotencyScopes.fromJSON(scope) : scope),
-      fingerprint: () =>
-        fingerprintOf('fingerprint' in requestSettings ? requestSettings.fingerprint : request),
-      run: () => next(),
-      complete: (result) => resultCompletion(result, policy, settings),
-      replay: (payload) => replayResult<TRes>(payload, serializer),
-      reject: (code) =>
-        Result.failure<TRes>(idempotencyErrors.forCode(code, settings.retryAfterMs)),
-    });
+        return {
+          settings,
+          source: 'mediator',
+          target: name,
+          namespace: typeSettings?.namespace ?? name,
+          unscopedKeyBehavior:
+            typeSettings?.unscopedKeyBehavior ?? options.unscopedKeyBehavior ?? 'reject',
+          signal: context.signal,
+          key: () => key,
+          scope: () => (revive && scope != null ? idempotencyScopes.fromJSON(scope) : scope),
+          fingerprint: () =>
+            fingerprintOf('fingerprint' in requestSettings ? requestSettings.fingerprint : request),
+          run,
+          complete: (result) => resultCompletion(result, policy, settings),
+          replay: (payload) => replayResult<TRes>(payload, serializer),
+          reject: (code) =>
+            Result.failure<TRes>(idempotencyErrors.forCode(code, settings.retryAfterMs)),
+        };
+      },
+      run,
+    );
   };
 }
 
@@ -207,7 +213,9 @@ export function makeIdempotencyBehavior(
  * - A failure of a transactional request is released (its work was rolled back), so a retry
  *   runs it again; other failures are stored (`Unexpected` ones for `serverErrorRetentionMs`).
  * - A handler that throws or is aborted keeps the key in flight until the lease ends.
- * - An invalid key or out-of-range request duration throws (`TypeError` / `RangeError`).
+ * - An invalid key or out-of-range request duration throws (`TypeError` / `RangeError`) in
+ *   `enforce`; `observe` logs it (`Idempotency.Observe.ResolutionFailed`) and runs the handler
+ *   without idempotency, as it does when `settings` or `releaseFailures` throws.
  *
  * Throws at setup when no store is given, a duration is out of range or a profile is unknown.
  */

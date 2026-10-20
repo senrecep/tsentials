@@ -435,7 +435,7 @@ Turning idempotency on in front of live traffic changes answers: retries that us
 
    **`observe` does not prevent duplicates.** A retry still runs the operation again; the mode only reports what `enforce` would do.
 
-   A key, scope or fingerprint resolver that throws does not block the call in `observe`: the call runs without idempotency and the logger gets `Idempotency.Observe.ResolutionFailed` (the same error rejects the call in `enforce`).
+   A key, scope or fingerprint resolver that throws does not block the call in `observe`, and neither does the rest of the setup: an invalid mediator request key, an out-of-range request `leaseMs` / `retentionMs`, a mediator `settings` or `releaseFailures` function that throws, or an `idempotent()` `signal` resolver that throws. The call runs without idempotency and the logger gets `Idempotency.Observe.ResolutionFailed` (the same error rejects the call in `enforce`).
 3. Watch these events. `WouldRejectKeyReused` usually means a client reuses keys across operations; `WouldRejectScopeRequired` means the scope resolver misses some callers. Fix the clients and resolvers first.
 4. **`enforce`**: replays and rejections take effect. Records written in `observe` are used, so a key completed during `observe` is replayed right away. (The SQL setup above is the exception: its observe records, written through the pool, use a separate namespace. After the switch, keys completed during `observe` are not replayed, and a call still in flight in `observe` at the moment of the switch can run once more in `enforce`.)
 
