@@ -73,6 +73,7 @@ createMediator<Requests>({
 await mediator.send('CapturePayment', { orderId, idempotencyKey, idempotencyScope: idempotencyScopes.tenant(tenantId) });
 ```
 
+Fingerprint defaults to the whole request: if it has per-retry fields (`requestedAt`, trace id), return an explicit `fingerprint` of the business fields from `settings`, or retries get 422 `KeyReused`. Fingerprints are not canonicalized (key order, whitespace, number formatting matter): clients resend the identical request.
 Reads `idempotencyKey`, `idempotencyScope`, `idempotencyRetentionMs`, `idempotencyLeaseMs` from the request (or `settings(request, ctx)`). Namespace = request name. A failure of a `transactional: true` request is released.
 
 ## Fetch API handlers
@@ -89,12 +90,14 @@ export const POST = withIdempotency(createOrder, {
 |-----------|----------|
 | No key, `requireKey: true` | 400 `Idempotency.KeyMissing` |
 | Malformed key | 400 `Idempotency.KeyInvalid` |
-| Key without scope, `unscopedKeyBehavior: 'reject'` | 400 `Idempotency.ScopeRequired` (default `'skip'` runs the handler) |
+| Key without scope, `unscopedKeyBehavior: 'reject'` (default) | 400 `Idempotency.ScopeRequired` (`'skip'` runs the handler) |
 | Same key running | 409 `Idempotency.InFlight` + `Retry-After` |
 | Same key, other method/path/query/body | 422 `Idempotency.KeyReused` |
+| Same key, completed with a 2xx that could not be stored | 409 `Idempotency.ResultUnavailable`, no `Retry-After`, never retried |
+| Reservation lost while the handler ran, then the handler threw that abort (the signal's reason, or an abort-like error with `bindRequest`) (`enforce`) | 503 `Idempotency.ReservationLost` with `Retry-After`; the key is released |
 | Same key, completed | stored status, whitelisted headers, body + `Idempotency-Replayed: true` |
 
-Errors are `application/problem+json` with a `code`. Guards POST and PATCH by default. 4xx is released, not stored. Compressed or streaming bodies and bodies over 1 MiB are not stored and keep the key in flight (released for a 4xx), as do 503/504 and a thrown handler, until the lease ends; other 5xx is stored for `serverErrorRetentionMs`. Replayed headers: `content-type`, `content-language`, `location`, `etag`, `cache-control`, `retry-after`.
+Errors are `application/problem+json` with a `code`. Guards POST and PATCH by default. 4xx is released, not stored. Compressed or streaming bodies and bodies over 1 MiB are not stored: a 2xx stores a marker for `retentionMs` (a retry gets 409 `Idempotency.ResultUnavailable`), a 4xx is released, any other status keeps the key in flight until the lease ends, as do 503/504 and a thrown handler; other 5xx is stored for `serverErrorRetentionMs`. Replayed headers: `content-type`, `content-language`, `location`, `etag`, `cache-control`, `retry-after`.
 
 ## Keys and scopes
 
@@ -110,7 +113,7 @@ Scope builders return `undefined` for a missing id. A scope is an `IdempotencySc
 
 - `InMemoryIdempotencyStore`: tests and one process.
 - `RedisIdempotencyStore(redis, { prefix })`: `RedisLike` needs only `eval(script, keys, args)`. ioredis: `client.eval(s, keys.length, ...keys, ...args)`; node-redis: `client.eval(s, { keys, arguments: args })`.
-- Own store: compare keys byte for byte (binary no-pad collation: a PAD SPACE one merges `a` and `a `; or key the row by the SHA-256 of `idempotencyStorageKey`, the only option on SQL Server, which pads under every collation); implement `IdempotencyStore` (`reserve`, `complete`, `release` with token compare-and-set) and run `describeIdempotencyStoreContract(name, (clock) => store, { describe, it })`.
+- Own store: compare keys byte for byte (binary no-pad collation: a PAD SPACE one merges `a` and `a `; or key the row by the SHA-256 of `idempotencyStorageKey`, the only option on SQL Server, which pads under every collation); implement `IdempotencyStore` (`reserve`, `complete`, `release` with token compare-and-set, optional `extend` that never revives an expired lease) and run `describeIdempotencyStoreContract(name, (clock) => store, { describe, it })`.
 - SQL in the same transaction as the business change: see `docs/IDEMPOTENCY.md` and `examples/idempotency-sql`.
 
 ## Client side
@@ -127,7 +130,8 @@ await ResiliencePolicy.create()
 ## Patterns and pitfalls
 
 - Import from `tsentials/idempotency`, never from the root `tsentials` entry.
-- **Lease rule:** `leaseMs` ≥ the client's total retry and timeout budget, and longer than the slowest run. Otherwise a retry takes the key over and the operation runs twice (`Idempotency.ReservationLost`).
+- **Lease rule:** `leaseMs` must cover the slowest handler run plus the client's whole retry and timeout budget; with a store that has `extend`, the heartbeat covers the run (for at most 15 minutes from the reservation), so `leaseMs` must still cover the client's retry and timeout budget, but not the run. `leaseMs` also bounds how long a crashed run blocks the key. Otherwise a retry takes the key over and the operation runs twice (`Idempotency.ReservationLost`).
+- **Lease extension:** with a store that has the optional `extend` (InMemory, Redis, the SQL example), the lease is extended every `leaseMs / 3` while the handler runs. If `extend` returns `false`, or no `extend` succeeds before the lease deadline (a throwing `extend` is retried), `Idempotency.ReservationLost` is logged once (15 minutes after the reservation `Idempotency.LeaseLimitReached` instead) and, in `enforce`, the handler's signal aborts with reason name `ReservationLost` (`IdempotencyReservationLostError`); if the handler then throws that abort (its reason, or an abort-like error when it received the signal), the key is released and the call answers `Idempotency.ReservationLost` (Unexpected, HTTP 503 + `Retry-After`). Any other error is rethrown; a failure returned after the loss is released when the handler received the signal (stored otherwise), a success is stored (token-fenced). The signal reaches the handler through mediator `ctx.signal`, `idempotent({ bindSignal: (signal, cmd) => [{ ...cmd, signal }] })`, and `withIdempotency({ bindRequest: (req, signal) => new Request(req, { signal }) })` (opt-in; without it the handler gets the original request). `observe` only logs.
 - Take the scope from the authenticated principal, never from the request body. Mediator `idempotencyKey`/`idempotencyScope` fields are trusted input.
 - One key per logical operation: create it when the user starts the operation, reuse it on every retry, never reuse it for another payload (422 `KeyReused` is final).
 - **Cloudflare KV (and any store without atomic insert) is not safe** as an idempotency store or lock.

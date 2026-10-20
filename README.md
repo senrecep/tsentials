@@ -7,7 +7,7 @@
 [![npm version](https://img.shields.io/npm/v/tsentials?style=flat-square&color=blue)](https://www.npmjs.com/package/tsentials)
 [![npm downloads](https://img.shields.io/npm/dm/tsentials?style=flat-square)](https://www.npmjs.com/package/tsentials)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/tsentials?style=flat-square&label=gzip)](https://bundlephobia.com/package/tsentials)
-[![tests](https://img.shields.io/badge/tests-2957%20passing-brightgreen?style=flat-square)](./tests)
+[![tests](https://img.shields.io/badge/tests-3107%20passing-brightgreen?style=flat-square)](./tests)
 [![CI](https://img.shields.io/github/actions/workflow/status/senrecep/tsentials/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/senrecep/tsentials/actions)
 [![license](https://img.shields.io/github/license/senrecep/tsentials?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
@@ -1272,8 +1272,9 @@ export const POST = idem.withIdempotency(createOrder, {
 
 - Same key still running → `Idempotency.InFlight` (Conflict, HTTP 409 with `Retry-After`).
 - Same key with another payload → `Idempotency.KeyReused` (Validation, HTTP 422).
+- `withIdempotency`: same key after a 2xx that could not be stored (too large, encoded or an event stream) → `Idempotency.ResultUnavailable` (Conflict, HTTP 409 without `Retry-After`, never retried).
 - Same key, same payload, completed → the stored outcome (HTTP adds `Idempotency-Replayed: true`).
-- Keys are scoped by `(namespace, scope, key)`; a key without a scope is rejected or skipped, never shared by accident.
+- Keys are scoped by `(namespace, scope, key)`; a key without a scope is rejected by default (`unscopedKeyBehavior: 'skip'` or `'global'` opt in), never shared by accident.
 - Roll out with `observe` first: it answers exactly like `off` and reports what `enforce` would have done.
 
 What `idempotent()` and the mediator behavior keep after the operation returns (the HTTP adapter has its own table in the guide, where a 4xx is released):
@@ -1284,6 +1285,7 @@ What `idempotent()` and the mediator behavior keep after the operation returns (
 | Failure whose first error is `Unexpected` | stored for `serverErrorRetentionMs` (10 min, at most `retentionMs`) |
 | Any other failure (Validation, NotFound, Conflict, …) | stored for `retentionMs` |
 | Thrown error or caller abort | kept in flight until the lease ends |
+| Lease signal abort thrown after the lease was lost (`enforce`, store with `extend`; an abort-like error counts only when the handler received the signal) | released; the call fails with `Idempotency.ReservationLost`, so a retry runs again (any other thrown error propagates as before) |
 | Failure with `storeFailures: false` (`idempotent`) or of a `transactional: true` request (mediator default; `releaseFailures` overrides it) | released, so a retry runs again |
 
 Stores: `InMemoryIdempotencyStore`, `RedisIdempotencyStore` (bring your own client through `RedisLike`) and any store that passes `describeIdempotencyStoreContract`. Use a store with atomic compare-and-set; an eventually consistent key-value store such as Cloudflare KV is not safe as a lock. On the client side, `tsentials/http` adds `withIdempotencyKey`, `RequestBuilder.idempotencyKey()` and `idempotentRetryClassifier` for `ResiliencePolicy.withRetry({ shouldRetry })`.

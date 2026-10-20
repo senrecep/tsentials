@@ -60,7 +60,7 @@ const route = idem.withIdempotency(createOrder, { scope: (req) => scopeOf(req) }
 |---------|---------|---------|
 | `store` | required | Where records live |
 | `mode` | `'enforce'` | `off`, `observe` or `enforce`, or a function read on every call |
-| `leaseMs` | 60 000 (1 min) | How long a reservation blocks other calls with the same key. At most `min(retentionMs, 15 min)` |
+| `leaseMs` | 60 000 (1 min) | How long a reservation blocks other calls with the same key. At most `min(retentionMs, 15 min)`. With a store that has `extend`, the heartbeat renews it while the handler runs, for at most 15 min from the reservation |
 | `retentionMs` | 86 400 000 (24 h) | How long a completed outcome is replayed |
 | `serverErrorRetentionMs` | 600 000 (10 min) | How long a 5xx response or an `Unexpected` failure is replayed. At most `retentionMs` |
 | `retryAfterMs` | 1 000 | `Retry-After` of an in-flight rejection; `null` omits it |
@@ -87,9 +87,11 @@ await capture(cmd); // the same Result, capturePayment does not run again
 
 - A running call with the same key → Conflict `Idempotency.InFlight` (retryable).
 - The same key with other arguments → Validation `Idempotency.KeyReused`. The fingerprint is the arguments by default; `fingerprint: (cmd) => cmd.amount` narrows it.
+- Fingerprints are deliberately not canonicalized: key order, whitespace and number formatting change the fingerprint, the same model as Stripe, so a client must resend the identical request.
 - A key without a scope → Validation `Idempotency.ScopeRequired`. `unscopedKeyBehavior: 'skip'` runs without idempotency instead, and `'global'` uses one shared scope.
 - Successes are kept for `retentionMs`. Failures whose first error is `Unexpected` are kept for `serverErrorRetentionMs`, other failures for `retentionMs`. `storeFailures: false` releases every failure so a retry runs again.
 - A function that throws or is aborted keeps the key in flight until the lease ends, and the error propagates. A store that throws rejects the call in `enforce` mode and is logged in `observe` mode.
+- `bindSignal: (signal, cmd) => [{ ...cmd, signal }]` hands the function the lease signal, which aborts when the reservation is lost (see [Lease extension](#lease-extension)). Without it the function gets its original arguments.
 
 ## Mediator: `idempotencyBehavior`
 
@@ -112,7 +114,21 @@ await mediator.send('CapturePayment', { orderId, idempotencyKey, idempotencyScop
 - Place it after validation and before lock and transaction behaviors.
 - By default it reads `idempotencyKey`, `idempotencyScope`, `idempotencyRetentionMs` and `idempotencyLeaseMs` from the request. These fields are trusted input: set them in server code (the scope from the authenticated principal), never copy them from a client payload. A `settings(request, context)` function can read them from somewhere else.
 - The namespace is the request name. A missing scope gives `Idempotency.ScopeRequired`, because the key comes from code and a missing scope is a bug.
+- The fingerprint is the whole request by default. A request that carries fields that change on every retry (`requestedAt`, a trace id, a generated timestamp) gets a different fingerprint each time and a retry fails with 422 `Idempotency.KeyReused`. Return an explicit `fingerprint` from `settings` that covers only the business fields:
+
+  ```ts
+  idempotencyBehavior({
+    store,
+    settings: (request: CapturePaymentRequest) => ({
+      key: request.idempotencyKey,
+      scope: request.idempotencyScope,
+      fingerprint: { orderId: request.orderId, amount: request.amount }, // not requestedAt or traceId
+    }),
+  });
+  ```
+
 - A failure of a request with `transactional: true` is released, since its work rolled back; other failures are stored.
+- With a store that has `extend`, the handler's `ctx.signal` in `enforce` is a new signal that aborts with the caller's reason or when the reservation is lost (see [Lease extension](#lease-extension)).
 
 ## HTTP handlers: `withIdempotency`
 
@@ -135,11 +151,13 @@ The wrapper guards `POST` and `PATCH` (`methods` changes this) and reads the `Id
 |-----------|----------|
 | No key and `requireKey: true` | 400 `Idempotency.KeyMissing` |
 | Malformed key (not 1–255 printable ASCII without `"` and `\`, or a list) | 400 `Idempotency.KeyInvalid` |
-| Key without scope, `unscopedKeyBehavior: 'reject'` | 400 `Idempotency.ScopeRequired` |
-| Key without scope, `unscopedKeyBehavior: 'skip'` (default) | Handler runs; event `Idempotency.UnscopedKeySkipped` |
+| Key without scope, `unscopedKeyBehavior: 'reject'` (default) | 400 `Idempotency.ScopeRequired` |
+| Key without scope, `unscopedKeyBehavior: 'skip'` | Handler runs; event `Idempotency.UnscopedKeySkipped` |
 | Same key still running | 409 `Idempotency.InFlight` with `Retry-After` |
 | Same key, other method, path, query or body | 422 `Idempotency.KeyReused` |
+| Same key, same request, completed with a 2xx that could not be stored | 409 `Idempotency.ResultUnavailable` without `Retry-After`; the handler does not run |
 | Same key, same request, completed | The stored status, whitelisted headers and body, plus `Idempotency-Replayed: true` |
+| The reservation was lost while the handler ran and the handler then threw the abort of its `bindRequest` signal (the signal's reason, or an abort-like error such as `AbortError` or `TimeoutError`; without `bindRequest` only the signal's reason counts) (`enforce`) | 503 `Idempotency.ReservationLost` with `Retry-After`; the key is released, so a retry runs the handler again |
 
 Errors are `application/problem+json` bodies `{ title, status, detail, code }`. The `code` is the contract, so clients classify on it.
 
@@ -149,11 +167,11 @@ What is stored:
 |-----------------|---------|
 | 503 or 504 (`neverStoreStatuses`) | No, the key stays in flight until the lease ends |
 | 4xx (`shouldStore` default) | No, the key is released so the client can fix the request and retry |
-| `Content-Encoding` other than identity, or `text/event-stream` | No. The handler ran, so the key stays in flight until the lease ends (a 4xx is released) |
-| Body larger than `maxResponseBodyBytes` (1 MiB) | No, kept in flight like above (a 4xx is released); logs `Idempotency.ResponseTooLarge` |
+| `Content-Encoding` other than identity, or `text/event-stream` | The response cannot be stored. A 2xx stores a marker for `retentionMs`, so a retry gets 409 `Idempotency.ResultUnavailable` instead of running the handler again; once the marker is stored, logs `Idempotency.ResponseNotReplayable` with `Reason` `encoded` or `event_stream`. A 4xx is released; any other status keeps the key in flight until the lease ends |
+| Body larger than `maxResponseBodyBytes` (1 MiB) | Like above: a marker for a 2xx (logs `Idempotency.ResponseNotReplayable` with `Reason` `too_large`), released for a 4xx, in flight otherwise; a non-2xx logs `Idempotency.ResponseTooLarge` |
 | 5xx | Yes, for `serverErrorRetentionMs` |
 | Anything else | Yes, for `retentionMs` |
-| The handler throws | No, the key stays in flight until the lease ends |
+| The handler throws | No, the key stays in flight until the lease ends. When it throws the abort of a lost reservation in `enforce` (see above), the key is released instead and the client gets 503 `Idempotency.ReservationLost` |
 
 `idempotencyStorePolicies.successOnly` stores only 2xx and releases every other response, so a retry after a 3xx or 5xx runs the handler again even if its work already happened. Replayed headers are `content-type`, `content-language`, `location`, `etag`, `cache-control` and `retry-after` by default (`replayedHeaders`); `set-cookie` is never replayed.
 
@@ -162,6 +180,7 @@ Notes:
 - The request body is buffered to compute the fingerprint, because Web Crypto has no streaming digest. Enforce a request body size limit before this wrapper.
 - Put rate limiting, timeouts and load shedding outside the wrapper, so their responses are not stored.
 - Do not wrap streaming routes.
+- The handler receives the original `Request`. To let it see the lease signal (see [Lease extension](#lease-extension)), set `bindRequest`, for example `bindRequest: (req, signal) => new Request(req, { signal })`. It is called only in `enforce` with a store that has `extend`, and the signal aborts with the caller's reason or when the reservation is lost. A `new Request(req, ...)` moves the body from `req`, so the handler must read the request it receives; properties set on the original object are not copied, and a `Request` subclass needs its own rebuild.
 
 ## Keys and scopes
 
@@ -223,25 +242,45 @@ const builder = RequestBuilder.post('/orders').json(order).idempotencyKey();
 await policy.execute((signal) => builder.signal(signal).send<Order>());
 ```
 
-`idempotentRetryClassifier(method, hasKey)` never retries a POST or PATCH without a key, never retries a replayed response, retries network errors and timeouts before a response, never retries a received response whose body cannot be read or parsed (2xx included), retries 409 `Idempotency.InFlight`, 408, 429, 503 and 504, and nothing else. `withRetry` waits at least the server's `Retry-After` (capped by `maxRetryAfterMs`). A failed response's first error, including a body parse failure, carries the metadata `httpStatus`, `retryAfterMs`, `idempotencyReplayed` and `problemCode` (`HttpErrorMetadataKeys`). A timeout while reading the body keeps `httpStatus` but has no `problemCode`, so a 409 whose body stalls is not retried.
+`idempotentRetryClassifier(method, hasKey)` never retries a POST or PATCH without a key, never retries a replayed response, retries network errors and timeouts before a response, never retries a received response whose body cannot be read or parsed (2xx included), retries 409 `Idempotency.InFlight`, 408, 429, 503 and 504, and nothing else (409 `Idempotency.ResultUnavailable` is never retried). Use it: a generic `withRetry` without `shouldRetry` retries a 409 Conflict, because Conflict is retryable, so it would retry `Idempotency.ResultUnavailable` until it runs out of attempts. `withRetry` waits at least the server's `Retry-After` (capped by `maxRetryAfterMs`). A failed response's first error, including a body parse failure, carries the metadata `httpStatus`, `retryAfterMs`, `idempotencyReplayed` and `problemCode` (`HttpErrorMetadataKeys`). A timeout while reading the body keeps `httpStatus` but has no `problemCode`, so a 409 whose body stalls is not retried.
 
 ## Lease, retention and the retry budget
 
-**Rule: `leaseMs` must be at least the client's total retry and timeout budget, and longer than the slowest run of the operation.**
+**Rule: `leaseMs` must be at least the slowest run of the handler plus the client's whole retry and timeout budget. With a store that has `extend`, the heartbeat covers the run (for at most 15 minutes from the reservation), so `leaseMs` must still cover the client's retry and timeout budget, but not the run.**
 
 The lease is how long a reservation blocks other calls. When it ends while the first call is still running, the next retry takes the key over and the operation runs twice; the first call's `complete` then fails (event `Idempotency.ReservationLost`). So:
 
 - Budget = attempts × per-attempt timeout + the retry delays. A client with 3 retries, a 10 s timeout and up to 5 s of backoff needs a lease of at least `4 × 10 s + 3 × 5 s = 55 s`.
-- A handler that can run for 2 minutes needs a lease above 2 minutes, whatever the client does.
+- A handler that can run for 2 minutes needs a lease above 2 minutes, whatever the client does, unless the store has `extend`, which keeps the reservation alive while the handler runs (see [Lease extension](#lease-extension)).
 - The lease is capped at 15 minutes. A longer operation should accept the request, return 202 and finish in the background under its own idempotency key.
 
 A crash or a 503/504 keeps the key in flight until the lease ends. A long lease therefore also blocks a client that retries after a crash; pick the shortest lease that satisfies the rule.
+
+### Lease extension
+
+When the store has `extend` (the in-memory and Redis stores do, and so does the SQL example), the engine extends the lease while the handler runs: every `leaseMs / 3` (at least 1 ms) it calls `extend(key, token, leaseMs)`, and the next beat starts only after the previous one settled. So a slow handler keeps its key in flight past `leaseMs`, while a crashed process stops beating and its key frees up one lease after the last beat. With such a store the heartbeat keeps a live run's lease alive, but `leaseMs` still bounds how long a crashed run blocks the key and how quickly a stalled heartbeat is detected. The client-side rule above still holds: the lease must cover the client's retry and timeout budget, since the lease is also how long a retry after a crash waits.
+
+The heartbeat starts after a reservation and stops when the handler settles. A caller abort does not stop it, because the handler may still be running. Its timers are `unref`ed, so they never keep a process alive. Each `extend` gets a signal that aborts when the heartbeat stops.
+
+- `extend` returns `false` (the token no longer holds the record): the lease is lost at once.
+- `extend` throws: the next beat tries again. The lease is known to be held until the time taken before the last successful `extend` (or before `reserve`) plus `leaseMs`. If no `extend` succeeded by then, because it kept throwing or hangs, the lease is lost and the pending `extend` is aborted.
+- 15 minutes (`MAX_LEASE_MS`) after the reservation the heartbeat stops and logs `Idempotency.LeaseLimitReached`; in `enforce` the handler's signal aborts as for a lost lease. A longer operation should return 202 and finish in the background.
+
+A lost lease logs `Idempotency.ReservationLost` (with the last error `extend` threw, if any), once per call:
+
+- In `enforce`, the handler's signal aborts with an `IdempotencyReservationLostError` (`name` `'ReservationLost'`, `cause` the last error `extend` threw). Hand the signal on to the database and HTTP calls of the handler so they stop: `ctx.signal` for the mediator, `bindSignal` for `idempotent`, `bindRequest` for `withIdempotency`. When the handler then throws or rejects with that abort, the engine releases what is left of the reservation and answers `Idempotency.ReservationLost` (Unexpected): a failure for `idempotent` and the mediator, 503 with `Retry-After` for `withIdempotency`. Nothing is stored, so a retry runs the operation again. The abort is the signal's reason, or an abort-like error such as `AbortError` or `TimeoutError` from a handler that received the signal (the mediator, `idempotent` with `bindSignal`, `withIdempotency` with `bindRequest`). Any other error is the handler's own and is rethrown as before, so a handler that never got the signal (no `bindSignal` or `bindRequest`) keeps its old behaviour: its own `TimeoutError` is rethrown, not answered with `Idempotency.ReservationLost`. A caller abort still rejects with the caller's reason, also when the lease was lost first.
+- A handler that returns after the loss: in `enforce`, when it received the signal, a failure (a failure `Result`, or a 5xx response that would be stored) is released instead of stored, because it may be the result of the abort; a handler that never got the signal cannot have failed because of it, so its failure is stored as before. A success is still stored, token-fenced, so it is kept only if the reservation was not taken over, and a retry does not repeat the operation. `ReservationLost` is logged once per call, by the heartbeat, whatever the handler does next; reaching the 15 minute limit logs `Idempotency.LeaseLimitReached` instead. With the mediator, `exceptionHandlingBehavior` rethrows the abort of `ctx.signal`, so the engine sees it wherever the behavior sits.
+- In `observe`, the lost lease is only logged; the handler keeps running and its error is rethrown as before.
+
+Known limitation: on Node 22, `AbortSignal.any` accepts a caller signal that is not a native `AbortSignal` (a polyfill, or one from another realm) without throwing, and the combined signal does not follow that caller's abort. Pass a native `AbortSignal` as the caller signal.
+
+A handler that ignores the signal and returns is completed as before: if the record was taken over, `complete` fails and nothing is stored; if the lease only expired and nobody took it over, `complete` can still store the handler's outcome. A store without `extend` behaves as before: no timer, no new signal, the original request and arguments.
 
 `retentionMs` is how long a client may retry and still get the stored outcome; it must cover the longest time a client keeps a pending operation (24 h by default). `serverErrorRetentionMs` keeps a 5xx outcome only briefly, so a client is not locked out of its key for a day after an outage.
 
 ## Stores
 
-A store implements `IdempotencyStore`: an atomic `reserve`, plus `complete` and `release` that act only when the stored token still matches (compare-and-set).
+A store implements `IdempotencyStore`: an atomic `reserve`, plus `complete` and `release` that act only when the stored token still matches (compare-and-set). The optional `extend(key, token, leaseMs, signal?)` moves the lease end to now + `leaseMs` and returns `true` only while the record is live, in flight and holds the token; it never revives an expired lease and never touches a completed record. A store without it still works, without [lease extension](#lease-extension).
 
 | Store | Use for |
 |-------|---------|
@@ -262,7 +301,7 @@ const redis: RedisLike = { eval: (s, keys, args) => client.eval(s, { keys, argum
 const store = new RedisIdempotencyStore(redis, { prefix: 'idem:v3:' });
 ```
 
-A record is a hash with the fields `t` (token), `f` (fingerprint) and `p` (payload, set once completed). Its TTL is the lease or the retention, so Redis cleans up by itself. The scripts are exported as `RedisIdempotencyScripts`. [`examples/idempotency-redis`](../examples/idempotency-redis) runs the contract suite against a real Redis.
+A record is a hash with the fields `t` (token), `f` (fingerprint) and `p` (payload, set once completed). Its TTL is the lease or the retention, so Redis cleans up by itself; `extend` resets the TTL with `PEXPIRE` while the hash holds the token and no payload, and an expired key is already gone, so it is never revived. The scripts are exported as `RedisIdempotencyScripts`. [`examples/idempotency-redis`](../examples/idempotency-redis) runs the contract suite against a real Redis.
 
 **Key-value stores without compare-and-set are not suitable.** Cloudflare KV, for example, is eventually consistent and has no atomic insert: two requests can both "reserve" the same key, so the operation runs twice. Do not use such a store for idempotency or as a lock; use Redis, a SQL database or Durable Objects instead.
 
@@ -304,25 +343,25 @@ CREATE TABLE idempotency_records (
   PRIMARY KEY (namespace, scope, key)
 );
 CREATE INDEX idempotency_records_expires_at_idx ON idempotency_records (expires_at);
--- Periodic cleanup; the store already ignores and replaces expired rows:
--- DELETE FROM idempotency_records WHERE expires_at <= $1;
+-- Periodic cleanup with the database clock; the store already ignores and replaces expired rows:
+-- DELETE FROM idempotency_records WHERE expires_at <= (extract(epoch from clock_timestamp()) * 1000)::bigint;
 ```
 
-The reservation is a single atomic statement, so parallel reserves have exactly one winner; classifying a conflict (mismatch, completed, in flight) re-reads the row. The example compares `expires_at` with the application clock, so keep the application servers' clocks in sync (NTP). The statements:
+The reservation is a single atomic statement, so parallel reserves have exactly one winner; classifying a conflict (mismatch, completed, in flight) re-reads the row. The example computes and compares `expires_at` with the database clock, `(extract(epoch from clock_timestamp()) * 1000)::bigint`, so skew between application servers does not matter. It uses `clock_timestamp()`, not `now()`, because `now()` is frozen for the whole transaction and a store that shares a long business transaction would see stale time. Such a store runs its queries on the transaction's connection one at a time, so a heartbeat `extend` can wait behind a slow business query; prefer a separate pool or client for the store. `leaseMs` and `retentionMs` are parameters. The statements:
 
 ```sql
 -- reserve: insert, or take over an expired record. No row returned → read the live record
 -- (other fingerprint → mismatch, payload → completed, otherwise in flight).
 INSERT INTO idempotency_records AS r (namespace, scope, key, token, fingerprint, payload, expires_at)
-VALUES ($1, $2, $3, $4, $5, NULL, $6)
+VALUES ($1, $2, $3, $4, $5, NULL, (extract(epoch from clock_timestamp()) * 1000)::bigint + $6::bigint)
 ON CONFLICT (namespace, scope, key) DO UPDATE
   SET token = excluded.token, fingerprint = excluded.fingerprint, payload = NULL, expires_at = excluded.expires_at
-  WHERE r.expires_at <= $7
+  WHERE r.expires_at <= (extract(epoch from clock_timestamp()) * 1000)::bigint
 RETURNING token;
 
 -- complete: store the payload only while our reservation holds (or after it was swept).
 INSERT INTO idempotency_records AS r (namespace, scope, key, token, fingerprint, payload, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES ($1, $2, $3, $4, $5, $6, (extract(epoch from clock_timestamp()) * 1000)::bigint + $7::bigint)
 ON CONFLICT (namespace, scope, key) DO UPDATE
   SET fingerprint = excluded.fingerprint, payload = excluded.payload, expires_at = excluded.expires_at
   WHERE r.token = $4 AND r.payload IS NULL
@@ -331,6 +370,12 @@ RETURNING 1;
 -- release: delete our in-flight reservation, never a completed record.
 DELETE FROM idempotency_records
 WHERE namespace = $1 AND scope = $2 AND key = $3 AND token = $4 AND payload IS NULL;
+
+-- extend: move the lease end of our live, in-flight reservation ($5 = leaseMs).
+UPDATE idempotency_records SET expires_at = (extract(epoch from clock_timestamp()) * 1000)::bigint + $5::bigint
+WHERE namespace = $1 AND scope = $2 AND key = $3 AND token = $4
+  AND payload IS NULL AND expires_at > (extract(epoch from clock_timestamp()) * 1000)::bigint
+RETURNING 1;
 ```
 
 Use it inside the transaction of the business work:
@@ -432,6 +477,7 @@ Turning idempotency on in front of live traffic changes answers: retries that us
    - `Idempotency.Observe.WouldRejectKeyReused`
    - `Idempotency.Observe.WouldRejectInFlight`
    - `Idempotency.Observe.WouldRejectScopeRequired`
+   - `Idempotency.Observe.WouldRejectResultUnavailable`
 
    **`observe` does not prevent duplicates.** A retry still runs the operation again; the mode only reports what `enforce` would do.
 
@@ -469,5 +515,21 @@ const idem = createIdempotency({
 | `Idempotency.KeyMissing` | Validation | 400 | After adding a key |
 | `Idempotency.KeyInvalid` | Validation | 400 | After fixing the key |
 | `Idempotency.ScopeRequired` | Validation | 400 | No, a server-side bug |
+| `Idempotency.ResultUnavailable` | Conflict | 409, no `Retry-After` | Never. The key completed but its result could not be stored (a 2xx that is too large, encoded or an event stream), so it cannot be replayed. Use a new key only if repeating the side effect is intended |
+| `Idempotency.ReservationLost` | Unexpected | 503 + `Retry-After` | Yes. The lease was lost while the handler ran and the handler threw that abort (the lease signal's reason, or an abort-like error when it received the signal); the key was released, so the retry runs the operation again |
 
-`IdempotencyEventNames` also has `Idempotency.Decision` (decisions without a fixed name, such as `reserved` and `stored`), `Idempotency.UnscopedKeySkipped`, `Idempotency.Observe.ResolutionFailed`, `Idempotency.StoreFailed`, `Idempotency.CompleteFailed`, `Idempotency.ReservationLost`, `Idempotency.ResponseTooLarge` and `Idempotency.StoredResponseUnreadable`.
+`onDecision` reports one of the decisions `reserved`, `replay`, `result_unavailable` (a key whose result could not be stored), `key_reused`, `in_flight`, `unscoped`, `released` and `stored`.
+
+| Event | Level | When |
+|-------|-------|------|
+| `Idempotency.Decision` | information | Decisions without a fixed name, such as `reserved` and `stored` (through `onDecision` only) |
+| `Idempotency.Observe.Would…` | information | `observe` found a conflict (see [Rolling out](#rolling-out-off-observe-enforce)) |
+| `Idempotency.Observe.ResolutionFailed` | warning | `observe` setup threw; the call ran without idempotency |
+| `Idempotency.UnscopedKeySkipped` | warning | A key without a scope ran without idempotency (`unscopedKeyBehavior: 'skip'`) |
+| `Idempotency.StoreFailed` | warning | `reserve` threw in `observe` |
+| `Idempotency.CompleteFailed` | warning | `complete` or `release` threw; the handler's output was returned |
+| `Idempotency.ReservationLost` | warning | `extend` returned `false`, no `extend` succeeded before the lease deadline, or `complete` found the record taken over; logged once per call |
+| `Idempotency.LeaseLimitReached` | warning | The heartbeat stopped 15 minutes after the reservation |
+| `Idempotency.ResponseTooLarge` | warning | A non-2xx HTTP response over `maxResponseBodyBytes` was not stored |
+| `Idempotency.ResponseNotReplayable` | warning | A marker was stored for a 2xx HTTP response that could not be stored; logged once the marker is stored, with the property `Reason`: `too_large`, `encoded` or `event_stream` |
+| `Idempotency.StoredResponseUnreadable` | warning | A stored HTTP response could not be read; the call got 500 |

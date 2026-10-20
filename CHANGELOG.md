@@ -4,6 +4,31 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-10-20
+
+### Changed
+
+#### BREAKING
+
+- **Idempotency (HTTP):** `withIdempotency` now rejects a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) with 400 `Idempotency.ScopeRequired` in `enforce` mode; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. Before, such a request ran without idempotency (`unscopedKeyBehavior` defaulted to `'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to keep the old behaviour; `'global'` is unchanged. `idempotent()` and `idempotencyBehavior()` already rejected by default.
+- **Idempotency (HTTP):** a 2xx response that `withIdempotency` cannot store (body over `maxResponseBodyBytes`, a `Content-Encoding` other than identity, or `text/event-stream`) now stores a marker for `retentionMs`, and a retry with the same key and request gets 409 `Idempotency.ResultUnavailable` without `Retry-After`; the handler does not run again. Before, the key stayed in flight (409 `Idempotency.InFlight`) until the lease ended, and a later retry ran the handler again and repeated the side effect. A 4xx is still released and 3xx/5xx still stay in flight. `idempotentRetryClassifier` never retries the new code. During a rolling deploy, an instance still on 2.0.x that reads a marker answers 500 (`Idempotency.StoredResponseUnreadable`), so finish the deploy before relying on it.
+- **Idempotency (lease extension):** with a store that has `extend` (both built-in stores now do), the engine runs a heartbeat while the handler runs, so a handler that outlives `leaseMs` keeps its key in flight instead of letting a retry take it over. In `enforce` the mediator's `ctx.signal` is a new signal that aborts with the caller's reason or when the reservation is lost; it is no longer the caller's signal object. When the handler throws the lease abort after a lost reservation, the call answers `Idempotency.ReservationLost` instead of that abort (see Added); any other error is rethrown as before. `withIdempotency` still passes the original `Request` unless the new `bindRequest` option is set. A custom store without `extend` behaves as before.
+- **Idempotency (types):** `IdempotencyErrorCode` has the new members `Idempotency.ResultUnavailable` and `Idempotency.ReservationLost`, and `IdempotencyDecision` has the new member `'result_unavailable'`, so an exhaustive `switch` or `Record` over either type needs the new entries. A key that holds a marker is reported to `onDecision` as `'result_unavailable'` (`observe`: `Idempotency.Observe.WouldRejectResultUnavailable`), not as `'replay'`.
+
+#### Other
+
+- **Idempotency (SQL example):** `examples/idempotency-sql` now computes and compares `expires_at` with the database clock (`clock_timestamp()`) instead of the application clock, and its `clock` constructor option is removed; the contract test waits in real time with short leases. `docs/IDEMPOTENCY.md` also documents lease sizing, explicit mediator fingerprints for requests with per-retry fields, and that fingerprints are not canonicalized.
+- **Idempotency:** `describeIdempotencyStoreContract` skips the `extend` scenarios of a store without `extend` through the runner's `skip()` (the test context argument, or `this` in mocha); a runner without one reports them as passed. The scenario functions declare no parameters, so vitest's `test.extend` (fixtures) can be passed as `it`.
+
+### Added
+
+- **Idempotency:** error code `Idempotency.ResultUnavailable` (Conflict, 409, never retried; `idempotencyErrors.resultUnavailable()`), event `Idempotency.ResponseNotReplayable` (a warning logged once the marker is stored, with the property `Reason`: `too_large`, `encoded` or `event_stream`; a too large 2xx no longer also logs `Idempotency.ResponseTooLarge`) and event `Idempotency.Observe.WouldRejectResultUnavailable`.
+- **Idempotency:** optional store method `extend(key, token, leaseMs, signal?)`, implemented by `InMemoryIdempotencyStore`, `RedisIdempotencyStore` (script `RedisIdempotencyScripts.extend`) and the PostgreSQL example. It extends only a live, in-flight reservation that holds the token; it never revives an expired lease and never touches a completed record. `describeIdempotencyStoreContract` checks it.
+- **Idempotency:** lease heartbeat. After a reservation the engine calls `extend` every `leaseMs / 3` (unref'ed timers, one call at a time, each with a signal that aborts when the heartbeat stops) until the handler settles; a caller abort does not stop it. `extend` returning `false` loses the lease at once. A throwing `extend` is retried; the lease is lost when no `extend` succeeded by the time taken before the last successful one (or before `reserve`) plus `leaseMs`, which also aborts a hung `extend`. 15 minutes (`MAX_LEASE_MS`) after the reservation the heartbeat stops and logs `Idempotency.LeaseLimitReached`. A lost lease logs `Idempotency.ReservationLost` and, in `enforce`, aborts the handler's signal with the new `IdempotencyReservationLostError` (`name` `'ReservationLost'`); `observe` only logs.
+- **Idempotency:** error code `Idempotency.ReservationLost` (Unexpected; HTTP 503 with `Retry-After`, retried by `idempotentRetryClassifier`; `idempotencyErrors.reservationLost()`). In `enforce`, when the handler throws or rejects after its reservation was lost with the lease signal's reason, or with an abort-like error (`AbortError`, `TimeoutError`) when it received the signal (the mediator, `idempotent` with `bindSignal`, `withIdempotency` with `bindRequest`), the engine releases what is left of the reservation and answers this code; nothing is stored, so a retry runs the operation again. Any other error is rethrown. A caller abort still rejects with the caller's reason, also when the lease was lost first. A failure a handler that received the signal returns after the loss (a failure `Result`, a stored 5xx) is released instead of stored; without the signal it is stored as before, and a success is always stored, token-fenced. `ReservationLost` is logged once per call. Setup that throws after the reservation (a throwing `bindSignal` or `bindRequest`) also releases it before rethrowing.
+- **Idempotency:** `idempotent()` option `bindSignal(signal, ...args)` returns the arguments to call the function with, so it receives the lease signal.
+- **Idempotency (HTTP):** `withIdempotency` option `bindRequest(request, signal)` returns the request to pass to the handler, so it receives the lease signal, for example `(req, signal) => new Request(req, { signal })`. It is called only in `enforce` with a store that has `extend`; without it the handler gets the original request.
+
 ## [2.0.1] - 2026-10-20
 
 ### Fixed
@@ -88,6 +113,8 @@ First stable release. It adds five new subpath modules, cancellation support acr
 
 - Version bumped to 1.0.0; the five new subpath modules are marked stable.
 
+[Unreleased]: https://github.com/senrecep/tsentials/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/senrecep/tsentials/compare/v2.0.1...v3.0.0
 [2.0.1]: https://github.com/senrecep/tsentials/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/senrecep/tsentials/releases/tag/v2.0.0
 [1.0.0]: https://github.com/senrecep/tsentials/releases/tag/v1.0.0

@@ -1,22 +1,55 @@
+import { isCallerAbort } from '../result/index.js';
 import {
   type IdempotencyErrorCode,
   IdempotencyErrorCodes,
   IdempotencyEventNames,
 } from './constants.js';
 import { sha256Hex } from './encoding.js';
-import type {
-  IdempotencyDecision,
-  IdempotencyMode,
-  IdempotencySource,
-  ResolvedIdempotencySettings,
-  UnscopedKeyBehavior,
+import {
+  type IdempotencyDecision,
+  type IdempotencyMode,
+  type IdempotencySource,
+  MAX_LEASE_MS,
+  type ResolvedIdempotencySettings,
+  type UnscopedKeyBehavior,
 } from './options.js';
 import { type IdempotencyScope, idempotencyScopes, scopeStorageValue } from './scopes.js';
-import type { IdempotencyRecordKey, IdempotencyReservation } from './store.js';
+import type { IdempotencyRecordKey, IdempotencyReservation, IdempotencyStore } from './store.js';
+
+/**
+ * Abort reason of the lease signal in `enforce` mode: the store's `extend` returned `false`, no
+ * `extend` succeeded before the lease ran out, or the lease reached `MAX_LEASE_MS`; the
+ * reservation may belong to another call by now. `name` is `'ReservationLost'`. When the handler
+ * rejects after the loss with this reason or an abort-like error (`AbortError`, `TimeoutError`)
+ * and the caller did not abort, the engine releases the reservation and answers with
+ * `Idempotency.ReservationLost` instead of rejecting; any other error is rethrown as is.
+ * `cause` holds the last error `extend` threw, if any.
+ */
+export class IdempotencyReservationLostError extends Error {
+  override readonly name = 'ReservationLost';
+  constructor(options?: ErrorOptions) {
+    super('The idempotency reservation was lost: its lease could not be extended.', options);
+  }
+}
 
 /** What to do with the record once the handler has returned. */
 export type IdempotencyCompletion =
-  | { readonly action: 'store'; readonly payload: string; readonly retentionMs: number }
+  | {
+      readonly action: 'store';
+      readonly payload: string;
+      readonly retentionMs: number;
+      /**
+       * A warning logged once the payload was stored (`complete` returned `true`), with the
+       * reason as the `Reason` property.
+       */
+      readonly notice?: { readonly name: string; readonly reason: string } | undefined;
+      /**
+       * The output is a failure. After a lost lease in `enforce` a failure is released instead
+       * of stored: the handler may have failed because its signal aborted, and a retry must run
+       * it again. A success is still stored (token-fenced), so a retry does not repeat it.
+       */
+      readonly failure?: boolean | undefined;
+    }
   | { readonly action: 'release' }
   /** Neither store nor release: the reservation stays in flight until its lease ends. */
   | { readonly action: 'keep' };
@@ -55,10 +88,30 @@ export interface IdempotencyCall<O> {
     | undefined
     | Promise<IdempotencyScope | null | undefined>;
   readonly fingerprint: () => string | Promise<string>;
-  /** Runs the handler. Calling it marks the handler as started. */
-  readonly run: () => Promise<O>;
+  /**
+   * Starts the handler and returns its promise. `signal` is defined only in `enforce` mode,
+   * after a reservation, when the store has `extend`: it aborts with the caller's reason or with
+   * an {@link IdempotencyReservationLostError}. Otherwise it is `undefined` and the handler runs
+   * exactly as without a heartbeat.
+   *
+   * Setup that can throw (binding the signal to the arguments) must run synchronously and the
+   * handler itself inside the returned promise: a synchronous throw releases the reservation
+   * and is rethrown, a rejection is the handler's.
+   */
+  readonly run: (signal?: AbortSignal) => Promise<O>;
+  /**
+   * Whether `run` hands its signal to the handler. Only then can an abort-like error or a
+   * failure output after a lost lease be blamed on the loss; otherwise only an error that is the
+   * lease signal's own reason is.
+   */
+  readonly receivesSignal?: boolean | undefined;
   /** Decides what happens to the record after the handler returned `output`. */
   readonly complete: (output: O) => IdempotencyCompletion | Promise<IdempotencyCompletion>;
+  /**
+   * Whether a stored payload marks a result that could not be stored. Such a record is answered
+   * with `Idempotency.ResultUnavailable` (decision `result_unavailable`) instead of a replay.
+   */
+  readonly unavailable?: ((payload: string) => boolean) | undefined;
   /** Rebuilds a stored output (`enforce` only). */
   readonly replay: (payload: string) => O | Promise<O>;
   /** Output of a rejected call (`enforce` only). */
@@ -80,6 +133,7 @@ function logEvent(
   level: 'information' | 'warning',
   name: string,
   exception: unknown,
+  properties?: Readonly<Record<string, unknown>>,
 ): void {
   const { logger } = call.settings;
   try {
@@ -92,6 +146,7 @@ function logEvent(
       Target: call.target,
       ...(keyHash === undefined ? {} : { KeyHash: keyHash }),
       ...(exception === undefined ? {} : { Exception: exception }),
+      ...properties,
     });
   } catch {
     // Ignored: logging is best effort.
@@ -123,8 +178,13 @@ class Reporter {
     if (name !== undefined) this.log(warn ? 'warning' : 'information', name, undefined);
   }
 
-  log(level: 'information' | 'warning', name: string, exception: unknown): void {
-    logEvent(this.call, this.mode, this.keyHash, level, name, exception);
+  log(
+    level: 'information' | 'warning',
+    name: string,
+    exception: unknown,
+    properties?: Readonly<Record<string, unknown>>,
+  ): void {
+    logEvent(this.call, this.mode, this.keyHash, level, name, exception, properties);
   }
 }
 
@@ -137,6 +197,12 @@ const conflictEvents: Readonly<
   completed: { decision: 'replay', observeName: IdempotencyEventNames.WouldReplay },
   mismatch: { decision: 'key_reused', observeName: IdempotencyEventNames.WouldRejectKeyReused },
   inFlight: { decision: 'in_flight', observeName: IdempotencyEventNames.WouldRejectInFlight },
+};
+
+/** A completed record whose result could not be stored (see `IdempotencyCall.unavailable`). */
+const unavailableEvent: { decision: IdempotencyDecision; observeName: string } = {
+  decision: 'result_unavailable',
+  observeName: IdempotencyEventNames.WouldRejectResultUnavailable,
 };
 
 /** Outcome of resolving key, scope and fingerprint, before anything is reserved. */
@@ -225,6 +291,8 @@ export async function runIdempotent<O>(
   const { reporter, recordKey, fingerprint } = resolution;
   const { store, leaseMs } = call.settings;
 
+  // Taken before `reserve`, so the first lease deadline is never later than the store's.
+  const reservedAt = Date.now();
   let reservation: IdempotencyReservation;
   try {
     reservation = await store.reserve(recordKey, fingerprint, leaseMs, call.signal);
@@ -236,12 +304,18 @@ export async function runIdempotent<O>(
   }
 
   if (reservation.status !== 'reserved') {
-    const conflict = conflictEvents[reservation.status];
+    const conflict =
+      reservation.status === 'completed' && call.unavailable?.(reservation.payload) === true
+        ? unavailableEvent
+        : conflictEvents[reservation.status];
     if (mode === 'observe') {
       reporter.decision(conflict.decision, conflict.observeName);
       return call.run();
     }
     reporter.decision(conflict.decision);
+    if (conflict === unavailableEvent) {
+      return call.reject(IdempotencyErrorCodes.ResultUnavailable);
+    }
     if (reservation.status === 'completed') return call.replay(reservation.payload);
     return call.reject(
       reservation.status === 'mismatch'
@@ -251,19 +325,90 @@ export async function runIdempotent<O>(
   }
 
   reporter.decision('reserved');
-  const output = await call.run();
+  const { token } = reservation;
+  // Token-fenced; the result and errors are ignored, the call already has its answer.
+  const releaseQuietly = async () => {
+    try {
+      if (await store.release(recordKey, token)) reporter.decision('released');
+    } catch {
+      // Ignored: the lease ends on its own.
+    }
+  };
+
+  let lease: Heartbeat | undefined;
+  let pending: Promise<O>;
+  try {
+    lease = startHeartbeat(
+      store,
+      recordKey,
+      token,
+      leaseMs,
+      reservedAt,
+      mode,
+      call.signal,
+      reporter,
+    );
+    pending = lease?.signal === undefined ? call.run() : call.run(lease.signal);
+  } catch (error) {
+    // The handler never started: the key must not stay in flight.
+    lease?.stop();
+    await releaseQuietly();
+    throw error;
+  }
+  let output: O;
+  try {
+    output = await pending;
+  } catch (error) {
+    lease?.stop();
+    // Only an error the lease signal can explain is about the lost lease: its own reason, or an
+    // abort-like error from a handler that received the signal. Any other error is the
+    // handler's and is rethrown as is.
+    if (
+      lease?.lost === true &&
+      lease.signal !== undefined &&
+      (error === lease.signal.reason ||
+        (call.receivesSignal === true && isCallerAbort(error, lease.signal)))
+    ) {
+      // A caller abort still rejects with the caller's reason, even when the lease went first.
+      if (call.signal?.aborted === true) throw call.signal.reason;
+      // The reservation is gone, so the outcome cannot be recorded: release what may be left of
+      // it and answer with a retryable code. The heartbeat already logged ReservationLost.
+      await releaseQuietly();
+      return call.reject(IdempotencyErrorCodes.ReservationLost);
+    }
+    throw error;
+  }
+  lease?.stop();
   try {
     const completion = await call.complete(output);
-    if (completion.action === 'store') {
+    // Only `enforce` aborts the handler's signal, so only there, and only for a handler that
+    // received it, can the loss cause a failure.
+    const lostFailure =
+      mode === 'enforce' &&
+      call.receivesSignal === true &&
+      lease?.lost === true &&
+      completion.action === 'store' &&
+      completion.failure === true;
+    if (lostFailure) {
+      // A throw here is logged as CompleteFailed below, like any other release.
+      if (await store.release(recordKey, token)) reporter.decision('released');
+    } else if (completion.action === 'store') {
       const stored = await store.complete(
         recordKey,
-        reservation.token,
+        token,
         fingerprint,
         completion.payload,
         completion.retentionMs,
       );
-      if (stored) reporter.decision('stored');
-      else reporter.log('warning', IdempotencyEventNames.ReservationLost, undefined);
+      if (stored) {
+        reporter.decision('stored');
+        const { notice } = completion;
+        if (notice !== undefined) {
+          reporter.log('warning', notice.name, undefined, { Reason: notice.reason });
+        }
+      } else if (lease?.lost !== true) {
+        reporter.log('warning', IdempotencyEventNames.ReservationLost, undefined);
+      }
     } else if (completion.action === 'release') {
       if (await store.release(recordKey, reservation.token)) reporter.decision('released');
     }
@@ -272,6 +417,138 @@ export async function runIdempotent<O>(
     reporter.log('warning', IdempotencyEventNames.CompleteFailed, error);
   }
   return output;
+}
+
+interface Heartbeat {
+  /** The signal for the handler; `undefined` in `observe`, where a lost lease only logs. */
+  readonly signal: AbortSignal | undefined;
+  /** Whether the lease was lost (or reached `MAX_LEASE_MS`) and that was logged. */
+  readonly lost: boolean;
+  /** Stops extending and aborts an `extend` in flight; later results are ignored. */
+  stop(): void;
+}
+
+function unref(timer: ReturnType<typeof setTimeout>): ReturnType<typeof setTimeout> {
+  (timer as { unref?: () => void }).unref?.();
+  return timer;
+}
+
+/**
+ * Extends the lease every `leaseMs / 3` while the handler runs, when the store has `extend`.
+ * Each beat is scheduled after the previous one settled, so a slow store never overlaps two
+ * extends.
+ *
+ * - `extend` returns `false` → the lease is lost at once.
+ * - `extend` throws → not lost yet; the next beat tries again.
+ * - The lease is known to be held until `confirmedUntil`: the time taken before the last
+ *   successful `extend` (or before `reserve`) plus `leaseMs`. A deadline timer fires then, so a
+ *   store that keeps failing or hangs loses the lease, and its pending `extend` is aborted
+ *   through the signal passed to it.
+ * - `MAX_LEASE_MS` after the reservation the beats stop (`Idempotency.LeaseLimitReached`).
+ *
+ * A lost lease logs `ReservationLost` and, in `enforce` only, aborts the handler's signal. The
+ * caller's abort does not stop the beats: the handler may still be running. Every timer is
+ * cleared by `stop`, which the engine calls once the handler settled.
+ */
+function startHeartbeat(
+  store: IdempotencyStore,
+  recordKey: IdempotencyRecordKey,
+  token: string,
+  leaseMs: number,
+  reservedAt: number,
+  mode: Exclude<IdempotencyMode, 'off'>,
+  caller: AbortSignal | undefined,
+  reporter: Reporter,
+): Heartbeat | undefined {
+  const extend = store.extend;
+  if (extend === undefined) return undefined;
+  const controller = new AbortController();
+  // Built first: `AbortSignal.any` can throw for a foreign signal (Node 24 does), and nothing
+  // is scheduled yet.
+  const signal =
+    mode === 'observe'
+      ? undefined
+      : caller === undefined
+        ? controller.signal
+        : AbortSignal.any([caller, controller.signal]);
+  const intervalMs = Math.max(1, Math.floor(leaseMs / 3));
+  let confirmedUntil = reservedAt + leaseMs;
+  let lastError: unknown;
+  let inFlight: AbortController | undefined;
+  let beatTimer: ReturnType<typeof setTimeout> | undefined;
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    clearTimeout(beatTimer);
+    clearTimeout(deadlineTimer);
+    clearTimeout(limitTimer);
+    inFlight?.abort();
+  };
+  const abortHandler = (cause: unknown) => {
+    heartbeat.lost = true;
+    if (mode === 'enforce') {
+      controller.abort(
+        new IdempotencyReservationLostError(cause === undefined ? undefined : { cause }),
+      );
+    }
+  };
+  const lose = (exception: unknown) => {
+    stop();
+    reporter.log('warning', IdempotencyEventNames.ReservationLost, exception);
+    abortHandler(exception);
+  };
+  const armDeadline = () => {
+    clearTimeout(deadlineTimer);
+    deadlineTimer = unref(
+      setTimeout(() => lose(lastError), Math.max(0, confirmedUntil - Date.now())),
+    );
+  };
+  const beat = async () => {
+    const startedAt = Date.now();
+    const attempt = new AbortController();
+    inFlight = attempt;
+    let extended: boolean;
+    try {
+      extended = await extend.call(store, recordKey, token, leaseMs, attempt.signal);
+    } catch (error) {
+      if (stopped) return;
+      inFlight = undefined;
+      lastError = error;
+      schedule();
+      return;
+    }
+    if (stopped) return;
+    inFlight = undefined;
+    if (!extended) {
+      lose(undefined);
+      return;
+    }
+    confirmedUntil = startedAt + leaseMs;
+    lastError = undefined;
+    armDeadline();
+    schedule();
+  };
+  const schedule = () => {
+    beatTimer = unref(setTimeout(beat, intervalMs));
+  };
+
+  const heartbeat = { signal, lost: false, stop };
+  const limitTimer = unref(
+    setTimeout(
+      () => {
+        stop();
+        reporter.log('warning', IdempotencyEventNames.LeaseLimitReached, undefined);
+        abortHandler(new RangeError(`The lease was held for ${MAX_LEASE_MS} ms`));
+      },
+      Math.max(0, reservedAt + MAX_LEASE_MS - Date.now()),
+    ),
+  );
+  armDeadline();
+  schedule();
+  return heartbeat;
 }
 
 /**

@@ -209,6 +209,8 @@ describe('idempotencyErrors', () => {
       [IdempotencyErrorCodes.KeyMissing, ErrorType.Validation],
       [IdempotencyErrorCodes.KeyInvalid, ErrorType.Validation],
       [IdempotencyErrorCodes.ScopeRequired, ErrorType.Validation],
+      [IdempotencyErrorCodes.ResultUnavailable, ErrorType.Conflict],
+      [IdempotencyErrorCodes.ReservationLost, ErrorType.Unexpected],
     ] as const;
     for (const [code, type] of cases) {
       const error = idempotencyErrors.forCode(code);
@@ -224,5 +226,8 @@ describe('idempotencyErrors', () => {
     ).toBe(500);
     expect(idempotencyErrors.inFlight(null).metadata?.size ?? 0).toBe(0);
     expect(idempotencyErrors.inFlight().metadata?.size ?? 0).toBe(0);
+    expect(
+      idempotencyErrors.forCode(IdempotencyErrorCodes.ResultUnavailable, 500).metadata?.size ?? 0,
+    ).toBe(0);
   });
 });

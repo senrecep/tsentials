@@ -1,7 +1,11 @@
 import { createFakeDateTimeProvider, type DateTimeProvider } from '../time/index.js';
 import type { IdempotencyRecordKey, IdempotencyReservation, IdempotencyStore } from './store.js';
 
-/** The test functions of any runner with a `describe`/`it` API (vitest, jest, mocha, node:test). */
+/**
+ * The test functions of any runner with a `describe`/`it` API (vitest, jest, mocha, node:test).
+ * A scenario that does not apply calls `skip()` on the test context (the first argument, as in
+ * vitest and node:test, or `this`, as in mocha); a runner without one sees it pass.
+ */
 export interface ContractTestApi {
   describe(name: string, body: () => void): void;
   it(name: string, body: () => Promise<void>): void;
@@ -70,6 +74,9 @@ function tokenOf(reservation: IdempotencyReservation, step: string): string {
  * Registers the scenarios every {@link IdempotencyStore} must pass: reserve, complete and
  * release with token fencing, lease and retention expiry, fingerprint mismatch, isolation by
  * namespace, scope and key, a single winner among parallel reserves, and argument checks.
+ * The `extend` scenarios (lease extension with token fencing, no revival of an expired lease,
+ * completed records untouched) are skipped when the store has no `extend`; a runner without a
+ * `skip()` on its test context reports them as passed.
  * Runner-agnostic: pass your runner's `describe` and `it`.
  *
  * ```ts
@@ -90,10 +97,20 @@ export function describeIdempotencyStoreContract(
   const parallelism = options.parallelism ?? 20;
   let counter = 0;
 
-  const scenario = (title: string, body: (ctx: Scenario) => Promise<void>) =>
-    api.it(title, async () => {
+  const scenario = (title: string, body: (ctx: Scenario) => Promise<void>, needsExtend = false) =>
+    // A plain function (not an arrow) so mocha's `this` is the test context. No declared
+    // parameters: no runner treats the body as callback style, and vitest's `test.extend`
+    // (which parses the parameter list for fixtures) accepts it.
+    api.it(title, async function (this: unknown) {
+      // biome-ignore lint/complexity/noArguments: a declared parameter would break vitest fixtures.
+      const context = (arguments[0] ?? this) as { skip?: () => void } | undefined;
       const clock = createFakeDateTimeProvider(new Date('2026-01-01T00:00:00Z'));
       const store = await factory(clock);
+      // The store is only known here, so the check runs inside the test.
+      if (needsExtend && store.extend === undefined) {
+        context?.skip?.();
+        return;
+      }
       const advance = async (ms: number) => {
         await (options.advance ? options.advance(ms, clock) : clock.advance(ms));
       };
@@ -107,6 +124,21 @@ export function describeIdempotencyStoreContract(
       });
       await body({ store, advance, key });
     });
+
+  // Skipped for a store without `extend`, which is optional.
+  const extendScenario = (title: string, body: (ctx: ExtendScenario) => Promise<void>) =>
+    scenario(
+      title,
+      async (ctx) => {
+        const { store } = ctx;
+        const extend = store.extend as NonNullable<IdempotencyStore['extend']>;
+        await body({
+          ...ctx,
+          extend: (key, token, leaseMs, signal) => extend.call(store, key, token, leaseMs, signal),
+        });
+      },
+      true,
+    );
 
   api.describe(`${name} (idempotency store contract)`, () => {
     scenario('reserves a new key with a non-empty token', async ({ store, key }) => {
@@ -278,6 +310,68 @@ export function describeIdempotencyStoreContract(
       await checkRejects(() => store.complete(key(), token, '', 'p', retention), 'empty fp');
       await checkRejects(() => store.release(key(), ''), 'release with empty token');
     });
+
+    extendScenario('extend keeps a reservation in flight past its lease', async (ctx) => {
+      const { store, key, advance, extend } = ctx;
+      const token = tokenOf(await store.reserve(key(), 'fp', lease), 'reserve');
+      check(await extend(key(), token, lease * 4), 'extend with the right token returned false');
+      await advance(lease + 1);
+      checkStatus(await store.reserve(key(), 'fp', lease), 'inFlight', 'after extend');
+      check(await store.complete(key(), token, 'fp', 'p', retention), 'complete after extend');
+    });
+
+    extendScenario('refuses extend with another token', async (ctx) => {
+      const { store, key, advance, extend } = ctx;
+      await store.reserve(key(), 'fp', lease);
+      check(!(await extend(key(), 'not-the-token', lease * 4)), 'extend with another token');
+      await advance(lease + 1);
+      tokenOf(await store.reserve(key(), 'fp', lease), 'reserve after refused extend');
+    });
+
+    extendScenario('fences the old token after a take over', async (ctx) => {
+      const { store, key, advance, extend } = ctx;
+      const first = tokenOf(await store.reserve(key(), 'fp', lease), 'first reserve');
+      await advance(lease + 1);
+      const second = tokenOf(await store.reserve(key(), 'other', lease), 'take over');
+      check(!(await extend(key(), first, lease)), 'stale extend returned true');
+      check(await extend(key(), second, lease), 'extend of the new reservation returned false');
+    });
+
+    extendScenario('extend of an unknown key returns false', async ({ key, extend }) => {
+      check(!(await extend(key('missing'), 'token', lease)), 'extend of an unknown key');
+    });
+
+    extendScenario('never extends a completed record', async (ctx) => {
+      const { store, key, advance, extend } = ctx;
+      const token = tokenOf(await store.reserve(key(), 'fp', lease), 'reserve');
+      check(await store.complete(key(), token, 'fp', 'payload-1', retention), 'complete');
+      check(!(await extend(key(), token, lease)), 'extend after complete returned true');
+      await advance(lease + 1);
+      const replay = await store.reserve(key(), 'fp', lease);
+      check(
+        replay.status === 'completed' && replay.payload === 'payload-1',
+        'extend after complete changed the completed record',
+      );
+    });
+
+    extendScenario('never revives an expired lease', async (ctx) => {
+      const { store, key, advance, extend } = ctx;
+      const token = tokenOf(await store.reserve(key(), 'fp', lease), 'reserve');
+      await advance(lease + 1);
+      check(!(await extend(key(), token, lease * 4)), 'extend of an expired lease returned true');
+      const again = tokenOf(await store.reserve(key(), 'fp', lease), 'reserve after expiry');
+      check(again !== token, 'reserve after expiry reused the old token');
+    });
+
+    extendScenario('rejects invalid extend arguments and an aborted extend', async (ctx) => {
+      const { store, key, extend } = ctx;
+      const token = tokenOf(await store.reserve(key(), 'fp', lease), 'reserve');
+      await checkRejects(() => extend(key(), '', lease), 'extend with empty token');
+      await checkRejects(() => extend(key(), token, 0), 'extend with leaseMs 0');
+      const controller = new AbortController();
+      controller.abort();
+      await checkRejects(() => extend(key(), token, lease, controller.signal), 'aborted extend');
+    });
   });
 }
 
@@ -285,4 +379,8 @@ interface Scenario {
   readonly store: IdempotencyStore;
   readonly advance: (ms: number) => Promise<void>;
   readonly key: (suffix?: string) => IdempotencyRecordKey;
+}
+
+interface ExtendScenario extends Scenario {
+  readonly extend: NonNullable<IdempotencyStore['extend']>;
 }

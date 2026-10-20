@@ -10,8 +10,20 @@ npm test
 ```
 
 `DATABASE_URL` overrides `postgres://postgres:postgres@localhost:5432/postgres`. The table is in
-`schema.sql`; the test creates it. Time comes from the store's `clock` option, so the suite needs no
-real waits.
+`schema.sql`; the test creates it. The store reads time from the database, so the suite uses short
+leases and waits in real time (a few seconds in total).
+
+## Database time
+
+Every lease and retention comparison uses the database clock, `(extract(epoch from clock_timestamp()) * 1000)::bigint`.
+Application servers with skewed clocks therefore agree on when a lease ends. `clock_timestamp()` is
+used instead of `now()` because `now()` is frozen for the whole transaction: a store that shares a
+long business transaction would compare against stale time. `leaseMs` and `retentionMs` stay query
+parameters.
+
+When the store shares a transaction's client, its queries run one at a time on that connection, so
+a heartbeat `extend` can wait behind a slow business query. For long handlers prefer a separate
+pool or client for the store (see Observe mode for the trade-off).
 
 ## Use in a transaction
 
@@ -32,6 +44,15 @@ try {
   client.release();
 }
 ```
+
+## Lease extension
+
+`extend` is one `UPDATE` that moves `expires_at` only while the row is live, in flight and holds
+the caller's token, so an expired lease is never revived and a completed record is never touched.
+The engine calls it every `leaseMs / 3` while the handler runs. On a transaction's client the
+heartbeat statements run inside that transaction; there the uncommitted row already blocks other
+reserves until commit, and a failed statement that aborts the transaction also makes the next
+`extend` fail, which aborts the handler with `ReservationLost` in `enforce`.
 
 ## Observe mode
 

@@ -53,6 +53,16 @@ if r[1] == ARGV[1] and not r[2] then
   return 1
 end
 return 0`,
+  /**
+   * KEYS: record. ARGV: token, leaseMs. Returns 1 or 0. A key whose TTL ran out is gone, so an
+   * expired lease is never revived.
+   */
+  extend: `local r = redis.call('HMGET', KEYS[1], 't', 'p')
+if r[1] == ARGV[1] and not r[2] then
+  redis.call('PEXPIRE', KEYS[1], ARGV[2])
+  return 1
+end
+return 0`,
 } as const;
 
 /** Options of {@link RedisIdempotencyStore}. */
@@ -87,7 +97,7 @@ function parseFlag(reply: unknown, operation: string): boolean {
 
 /**
  * Shared store on Redis. Each operation is one Lua script ({@link RedisIdempotencyScripts}), so
- * reserve, complete and release are atomic across processes. Bring your own client through
+ * reserve, complete, release and extend are atomic across processes. Bring your own client through
  * {@link RedisLike}; Redis measures lease and retention itself (`PEXPIRE`, rounded up to whole
  * milliseconds).
  *
@@ -149,5 +159,22 @@ export class RedisIdempotencyStore implements IdempotencyStore {
       [token],
     );
     return parseFlag(reply, 'release');
+  }
+
+  async extend(
+    key: IdempotencyRecordKey,
+    token: string,
+    leaseMs: number,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    throwIfAborted(signal);
+    assertNonEmpty('token', token);
+    assertPositive('leaseMs', leaseMs);
+    const reply = await this.#redis.eval(
+      RedisIdempotencyScripts.extend,
+      [idempotencyStorageKey(key, this.#prefix)],
+      [token, String(Math.ceil(leaseMs))],
+    );
+    return parseFlag(reply, 'extend');
   }
 }

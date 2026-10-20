@@ -20,6 +20,7 @@ export type {
 export { describeIdempotencyStoreContract } from './contract.js';
 export { createIdempotency, type Idempotency } from './create.js';
 export { fingerprintOf, stableStringify } from './encoding.js';
+export { IdempotencyReservationLostError } from './engine.js';
 export { idempotencyErrors } from './errors.js';
 export {
   DEFAULT_IDEMPOTENT_METHODS,
