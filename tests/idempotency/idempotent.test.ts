@@ -245,6 +245,16 @@ describe('idempotent', () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
+  it('reads the mode once and skips the signal resolver in off mode', async () => {
+    const mode = vi.fn(() => 'off' as const);
+    const signal = vi.fn(() => new AbortController().signal);
+    const fn = vi.fn((_: Cmd) => Result.success(1));
+    const run = idempotent(fn, { ...options(new InMemoryIdempotencyStore()), mode, signal });
+    expect(await run(cmd)).toEqual(Result.success(1));
+    expect(mode).toHaveBeenCalledTimes(1);
+    expect(signal).not.toHaveBeenCalled();
+  });
+
   it('passes the signal to the store', async () => {
     const controller = new AbortController();
     controller.abort(new Error('cancelled'));

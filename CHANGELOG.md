@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- **Idempotency:** `observe` no longer fails a call whose setup throws before the engine runs. In the mediator behavior this covers an invalid request key, an out-of-range request `leaseMs` / `retentionMs` and a `settings` or `releaseFailures` function that throws; in `idempotent()` a `signal` resolver that throws. `observe` logs `Idempotency.Observe.ResolutionFailed` and runs the handler without idempotency; `enforce` still throws (a throwing `signal` resolver now rejects the returned promise instead of throwing synchronously).
+- **Idempotency:** `observe` no longer fails a call whose setup throws before the engine runs. In the mediator behavior this covers an invalid request key, an out-of-range request `leaseMs` / `retentionMs` and a `settings` or `releaseFailures` function that throws; in `idempotent()` a `signal` resolver that throws. `observe` logs `Idempotency.Observe.ResolutionFailed` and runs the handler without idempotency; `enforce` still throws (a throwing `signal` resolver now rejects the returned promise instead of throwing synchronously, and `off` no longer calls it).
 
 ## [2.0.0] - 2026-10-20
 
@@ -32,7 +32,7 @@ Adds the `tsentials/idempotency` module and idempotent HTTP client support. The 
 
 - **Minimum Node.js version is now 22.** `engines.node` is `>=22.0.0`; CI runs on Node 22 and 24, publishing runs on Node 22 and `@types/node` is `^22`. The library relies on the global Web Crypto API (`crypto.subtle`, `crypto.randomUUID`) without any runtime dependency.
 - **Http:** the first error of a failed `fetchResult` / `RequestBuilder` response carries the metadata `httpStatus`, `retryAfterMs`, `idempotencyReplayed` and `problemCode`. Code, type and description are unchanged, but a test that compares a whole failure with `toEqual` now also sees the metadata.
-- **Resilience:** `withRetry` and `retryIfFailed` wait at least the `retryAfterMs` metadata of a failure's first error, capped by `maxRetryAfterMs` (default 30 s). A `fetchResult` failure with `Retry-After` therefore waits longer than the backoff when the server asks it to, and an `Idempotency.InFlight` failure, which carries `retryAfterMs` (default 1 000), waits at least 1 s.
+- **Resilience:** `withRetry` and `retryIfFailed` wait at least the `retryAfterMs` metadata of a failure's first error, capped by `maxRetryAfterMs` (default 30 s). A `fetchResult` failure with `Retry-After` therefore waits longer than the backoff when the server asks it to, and an `Idempotency.InFlight` failure, which carries `retryAfterMs` (default 1 000), waits at least that long unless `maxRetryAfterMs` is lower.
 
 ## [1.0.0] - 2026-10-14
 
