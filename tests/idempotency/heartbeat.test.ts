@@ -689,6 +689,10 @@ describe('runIdempotent: lease heartbeat', () => {
     store.reserve = (key, fingerprint, leaseMs) => inner.reserve(key, fingerprint, leaseMs);
     store.release = (...args) => inner.release(...args);
     const h = harness({ store });
+    // Node versions differ on whether `AbortSignal.any` rejects a foreign object, so force the throw.
+    const any = vi.spyOn(AbortSignal, 'any').mockImplementation(() => {
+      throw new TypeError('not an AbortSignal');
+    });
     const foreign = { aborted: false } as AbortSignal;
     let ran = false;
     await expect(
@@ -702,6 +706,7 @@ describe('runIdempotent: lease heartbeat', () => {
         ),
       ),
     ).rejects.toThrow(TypeError);
+    any.mockRestore();
     expect(ran).toBe(false);
     expect(h.events.map((e) => e.decision)).toEqual(['reserved', 'released']);
     expect(vi.getTimerCount()).toBe(0);
