@@ -20,6 +20,17 @@ export type { HttpCode } from './http-codes.js';
 export { HttpCodes } from './http-codes.js';
 export type { IdempotencyKeyOptions } from './idempotency-client.js';
 export { idempotentRetryClassifier, withIdempotencyKey } from './idempotency-client.js';
+export type {
+  ProblemDetails,
+  ProblemDetailsOptions,
+  ProblemResponseOptions,
+} from './problem-response.js';
+export {
+  resultToResponse,
+  rfc9110TypeUri,
+  toProblemDetails,
+  toProblemResponse,
+} from './problem-response.js';
 export type { QueryValue } from './request-builder.js';
 export { RequestBuilder } from './request-builder.js';
 export { HttpErrorMetadataKeys, parseRetryAfter } from './response-metadata.js';
