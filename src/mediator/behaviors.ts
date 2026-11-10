@@ -84,12 +84,21 @@ type ValidateFn<T> = (
 
 /**
  * A request validator: a function, a `Rule<T>` from
- * `tsentials/rules` qualifies: or an object with an `order`. Validators with a lower
+ * `tsentials/rules` qualifies: or an object with an `order`, such as a `Validator`
+ * subclass from `tsentials/validation`. Objects are called as methods; when an object has
+ * `validateAsync` it is used (with the signal) instead of `validate`. Validators with a lower
  * order run first; validators with the same order run concurrently. Default order 0.
  */
 export type RequestValidator<T> =
   | ValidateFn<T>
-  | { readonly order?: number | undefined; readonly validate: ValidateFn<T> };
+  | {
+      readonly order?: number | undefined;
+      readonly validate: ValidateFn<T>;
+      readonly validateAsync?: (
+        request: T,
+        options?: { readonly signal?: AbortSignal | undefined },
+      ) => Promise<Result<unknown>>;
+    };
 
 /** What a {@link ValidationFailureObserver} receives. */
 export interface ValidationFailure<T = unknown> {
@@ -173,7 +182,11 @@ export function validationBehavior<TReq>(
   const normalized = validators.map((v) =>
     typeof v === 'function'
       ? { order: 0, validate: v }
-      : { order: v.order ?? 0, validate: v.validate },
+      : {
+          order: v.order ?? 0,
+          validate: (request: TReq, signal: AbortSignal | undefined) =>
+            v.validateAsync ? v.validateAsync(request, { signal }) : v.validate(request, signal),
+        },
   );
   const orders = [...new Set(normalized.map((v) => v.order))].sort((a, b) => a - b);
   const groups = orders.map((o) => normalized.filter((v) => v.order === o).map((v) => v.validate));
