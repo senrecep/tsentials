@@ -7,6 +7,7 @@ This guide lists every change that alters the runtime behaviour of an existing t
 ## Behaviour changes in the next release (unreleased)
 
 * **mediator:** `validationBehavior` now calls an object validator as a method, and uses its `validateAsync(request, { signal })` when it has one, instead of calling a detached `validate`. A `Validator` subclass from `tsentials/validation` used to fail every request with `Validator.Exception` because it lost `this`; it now validates, honours its `order`, and receives the caller's signal. An object with both methods now runs `validateAsync`, not `validate`.
+* **http:** `problemDetailsToErrors`, and so a failed `fetchResult` / `RequestBuilder` response, now reads the `errorCodes` extension that CSharpEssentials.AspNetCore writes. A problem body with `errorCodes: ["User.NotFound"]` and no `errors` used to give one `Http.404` error; it now gives `User.NotFound` with the type of the status and `detail` as the description. A code that also has entries in `errors` keeps those entries, codes listed only in `errorCodes` are added, and the errors follow the `errorCodes` order. Code that matched on `Http.{status}` for such responses must match on the domain code or on the type.
 
 ## Behaviour changes in 3.0.0
 

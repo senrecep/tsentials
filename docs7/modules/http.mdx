@@ -212,6 +212,18 @@ HTTP errors are automatically mapped to `AppError` with descriptive codes via `h
 
 The error code format is `Http.{status}` (e.g., `Http.404`, `Http.500`).
 
+A ProblemDetails body overrides the code (`problemDetailsToErrors`):
+
+- `errors` extension: one `AppError` per entry (list `[{ code, description, type? }]` or dictionary `{ key: string[] }`); entries without a valid `type` are `Validation`.
+- `errorCodes` extension (CSharpEssentials.AspNetCore writes it on every problem): the server's domain codes are kept, in that order. A code with entries in `errors` yields those entries; a code without one yields an error with that code, the status type and `detail` (then `title`) as the description.
+
+```typescript
+// 404 body: {"title":"Not Found","status":404,"detail":"No user with id 42.","errorCodes":["User.NotFound"]}
+// AppError { code: 'User.NotFound', description: 'No user with id 42.', type: 'NotFound' }
+```
+
+Only when the body has neither does the code fall back to `Http.{status}`.
+
 ---
 
 ## httpStatusToError / extractErrorDescription

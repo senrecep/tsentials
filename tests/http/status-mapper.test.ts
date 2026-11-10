@@ -372,3 +372,73 @@ describe('problemDetailsToErrors', () => {
     expect(problemDetailsToErrors(500, body)).toEqual([httpStatusToError(500)]);
   });
 });
+
+// Bodies written verbatim by CSharpEssentials.AspNetCore 8.0.0 with the default options
+// (AddEnhancedProblemDetails + UseEnhancedProblemDetails, Error(s).ToProblemResult()).
+describe('problemDetailsToErrors with CSharpEssentials.AspNetCore errorCodes', () => {
+  const pick = (errors: ReturnType<typeof problemDetailsToErrors>) =>
+    errors.map((e) => [e.code, e.type, e.description]);
+
+  it('reads the domain code of a single error', () => {
+    // Error.NotFound("User.NotFound", "No user with id 42.").ToProblemResult()
+    const body = JSON.parse(
+      '{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"detail":"No user with id 42.","instance":"/users/42","errorCodes":["User.NotFound"],"traceId":"550415b3078b017937693bd7d816b4ff"}',
+    );
+    expect(pick(problemDetailsToErrors(404, body))).toEqual([
+      ['User.NotFound', ErrorType.NotFound, 'No user with id 42.'],
+    ]);
+  });
+
+  it('reads every code of several non-validation errors', () => {
+    // [Error.NotFound("Customer.NotFound", ...), Error.Conflict("Order.Duplicate", ...)].ToProblemResult()
+    const body = JSON.parse(
+      '{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.10","title":"Conflict","status":409,"detail":"The order was already placed.","instance":"/orders","errorCodes":["Customer.NotFound","Order.Duplicate"],"traceId":"84f8d640c3b63b63b53365eba01335a7"}',
+    );
+    expect(pick(problemDetailsToErrors(409, body))).toEqual([
+      ['Customer.NotFound', ErrorType.Conflict, 'The order was already placed.'],
+      ['Order.Duplicate', ErrorType.Conflict, 'The order was already placed.'],
+    ]);
+  });
+
+  it('keeps every validation error once when its code is also in errorCodes', () => {
+    // Three Error.Validation values, two with the same code; errorCodes holds distinct codes.
+    const body = JSON.parse(
+      '{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"Validation Error","status":400,"detail":"Email format is incorrect.","instance":"/users","errorCodes":["User.InvalidEmail","User.NameRequired"],"errors":[{"code":"User.InvalidEmail","description":"Email format is incorrect."},{"code":"User.NameRequired","description":"Name is required."},{"code":"User.NameRequired","description":"Name must not be blank."}],"traceId":"a92636780aa451ec218310f8a20abb38"}',
+    );
+    expect(pick(problemDetailsToErrors(400, body))).toEqual([
+      ['User.InvalidEmail', ErrorType.Validation, 'Email format is incorrect.'],
+      ['User.NameRequired', ErrorType.Validation, 'Name is required.'],
+      ['User.NameRequired', ErrorType.Validation, 'Name must not be blank.'],
+    ]);
+  });
+
+  it('adds the non-validation codes of a mixed body in errorCodes order', () => {
+    // [Error.Validation("User.InvalidEmail", ...), Error.Conflict("User.EmailTaken", ...)].ToProblemResult()
+    const body = JSON.parse(
+      '{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.10","title":"Conflict","status":409,"detail":"The email is already in use.","instance":"/users/42","errorCodes":["User.InvalidEmail","User.EmailTaken"],"errors":[{"code":"User.InvalidEmail","description":"Email format is incorrect."}],"traceId":"132a294467cfb6b867ec1ee4c71ba052"}',
+    );
+    expect(pick(problemDetailsToErrors(409, body))).toEqual([
+      ['User.InvalidEmail', ErrorType.Validation, 'Email format is incorrect.'],
+      ['User.EmailTaken', ErrorType.Conflict, 'The email is already in use.'],
+    ]);
+  });
+
+  it('keeps errors entries whose code is not in errorCodes after the listed codes', () => {
+    const errors = problemDetailsToErrors(400, {
+      title: 'Bad Request',
+      errorCodes: ['A', 7, 'A'],
+      errors: { Email: ['Email is invalid'] },
+    });
+    expect(pick(errors)).toEqual([
+      ['A', ErrorType.Validation, 'Bad Request'],
+      ['Email', ErrorType.Validation, 'Email is invalid'],
+    ]);
+  });
+
+  it('ignores an errorCodes value that is not an array of codes', () => {
+    expect(problemDetailsToErrors(404, { errorCodes: 'User.NotFound' })).toEqual([
+      httpStatusToError(404),
+    ]);
+    expect(problemDetailsToErrors(404, { errorCodes: [] })).toEqual([httpStatusToError(404)]);
+  });
+});
