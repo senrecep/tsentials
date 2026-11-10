@@ -1283,7 +1283,7 @@ if (first.ok) {
 // bad cursor → failure 'KeysetPagination.InvalidCursor'; after + before → 'KeysetPagination.AfterAndBefore'
 ```
 
-For database queries use `planKeysetPage` + `createKeysetPageResponse` ; `encodeCursor`/`decodeCursor` and a `CursorProtector` (e.g. HMAC) are exported.
+For database queries use `planKeysetPage` + `createKeysetPageResponse`; `keysetPredicate` builds the cursor filter as plain data and `keysetPredicateToSql` renders it as a parameterised `WHERE` fragment; `encodeCursor`/`decodeCursor` and a `CursorProtector` (e.g. HMAC) are exported.
 
 ---
 

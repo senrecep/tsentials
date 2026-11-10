@@ -623,7 +623,7 @@ const first = keysetPaginate(orders, { limit: 10 }, byNewest);   // Result<Keyse
 if (first.ok) keysetPaginate(orders, { limit: 10, after: first.value.nextCursor }, byNewest);
 ```
 
-`pageSize` is clamped (max 100). Last keyset key must be unique. Failures: `KeysetPagination.InvalidCursor`, `KeysetPagination.AfterAndBefore`. For databases use `planKeysetPage` + `createKeysetPageResponse`.
+`pageSize` is clamped (max 100). Last keyset key must be unique. Failures: `KeysetPagination.InvalidCursor`, `KeysetPagination.AfterAndBefore`. For databases use `planKeysetPage` + `createKeysetPageResponse`; `keysetPredicate(ordering, plan.cursor, plan.reverse)` gives the filter as data and `keysetPredicateToSql(predicate, { columns, placeholder? })` a parameterised `WHERE` fragment (`columns` required, values only as parameters).
 
 ### Enums — wire names and safe parsing (subpath-only)
 
