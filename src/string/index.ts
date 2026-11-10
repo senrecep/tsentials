@@ -31,11 +31,7 @@ export function toPascalCase(str: string): string {
 /** "hello world" / "HelloWorld" / "hello-world" → "helloWorld" */
 export function toCamelCase(str: string): string {
   const words = splitWords(str);
-  return words
-    .map((w, i) =>
-      i === 0 ? w.toLowerCase() : capitalize(w),
-    )
-    .join('');
+  return words.map((w, i) => (i === 0 ? w.toLowerCase() : capitalize(w))).join('');
 }
 
 /** "hello world" / "helloWorld" / "Hello World" → "hello-world" */
