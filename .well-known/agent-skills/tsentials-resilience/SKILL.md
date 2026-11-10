@@ -67,6 +67,8 @@ const cached = await ResiliencePolicy.create<string>()
 // Result.success('cached')
 ```
 
+If the fallback itself throws (not the caller's abort), the result is an `Unexpected` failure coded with the thrown value's name, the same conversion `execute` applies to a thrown action.
+
 ## Error codes
 
 | Code | When |

@@ -5,6 +5,10 @@ This guide lists every change that alters the runtime behaviour of an existing t
 ## Behaviour changes in the next release (unreleased)
 
 * **mediator:** `validationBehavior` now calls an object validator as a method, and uses its `validateAsync(request, { signal })` when it has one, instead of calling a detached `validate`. A `Validator` subclass from `tsentials/validation` used to fail every request with `Validator.Exception` because it lost `this`; it now validates, honours its `order`, and receives the caller's signal. An object with both methods now runs `validateAsync`, not `validate`.
+* **http:** a 2xx `fetchResult` / `RequestBuilder` response with a JSON content type whose body cannot be parsed is now a `Validation` failure (code `SyntaxError`, still with `httpStatus` metadata) instead of `Unexpected`, as in CSharpEssentials 8.0. The default retry classifier treats it as not retryable.
+* **http:** a JSON request body that `JSON.stringify` rejects (cyclic object, BigInt) is now a `Validation` failure (code `TypeError`) instead of `Unexpected`, for `fetchResult.post` / `put` / `patch` and `RequestBuilder`. An invalid header on such a JSON request is a `Validation` failure too. No request is sent.
+* **http:** `RequestBuilder.json()` no longer serializes the value: it never throws, and `send()` serializes it once per call. A cyclic or BigInt value used to throw from `json()`. A value changed between `json()` and `send()` is now sent as it is at `send()` time.
+* **resilience:** a `withFallback` / `withFallbackResult` fallback that throws (not the caller's abort) now gives an `Unexpected` error (code: the thrown value's name) instead of `Failure`, matching how `execute` converts a thrown action and CSharpEssentials 8.0.
 
 ## Behaviour changes in 3.0.0
 

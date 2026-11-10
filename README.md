@@ -580,7 +580,7 @@ class Order implements EntityBase, SoftDeletable {
 
 ## HTTP (fetchResult)
 
-`fetchResult` captures network errors, body parse errors and HTTP error responses as `Result<T>`. The only rejection is the caller's own abort (`signal`), which rejects with the abort reason. The default timeout is 30 s (`timeout` option; `0` or `Infinity` disables it); on expiry the result is a failure with code `Http.Timeout` (`Unexpected`). A 2xx JSON response with an empty or `null` body is a `NotFound` failure ("Response body was empty or could not be deserialized."), except for `fetchResult.delete`, where it is a void success; 204/205 and non-JSON responses are void successes.
+`fetchResult` captures network errors, body parse errors and HTTP error responses as `Result<T>`. The only rejection is the caller's own abort (`signal`), which rejects with the abort reason. The default timeout is 30 s (`timeout` option; `0` or `Infinity` disables it); on expiry the result is a failure with code `Http.Timeout` (`Unexpected`). A 2xx JSON response with an empty or `null` body is a `NotFound` failure ("Response body was empty or could not be deserialized."), except for `fetchResult.delete`, where it is a void success; 204/205 and non-JSON responses are void successes. A 2xx JSON body that cannot be parsed is a `Validation` failure (code `SyntaxError`), and a JSON request body that cannot be serialized (cyclic object, BigInt) is a `Validation` failure (code `TypeError`) with no request sent; `RequestBuilder.json()` serializes once, in `send()`, and never throws.
 
 ```typescript
 import { fetchResult, RequestBuilder } from 'tsentials/http';
