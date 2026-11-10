@@ -5,7 +5,7 @@ Use when you need type-safe sorting, min/max, or range clamping.
 ## API
 
 ```typescript
-import { Ord, sortBy, min, max, clamp, between } from 'tsentials/ord';
+import { Ord, sortBy, min, max, clamp, between, betweenExclusive } from 'tsentials/ord';
 import type { Ordering } from 'tsentials/ord'; // -1 | 0 | 1
 
 // Primitive ordering
@@ -34,6 +34,8 @@ max(Ord.number, 1, 2); // 2
 // Range checks
 clamp(Ord.number, 0, 10, 15); // 10
 between(Ord.number, 0, 10, 5); // true
+between(Ord.number, 0, 10, 10); // true (inclusive)
+betweenExclusive(Ord.number, 0, 10, 10); // false (bounds excluded)
 ```
 
 ## Patterns

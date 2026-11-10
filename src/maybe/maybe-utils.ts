@@ -1,7 +1,7 @@
 import { Maybe } from './maybe.js';
 
 /**
- * Returns the first element (or the first element matching `predicate`) as Maybe<T>.
+ * Returns the first element (or the first element matching `predicate`) of any iterable as Maybe<T>.
  * None when nothing is found or when the found element is `null`/`undefined`
  * (the search does not continue past it).
  *
@@ -10,21 +10,31 @@ import { Maybe } from './maybe.js';
  * tryFirst([1, 2, 3], (n) => n > 1)   // Some(2)
  * tryFirst([])                        // None
  */
-export function tryFirst<T>(arr: readonly T[], predicate?: (value: T) => boolean): Maybe<T> {
-  if (predicate === undefined) return arr.length > 0 ? Maybe.from(arr[0]) : Maybe.none<T>();
-  const idx = arr.findIndex((value) => predicate(value));
-  return idx >= 0 ? Maybe.from(arr[idx]) : Maybe.none<T>();
+export function tryFirst<T>(items: Iterable<T>, predicate?: (value: T) => boolean): Maybe<T> {
+  for (const value of items) {
+    if (predicate === undefined || predicate(value)) return Maybe.from(value);
+  }
+  return Maybe.none<T>();
 }
 
 /**
  * Returns the last element (or the last element matching `predicate`) as Maybe<T>.
  * None when nothing is found or when the found element is `null`/`undefined`.
+ * An array is searched from the end; any other iterable is read to the end.
  *
  * @example
  * tryLast([1, 2, 3])                  // Some(3)
  * tryLast([1, 2, 3], (n) => n < 3)    // Some(2)
  */
-export function tryLast<T>(arr: readonly T[], predicate?: (value: T) => boolean): Maybe<T> {
+export function tryLast<T>(items: Iterable<T>, predicate?: (value: T) => boolean): Maybe<T> {
+  if (!Array.isArray(items)) {
+    let last = Maybe.none<T>();
+    for (const value of items) {
+      if (predicate === undefined || predicate(value)) last = Maybe.from(value);
+    }
+    return last;
+  }
+  const arr: readonly T[] = items;
   if (predicate === undefined) {
     return arr.length > 0 ? Maybe.from(arr[arr.length - 1]) : Maybe.none<T>();
   }
@@ -65,17 +75,17 @@ export function tryFind(source: unknown, keyOrPredicate: unknown): Maybe<unknown
 }
 
 /**
- * Extracts all Some values from an array of Maybe<T>, discarding None values.
+ * Extracts all Some values from an iterable of Maybe<T>, discarding None values.
  * With a `selector`, each element is mapped to a Maybe first and only the Some values are kept.
  *
  * @example
  * choose([Maybe.some(user1), Maybe.none(), Maybe.some(user2)]);  // [user1, user2]
  * choose(users, (u) => Maybe.from(u.email));  // emails of the users that have one
  */
-export function choose<T>(maybes: readonly Maybe<T>[]): T[];
-export function choose<T, U>(items: readonly T[], selector: (item: T) => Maybe<U>): U[];
+export function choose<T>(maybes: Iterable<Maybe<T>>): T[];
+export function choose<T, U>(items: Iterable<T>, selector: (item: T) => Maybe<U>): U[];
 export function choose(
-  items: readonly unknown[],
+  items: Iterable<unknown>,
   selector?: (item: unknown) => Maybe<unknown>,
 ): unknown[] {
   const result: unknown[] = [];

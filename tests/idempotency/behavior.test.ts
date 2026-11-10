@@ -709,6 +709,30 @@ describe('idempotencyBehavior', () => {
     );
     expect(() => idempotencyBehavior({ store, profile: 'nope' })).toThrow(/unknown profile/);
   });
+
+  it('copies the options at setup, so later changes to them have no effect', async () => {
+    const store = new InMemoryIdempotencyStore();
+    const refund = { namespace: 'payments', unscopedKeyBehavior: 'global' as const };
+    const forRequest: Record<
+      string,
+      { namespace?: string; unscopedKeyBehavior?: 'skip' | 'global' }
+    > = { Refund: refund };
+    const options = { store, unscopedKeyBehavior: 'global' as 'global' | 'skip', forRequest };
+    const { mediator, fn } = setup(idempotencyBehavior(options), charge);
+
+    options.unscopedKeyBehavior = 'skip';
+    Object.assign(refund, { namespace: 'other', unscopedKeyBehavior: 'skip' });
+    Object.assign(forRequest, { Capture: { namespace: 'other', unscopedKeyBehavior: 'skip' } });
+    Reflect.deleteProperty(forRequest, 'Refund');
+
+    const unscoped = capture({ idempotencyScope: undefined });
+    await mediator.send('Capture', unscoped);
+    await mediator.send('Capture', unscoped);
+    expect(fn).toHaveBeenCalledTimes(1);
+    await mediator.send('Refund', unscoped);
+    await mediator.send('Refund', unscoped);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('createIdempotency().idempotencyBehavior', () => {

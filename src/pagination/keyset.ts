@@ -662,3 +662,127 @@ export function keysetPaginate<T>(
     .map((row) => row.item);
   return Result.success(createKeysetPageResponse(rows, plan.value, ordering, options));
 }
+
+// ---------------------------------------------------------------------------------------------
+// Predicate
+// ---------------------------------------------------------------------------------------------
+
+/** Comparison operator of a {@link KeysetComparison}. */
+export type KeysetComparisonOperator = '>' | '>=' | '<' | '<=' | '=';
+
+/** One `path operator value` comparison of a {@link KeysetPredicate}. */
+export interface KeysetComparison {
+  readonly path: string;
+  readonly operator: KeysetComparisonOperator;
+  readonly value: KeysetValue;
+}
+
+/**
+ * Framework-agnostic description of the rows strictly beyond a cursor:
+ * `seek AND (anyOf[0] OR anyOf[1] OR ...)`, where every `anyOf` entry is an AND of comparisons.
+ * For ascending keys `a, b` that is `a >= @a AND (a > @a OR (a = @a AND b > @b))`.
+ */
+export interface KeysetPredicate {
+  /**
+   * The redundant inclusive comparison on the first key (`>=` or `<=`), which lets a database seek on an
+   * index led by that key. `undefined` when the ordering has a single key.
+   */
+  readonly seek: KeysetComparison | undefined;
+  /** Entry `i` is `k0 = v0 AND ... AND k(i-1) = v(i-1) AND ki > vi` (`<` when key `i` reads descending). */
+  readonly anyOf: readonly (readonly KeysetComparison[])[];
+}
+
+/**
+ * Builds the keyset predicate for decoded cursor values (for example `plan.cursor` of {@link planKeysetPage}),
+ * like the C# `KeysetPredicateBuilder`. An ascending key compares with `>`, a descending one with `<`;
+ * `reverse` (`plan.reverse`, a `before` page) inverts every key. Keyset keys are never null, as in C#,
+ * so the predicate has no `IS NULL` branches. A `NaN` or infinite number has no portable SQL order.
+ *
+ * @example
+ * const plan = planKeysetPage({ limit: 20, after }, byNewest);
+ * if (plan.ok && plan.value.cursor) {
+ *   const where = keysetPredicate(byNewest, plan.value.cursor, plan.value.reverse);
+ * }
+ *
+ * @throws TypeError when the ordering has no keys, or the cursor has the wrong length or a null value.
+ */
+export function keysetPredicate<T>(
+  ordering: KeysetOrdering<T>,
+  cursor: readonly KeysetValue[],
+  reverse = false,
+): KeysetPredicate {
+  assertOrdering(ordering);
+  if (cursor.length !== ordering.keys.length) {
+    throw new TypeError(
+      `The cursor has ${cursor.length} values but the ordering has ${ordering.keys.length} keys. (Parameter: cursor)`,
+    );
+  }
+  const compare = (i: number, strict: boolean): KeysetComparison => {
+    const key = ordering.keys[i] as KeysetKey<T>;
+    const ascending = (key.direction === 'asc') !== reverse;
+    const operator = ascending ? (strict ? '>' : '>=') : strict ? '<' : '<=';
+    return { path: key.path, operator, value: cursor[i] as KeysetValue };
+  };
+  const equal = (i: number): KeysetComparison => ({ ...compare(i, true), operator: '=' });
+  for (const [i, key] of ordering.keys.entries()) {
+    if (cursor[i] === null || cursor[i] === undefined) {
+      throw new TypeError(
+        `Keyset key '${key.path}' has a null cursor value. Keyset keys must never be null. (Parameter: cursor)`,
+      );
+    }
+  }
+  const anyOf = ordering.keys.map((_, i) => [
+    ...ordering.keys.slice(0, i).map((_k, j) => equal(j)),
+    compare(i, true),
+  ]);
+  return { seek: ordering.keys.length > 1 ? compare(0, false) : undefined, anyOf };
+}
+
+/** Options of {@link keysetPredicateToSql}. */
+export interface KeysetSqlOptions {
+  /**
+   * SQL identifier for every key path, written into the SQL as is (quote it yourself when needed).
+   * Only these caller-provided identifiers reach the SQL text; a path without an entry throws.
+   */
+  readonly columns: Readonly<Record<string, string>>;
+  /** Placeholder for the 1-based parameter `index`. Default `?`; use `` (i) => `$${i}` `` for PostgreSQL. */
+  readonly placeholder?: ((index: number) => string) | undefined;
+}
+
+/** A parameterised SQL fragment: `sql` holds only identifiers, operators and placeholders. */
+export interface KeysetSql {
+  readonly sql: string;
+  /** Parameter values in placeholder order. */
+  readonly values: readonly KeysetValue[];
+}
+
+/**
+ * Renders a {@link KeysetPredicate} as a parameterised SQL `WHERE` fragment, for example
+ * `created_at <= ? AND (created_at < ? OR (created_at = ? AND id > ?))`. Values are never inlined.
+ * String keys compare with the column collation, which may differ from the in-memory ordinal order.
+ *
+ * @throws TypeError when a path has no entry in `columns`.
+ */
+export function keysetPredicateToSql(
+  predicate: KeysetPredicate,
+  options: KeysetSqlOptions,
+): KeysetSql {
+  const placeholder = options.placeholder ?? (() => '?');
+  const values: KeysetValue[] = [];
+  const render = (c: KeysetComparison): string => {
+    if (!Object.hasOwn(options.columns, c.path)) {
+      throw new TypeError(
+        `No SQL column is mapped for keyset key '${c.path}'. (Parameter: columns)`,
+      );
+    }
+    values.push(c.value);
+    return `${options.columns[c.path]} ${c.operator} ${placeholder(values.length)}`;
+  };
+  const seek = predicate.seek === undefined ? undefined : render(predicate.seek);
+  const branches = predicate.anyOf.map((and) => {
+    const sql = and.map(render).join(' AND ');
+    return and.length > 1 && predicate.anyOf.length > 1 ? `(${sql})` : sql;
+  });
+  const any = branches.join(' OR ');
+  return { sql: seek === undefined ? any : `${seek} AND (${any})`, values };
+}

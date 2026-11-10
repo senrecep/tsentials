@@ -55,9 +55,11 @@ export const Union = {
     union: U,
     handlers: { [K in U['tag']]: (value: Extract<U, { readonly tag: K }>['value']) => R },
   ): R {
-    const handler = (handlers as Record<string | symbol, (value: unknown) => R>)[
-      union.tag as string | symbol
-    ];
+    const tag = union.tag as string | symbol;
+    // Own properties only: a tag such as 'constructor' must not reach Object.prototype.
+    const handler = Object.hasOwn(handlers, tag)
+      ? (handlers as Record<string | symbol, (value: unknown) => R>)[tag]
+      : undefined;
     if (handler === undefined) throw new Error(`Unhandled union tag: ${String(union.tag)}`);
     return handler(union.value);
   },
@@ -129,14 +131,15 @@ export const Union = {
   groupBy<U extends Tagged>(
     items: ReadonlyArray<U>,
   ): { [K in U['tag']]?: Array<Extract<U, { readonly tag: K }>['value']> } {
-    const result: Record<PropertyKey, Array<unknown>> = {};
+    // A Map plus Object.fromEntries keeps tags like '__proto__' or 'constructor' as own keys.
+    const groups = new Map<PropertyKey, Array<unknown>>();
     for (const item of items) {
-      const key = item.tag;
-      if (!result[key]) {
-        result[key] = [];
-      }
-      result[key].push(item.value);
+      const group = groups.get(item.tag);
+      if (group === undefined) groups.set(item.tag, [item.value]);
+      else group.push(item.value);
     }
-    return result as { [K in U['tag']]?: Array<Extract<U, { readonly tag: K }>['value']> };
+    return Object.fromEntries(groups) as {
+      [K in U['tag']]?: Array<Extract<U, { readonly tag: K }>['value']>;
+    };
   },
 } as const;

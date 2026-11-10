@@ -108,13 +108,18 @@ function defaultReleaseFailures(request: unknown): boolean {
 
 /** @internal Shared by `idempotencyBehavior` and `createIdempotency`. */
 export function makeIdempotencyBehavior(
-  options: IdempotencyBehaviorOptions,
+  given: IdempotencyBehaviorOptions,
   defaults: IdempotencyDefaults | undefined,
 ): GenericBehavior {
+  // Copied at setup, as the C# behavior binds its options once: later changes to the options or
+  // `forRequest` objects have no effect.
+  const options = { ...given };
+  const forRequest = new Map(
+    Object.entries(given.forRequest ?? {}).map(([name, s]) => [name, { ...s }] as const),
+  );
   const settingsOf = options.settings ?? defaultRequestSettings;
   const releaseFailuresOf = options.releaseFailures ?? defaultReleaseFailures;
   const serializer = options.serializer ?? jsonResultSerializer;
-  const forRequest = options.forRequest ?? {};
 
   // A profile sits right below the settings that name it; a request type's profile replaces
   // the behavior's profile.
@@ -126,7 +131,7 @@ export function makeIdempotencyBehavior(
   // Fail at setup: the behavior and every request type must resolve to valid settings.
   const base = resolveSettings(layersOf(undefined));
   const perType = new Map<string, ResolvedIdempotencySettings>();
-  for (const [name, typeSettings] of Object.entries(forRequest)) {
+  for (const [name, typeSettings] of forRequest) {
     perType.set(name, resolveSettings(layersOf(typeSettings)));
   }
 
@@ -136,7 +141,7 @@ export function makeIdempotencyBehavior(
     context: RequestContext,
   ): Promise<Result<TRes>> => {
     const name = context.requestName;
-    const typeSettings = Object.hasOwn(forRequest, name) ? forRequest[name] : undefined;
+    const typeSettings = forRequest.get(name);
     const typeResolved = perType.get(name) ?? base;
     const run = () => next();
 

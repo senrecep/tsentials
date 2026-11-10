@@ -19,6 +19,7 @@ import { createIdempotency, InMemoryIdempotencyStore } from 'tsentials/idempoten
 - [Stores](#stores)
 - [Money and credits: a transactional SQL store](#money-and-credits-a-transactional-sql-store)
 - [Webhooks](#webhooks)
+- [Message inbox](#message-inbox)
 - [Rolling out: off, observe, enforce](#rolling-out-off-observe-enforce)
 - [Error codes and events](#error-codes-and-events)
 
@@ -469,6 +470,41 @@ const handle = idempotent((e: StripeEvent) => applyEvent(client, e), {
 });
 ```
 
+## Message inbox
+
+Queues and brokers deliver at least once, so a consumer can get the same message twice. When the broker or messaging framework has no inbox of its own, `idempotent` can serve as one. This mirrors the CSharpEssentials `IdempotencyInbox`:
+
+- Namespace: `messaging:{consumer}`, and key: `idempotencyKeys.fromMessage(message.id, consumer)`. Two consumers of the same message do not deduplicate each other.
+- Scope: the owner of the message, such as the tenant or the sending account. Use `idempotencyScopes.global` when message ids are unique across owners.
+- Fingerprint: a constant. The message id is authoritative, so a redelivery that serializes the message differently is still a duplicate.
+- Retention: a `messaging` profile of 7 days (the C# default), so a message redelivered from a dead-letter queue days later is still recognized.
+- A success, first or replayed, means the message is done: acknowledge it. `Idempotency.InFlight` means another delivery is processing it: redeliver it later. `storeFailures: false` releases failures, so a redelivery runs the handler again. A handler that throws keeps the key in flight until the lease ends.
+
+```ts
+import { createIdempotency, idempotencyKeys, idempotencyScopes } from 'tsentials/idempotency';
+
+const idem = createIdempotency({
+  store: new RedisIdempotencyStore(redis),
+  profiles: { messaging: { retentionMs: 7 * 86_400_000 } },
+});
+
+const consumer = 'billing.invoice-created';
+const handleInvoiceCreated = idem.idempotent((m: InvoiceCreated) => createInvoice(m), {
+  namespace: `messaging:${consumer}`,
+  profile: 'messaging',
+  key: (m) => idempotencyKeys.fromMessage(m.id, consumer),
+  scope: (m) => idempotencyScopes.tenant(m.tenantId),
+  fingerprint: () => 'message',
+  storeFailures: false,
+});
+
+broker.subscribe('invoice-created', async (message) => {
+  const result = await handleInvoiceCreated(message.body);
+  if (result.ok) await message.ack(); // first delivery and duplicates alike
+  else await message.nack({ requeue: true }); // Idempotency.InFlight or a released failure
+});
+```
+
 ## Rolling out: off, observe, enforce
 
 Turning idempotency on in front of live traffic changes answers: retries that used to run again now get replays or 409/422. Roll out in steps:
@@ -535,3 +571,30 @@ const idem = createIdempotency({
 | `Idempotency.ResponseTooLarge` | warning | A non-2xx HTTP response over `maxResponseBodyBytes` was not stored |
 | `Idempotency.ResponseNotReplayable` | warning | A marker was stored for a 2xx HTTP response that could not be stored; logged once the marker is stored, with the property `Reason`: `too_large`, `encoded` or `event_stream` |
 | `Idempotency.StoredResponseUnreadable` | warning | A stored HTTP response could not be read; the call got 500 |
+
+### Event names in CSharpEssentials
+
+The C# packages log the same situations under these names. Rows without a TypeScript name have no event here.
+
+| CSharpEssentials | tsentials |
+|------------------|-----------|
+| `Idempotency.Observe.WouldReplay` | `Idempotency.Observe.WouldReplay` |
+| `Idempotency.Observe.WouldRejectInFlight` | `Idempotency.Observe.WouldRejectInFlight` |
+| `Idempotency.Observe.WouldRejectKeyReused` | `Idempotency.Observe.WouldRejectKeyReused` |
+| `Idempotency.Observe.WouldRejectScopeRequired` | `Idempotency.Observe.WouldRejectScopeRequired` |
+| `Idempotency.Observe.WouldRejectKeyMissing` | none: a missing key runs without idempotency |
+| `Idempotency.Observe.WouldRejectKeyInvalid` | none: an invalid key runs without idempotency |
+| `Idempotency.Observe.ResolutionFailed` | `Idempotency.Observe.ResolutionFailed` |
+| `Idempotency.Observe.ReserveFailed` | `Idempotency.StoreFailed` |
+| `Idempotency.StoreFailed` (storing the outcome failed) | `Idempotency.CompleteFailed` |
+| `Idempotency.ReleaseFailed` | `Idempotency.CompleteFailed` |
+| `Idempotency.StaleReservation` | `Idempotency.ReservationLost` |
+| `Idempotency.UnscopedKeySkipped` | `Idempotency.UnscopedKeySkipped` |
+| `Idempotency.StoredResponseUnreadable` | `Idempotency.StoredResponseUnreadable` |
+| `Idempotency.ResponseNotStorable` (a 4xx was not stored) | `Idempotency.ResponseTooLarge` when the body was too large |
+| `Idempotency.KeptInFlight` | `Idempotency.ResponseTooLarge` when a non-2xx body was too large, otherwise none |
+| `Idempotency.ExecutionFilterMissing` | none (ASP.NET Core only) |
+| `Idempotency.RequestTimeoutExceedsLease` | none (ASP.NET Core only) |
+| none | `Idempotency.Observe.WouldRejectResultUnavailable`, `Idempotency.LeaseLimitReached`, `Idempotency.Decision` |
+
+`Idempotency.StoreFailed` means different things: in C# storing the outcome failed, here `reserve` threw in `observe`.

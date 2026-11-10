@@ -1,6 +1,8 @@
 export type {
   CursorProtector,
   DecodeCursorOptions,
+  KeysetComparison,
+  KeysetComparisonOperator,
   KeysetCursorDirection,
   KeysetDirection,
   KeysetKey,
@@ -10,6 +12,9 @@ export type {
   KeysetPaginationOptions,
   KeysetPaginationRequest,
   KeysetPaginationResponse,
+  KeysetPredicate,
+  KeysetSql,
+  KeysetSqlOptions,
   KeysetValue,
 } from './keyset.js';
 export {
@@ -21,6 +26,8 @@ export {
   KeysetCursorErrors,
   keysetOrdering,
   keysetPaginate,
+  keysetPredicate,
+  keysetPredicateToSql,
   noOpCursorProtector,
   planKeysetPage,
 } from './keyset.js';

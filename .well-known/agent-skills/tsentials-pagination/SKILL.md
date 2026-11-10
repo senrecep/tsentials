@@ -1,6 +1,6 @@
 ---
 name: tsentials-pagination
-description: Use when paging collections — paginate() for in-memory offset paging (pageNumber/pageSize/search, PaginationResponse with totalPages and hasNextPage), keysetOrdering + keysetPaginate for stable cursor paging, and planKeysetPage/createKeysetPageResponse plus encodeCursor/decodeCursor and CursorProtector for database-backed keyset queries.
+description: Use when paging collections: paginate() for in-memory offset paging (pageNumber/pageSize/search, PaginationResponse with totalPages and hasNextPage), keysetOrdering + keysetPaginate for stable cursor paging, and planKeysetPage/createKeysetPageResponse plus keysetPredicate/keysetPredicateToSql, encodeCursor/decodeCursor and CursorProtector for database-backed keyset queries.
 ---
 
 # tsentials/pagination
@@ -18,6 +18,7 @@ npm install tsentials
 ```typescript
 import { paginate, keysetOrdering, keysetPaginate } from 'tsentials/pagination';
 import { planKeysetPage, createKeysetPageResponse, encodeCursor, decodeCursor } from 'tsentials/pagination';
+import { keysetPredicate, keysetPredicateToSql } from 'tsentials/pagination';
 import type { PaginationResponse, KeysetPaginationResponse, CursorProtector } from 'tsentials/pagination';
 ```
 
@@ -82,6 +83,22 @@ const rows = await db.fetch(plan.value);
 const response = createKeysetPageResponse(rows, plan.value, byNewest);
 ```
 
+`keysetPredicate(ordering, plan.value.cursor, plan.value.reverse)` builds the "strictly beyond the cursor" filter as plain data, the same shape as the C# `KeysetPredicateBuilder`: `{ seek, anyOf }` means `seek AND (anyOf[0] OR anyOf[1] OR ...)`, each `anyOf` entry an AND of `{ path, operator, value }`. Ascending keys use `>`, descending keys `<`, and `reverse` flips every key. `seek` is the redundant `>=`/`<=` on the first key that lets the database use an index led by it; it is `undefined` for a single key. Map it to Prisma, Drizzle, Knex or MongoDB, or render SQL:
+
+```typescript
+if (plan.value.cursor) {
+  const where = keysetPredicate(byNewest, plan.value.cursor, plan.value.reverse);
+  const { sql, values } = keysetPredicateToSql(where, {
+    columns: { createdAt: 'created_at', id: 'id' },   // required; written into the SQL as is
+    placeholder: (i) => `$${i}`,                      // default '?'
+  });
+  // sql: created_at <= $1 AND (created_at < $2 OR (created_at = $3 AND id > $4))
+  // values: [createdAt, createdAt, createdAt, id]
+}
+```
+
+Only the identifiers in `columns` reach the SQL text; a key path without an entry throws `TypeError`, and cursor values only travel in `values`. Keys are never null (as in C#), so there are no `IS NULL` branches; the builder throws on a null value or a wrong cursor length.
+
 Cursor protection (for example HMAC signing): implement `CursorProtector` (`protect`, `tryUnprotect`) and pass it as `{ protector }` in the keyset options. `encodeCursor` / `decodeCursor` are exported for custom flows.
 
 ---
@@ -94,3 +111,4 @@ Cursor protection (for example HMAC signing): implement `CursorProtector` (`prot
 - The last key of a `keysetOrdering` must be unique (typically `id`), otherwise rows can be skipped or repeated.
 - `limit` is clamped to `maxLimit` (default 100, `KEYSET_DEFAULTS`).
 - In-memory string keys compare ordinally, unlike a database collation.
+- `keysetPredicateToSql` never derives SQL from data: map every key path in `columns`, and never build `columns` from user input.

@@ -4,6 +4,7 @@ import { Err } from '../errors/app-error.js';
 import type { AbortOptions } from '../result/abort.js';
 import { observe, throwIfAborted, withAbort } from '../result/abort.js';
 import type { AsyncRule, Rule } from '../rules/rule.js';
+import { RuleEngine } from '../rules/rule-engine.js';
 import { CascadeMode } from './cascade-mode.js';
 import type { AsyncValidator, SyncValidator } from './contracts.js';
 import type { EnumLike } from './enum-support.js';
@@ -28,6 +29,22 @@ import {
   sameValue,
   trackPending,
 } from './internal.js';
+
+/** Options of {@link RuleChain.equal} and {@link RuleChain.notEqual}. */
+export interface EqualOptions {
+  /**
+   * Compare strings ignoring case, as C# `StringComparison.OrdinalIgnoreCase`. Both sides are
+   * folded with `toUpperCase()` (locale independent). Non-string values are not affected.
+   */
+  readonly ignoreCase?: boolean;
+}
+
+/** Strict or case-insensitive string equality for {@link RuleChain.equal} / `notEqual`. */
+function sameString(a: unknown, b: unknown, ignoreCase: boolean | undefined): boolean {
+  return ignoreCase && typeof a === 'string' && typeof b === 'string'
+    ? a.toUpperCase() === b.toUpperCase()
+    : a === b;
+}
 
 /** Options of the default-message {@link RuleChain.must} overload. */
 export interface MustOptions {
@@ -230,11 +247,12 @@ export class RuleChain<TProp> {
 
   /**
    * Evaluates a {@link Rule} against the value. On failure every error of the rule is
-   * recorded as-is (codes are not prefixed) and the chain is marked failed.
+   * recorded as-is (codes are not prefixed) and the chain is marked failed. A rule that throws
+   * fails with code `Rule.EvaluationFailed`, as in `RuleEngine.evaluate`.
    */
   satisfies(rule: Rule<TProp>): this {
     if (this.hasFailed) return this;
-    const result: unknown = rule(this.value);
+    const result: unknown = RuleEngine.evaluate(rule, this.value);
     if (isThenable(result)) {
       observe(result);
       throw new TypeError('satisfies() received an async rule; use satisfiesAsync() instead.');
@@ -244,14 +262,17 @@ export class RuleChain<TProp> {
     return this;
   }
 
-  /** Async variant of {@link satisfies}; rejects with the signal's reason when it aborts. */
+  /**
+   * Async variant of {@link satisfies}; rejects with the signal's reason when it aborts. Any
+   * other throw or rejection of the rule fails with code `Rule.EvaluationFailed`.
+   */
   satisfiesAsync(rule: AsyncRule<TProp> | Rule<TProp>, options?: AbortOptions): Promise<this> {
     if (this.hasFailed) return Promise.resolve(this);
     const signal = options?.signal ?? this.#state.signal;
     return this.#track(async () => {
       throwIfAborted(signal);
       const result = await withAbort(
-        Promise.resolve().then(() => (rule as AsyncRule<TProp>)(this.value, signal)),
+        RuleEngine.evaluateAsync(rule, this.value, signal === undefined ? undefined : { signal }),
         signal,
       );
       if (!result.ok) this.#propagate(result.errors);
@@ -479,8 +500,9 @@ export class RuleChain<TProp> {
    * (`must be equal to 'x'.`). Other values compare with `===` (Dates by timestamp, NaN
    * equals NaN) and a null value fails against a non-null expected value (`must be equal to 5.`).
    * Null vs null follows the string rule (equal), since TypeScript cannot tell the overloads apart.
+   * Pass `{ ignoreCase: true }` to compare strings ignoring case.
    */
-  equal(expected: TProp, message?: ValidationMessage): this {
+  equal(expected: TProp, message?: ValidationMessage, options?: EqualOptions): this {
     if (this.hasFailed) return this;
     const value: unknown = this.value;
     if (
@@ -488,7 +510,9 @@ export class RuleChain<TProp> {
       typeof value === 'string' ||
       (isNullish(value) && isNullish(expected))
     ) {
-      const equal = isNullish(value) ? isNullish(expected) : value === expected;
+      const equal = isNullish(value)
+        ? isNullish(expected)
+        : sameString(value, expected, options?.ignoreCase);
       if (!equal) {
         this.#fail(
           'Equal',
@@ -512,8 +536,9 @@ export class RuleChain<TProp> {
   /**
    * Fails when the value equals `forbidden` → `<path>.NotEqual`. Same comparison and
    * quoting rules as {@link equal}; a null value only fails against a null string.
+   * Pass `{ ignoreCase: true }` to compare strings ignoring case.
    */
-  notEqual(forbidden: TProp, message?: ValidationMessage): this {
+  notEqual(forbidden: TProp, message?: ValidationMessage, options?: EqualOptions): this {
     if (this.hasFailed) return this;
     const value: unknown = this.value;
     if (
@@ -521,7 +546,9 @@ export class RuleChain<TProp> {
       typeof value === 'string' ||
       (isNullish(value) && isNullish(forbidden))
     ) {
-      const equal = isNullish(value) ? isNullish(forbidden) : value === forbidden;
+      const equal = isNullish(value)
+        ? isNullish(forbidden)
+        : sameString(value, forbidden, options?.ignoreCase);
       if (equal) {
         this.#fail(
           'NotEqual',

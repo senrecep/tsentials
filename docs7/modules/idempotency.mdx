@@ -71,7 +71,7 @@ await mediator.send('CapturePayment', { orderId, idempotencyKey, idempotencyScop
 ```
 
 Fingerprint defaults to the whole request: if it has per-retry fields (`requestedAt`, trace id), return an explicit `fingerprint` of the business fields from `settings`, or retries get 422 `KeyReused`. Fingerprints are not canonicalized (key order, whitespace, number formatting matter): clients resend the identical request.
-Reads `idempotencyKey`, `idempotencyScope`, `idempotencyRetentionMs`, `idempotencyLeaseMs` from the request (or `settings(request, ctx)`). Namespace = request name. A failure of a `transactional: true` request is released.
+Reads `idempotencyKey`, `idempotencyScope`, `idempotencyRetentionMs`, `idempotencyLeaseMs` from the request (or `settings(request, ctx)`). Namespace = request name. A failure of a `transactional: true` request is released. The options and `forRequest` are copied at setup: changing those objects later has no effect.
 
 ## Fetch API handlers
 
@@ -103,6 +103,8 @@ await idempotencyKeys.for('refund', orderId, refundId);      // deterministic, f
 await idempotencyKeys.fromMessage(messageId, 'billing');     // for('message', consumer, id): one key per (message, consumer)
 idempotencyScopes.user(id) / .tenant(id) / .userAndTenant(u, t) / .client(id) / .custom('kind', id) / .global
 ```
+
+Message inbox (queue/broker consumer): `idempotent` with namespace `messaging:{consumer}`, key `fromMessage(message.id, consumer)`, the message owner's scope, `fingerprint: () => 'message'`, `storeFailures: false` and a 7-day `messaging` profile; ack on success, redeliver on failure (`Idempotency.InFlight`). C# event names map to these in `docs/IDEMPOTENCY.md`.
 
 Scope builders return `undefined` for a missing id. A scope is an `IdempotencyScope` that only these builders create; a raw string (`'global'`, `'user:42'`) is a compile error and throws (enforce) or runs without idempotency (observe). `String(scope)` is the storage form; `toJSON()` / `idempotencyScopes.fromJSON(json)` carry it through JSON; the mediator's default reader calls `fromJSON` only with `reviveScopeJson: true` (behavior-wide or per request type), and a custom `settings` must call it itself. `custom(kind, id)` rejects `user`/`tenant`/`client`/`global` in any case, kinds with `:` or `/`, and all-digit kinds; ids and kinds with a lone surrogate throw. A resolver may return `null` for no scope. Storage key: `idem:v3:{len}:{namespace}|{len}:{scope}|{len}:{key}` (`idempotencyStorageKey`).
 
