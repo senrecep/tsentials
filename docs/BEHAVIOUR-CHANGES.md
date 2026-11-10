@@ -4,6 +4,8 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 ## Behaviour changes in the next release (unreleased)
 
+* **entity:** the object from `createEntityBaseWithId` now keeps `domainEvents`, `createdAt`, `createdBy`, `updatedAt` and `updatedBy` live, so they reflect later `raise`, `clearDomainEvents`, `setCreatedInfo` and `setUpdatedInfo` calls. They used to keep the values they had when the object was created. `createEntityBaseWithId` and `EntityBaseWithId` are now also exported from `tsentials/entity`.
+* **entity:** `raise` throws a `TypeError` when the event is `null` or `undefined`, and `setCreatedInfo` / `setUpdatedInfo` throw a `RangeError` when the date is not a valid `Date` (not a `Date`, or an invalid one such as `new Date('x')`). Nothing is stored in that case. They used to store the value.
 * **mediator:** `validationBehavior` now calls an object validator as a method, and uses its `validateAsync(request, { signal })` when it has one, instead of calling a detached `validate`. A `Validator` subclass from `tsentials/validation` used to fail every request with `Validator.Exception` because it lost `this`; it now validates, honours its `order`, and receives the caller's signal. An object with both methods now runs `validateAsync`, not `validate`.
 
 ## Behaviour changes in 3.0.0
