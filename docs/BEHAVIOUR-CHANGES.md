@@ -4,6 +4,8 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 ## Behaviour changes in the next release (unreleased)
 
+* **enums:** case-insensitive matching in `parse` (and the ambiguity checks of `defineEnum`) now follows C# `OrdinalIgnoreCase`: each character is upper-cased on its own. A character whose upper case is longer is no longer expanded, so `'STRAßE'` no longer matches the wire name `'strasse'`. The Turkish dotless `ı` and the long `ſ` no longer match `I` and `S`. Final and medial sigma still match. Members whose names differ only in these characters, such as `'aß'` and `'ASS'`, are no longer rejected as ambiguous.
+
 ## Behaviour changes in 4.0.0
 
 * **string:** the case converters split words on Unicode rules, as CSharpEssentials does. Any character that is not a letter, combining mark or digit now separates words and is dropped: `toSnakeCase('foo.bar')` gives `'foo_bar'` (it was `'foo.bar'`). A digit run is its own word: `toSnakeCase('hello123World')` gives `'hello_123_world'` (it was `'hello123world'`) and `toCamelCase('v2Api')` gives `'v2Api'` (it was `'v2api'`). Non-ASCII uppercase and titlecase letters start a word: `toKebabCase('überÄpfel')` gives `'über-äpfel'` (it was `'überäpfel'`), and `toSnakeCase('user用户Name')` gives `'user用户_name'`. Acronym splitting is unchanged (`'XMLParser'` gives `'xml_parser'`).
