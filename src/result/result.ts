@@ -1,10 +1,11 @@
 import type { AppError } from '../errors/app-error.js';
-import { Err } from '../errors/app-error.js';
+import { decodeAppError, Err, isJsonRecord, readJsonKey } from '../errors/app-error.js';
 import { DomainError } from '../errors/domain-error.js';
 import type { ErrorType } from '../errors/error-type.js';
 import {
   type AbortOptions,
   isCallerAbort,
+  isThenable,
   observe,
   rethrowIfAborted,
   throwIfAborted,
@@ -69,6 +70,56 @@ export const Result = {
       throw new Error('Result.failureFrom requires at least one error.');
     }
     return Object.freeze({ ok: false, errors: Object.freeze([...errors]) }) as Result<T>;
+  },
+
+  /**
+   * Validates a parsed JSON value and revives it as a Result. Accepts the tsentials shape
+   * (`{ ok: true, value }` or `{ ok: false, errors }`) and the CSharpEssentials shape
+   * (`isSuccess` and/or `isFailure`, `value`, `errors`, keys in any case). Each error goes
+   * through {@link Err.fromJSON}. A success may carry an empty `errors` array; a failure needs
+   * at least one error. The success `value` is not validated.
+   *
+   * A bad shape returns a Validation failure with code `Result.InvalidJson` (or
+   * `AppError.InvalidJson` for a bad error entry, one per entry) and the offending `path`
+   * in its metadata, so check those codes to tell a bad payload from a decoded failure.
+   *
+   * @example
+   * const r = Result.fromJSON<User>(await response.json());
+   */
+  fromJSON<T = unknown>(json: unknown): Result<T> {
+    const invalid = (path: string, description: string) =>
+      Result.failure<T>(
+        Err.validation('Result.InvalidJson', `${path} ${description}.`, new Map([['path', path]])),
+      );
+    if (!isJsonRecord(json)) return invalid('result', 'must be an object');
+    const isFailure = readJsonKey(json, 'isFailure');
+    const flags = [
+      readJsonKey(json, 'ok'),
+      readJsonKey(json, 'isSuccess'),
+      typeof isFailure === 'boolean' ? !isFailure : isFailure,
+    ].filter((flag) => flag !== undefined);
+    if (flags.length === 0 || flags.some((flag) => typeof flag !== 'boolean')) {
+      return invalid('result', 'must have a boolean ok, isSuccess or isFailure flag');
+    }
+    if (new Set(flags).size > 1) return invalid('result', 'has contradicting success flags');
+    const errors = readJsonKey(json, 'errors');
+    if (flags[0]) {
+      if (
+        errors === undefined ||
+        errors === null ||
+        (Array.isArray(errors) && errors.length === 0)
+      ) {
+        return Result.success(readJsonKey(json, 'value') as T);
+      }
+      return invalid('result.errors', 'must be empty, null or absent on a success');
+    }
+    if (!Array.isArray(errors) || errors.length === 0) {
+      return invalid('result.errors', 'must be a non-empty array on a failure');
+    }
+    const decodedErrors = Result.and(
+      errors.map((e: unknown, i) => decodeAppError(e, `result.errors[${i}]`)),
+    );
+    return Result.failureFrom<T>(decodedErrors.ok ? decodedErrors.value : decodedErrors.errors);
   },
 
   // ─── TYPE GUARDS ──────────────────────────────────────────────────────────
@@ -152,17 +203,25 @@ export const Result = {
 
   /**
    * Runs a side effect on success without altering the result.
+   *
+   * Warning: `fn` is not awaited. A promise it returns is dropped, and its rejection surfaces
+   * as an unhandled rejection (a TypeError with the original error as `cause`). Use
+   * {@link Result.tapAsync} for async work.
    */
   tap<T>(result: Result<T>, fn: (value: T) => void): Result<T> {
-    if (result.ok) fn(result.value);
+    if (result.ok) reportAsyncCallback(fn(result.value), 'Result.tap', TAP_ASYNC);
     return result;
   },
 
   /**
    * Runs a side effect on failure without altering the result.
+   *
+   * Warning: `fn` is not awaited. A promise it returns is dropped, and its rejection surfaces
+   * as an unhandled rejection (a TypeError with the original error as `cause`). Use
+   * {@link Result.tapErrorAsync} for async work.
    */
   tapError<T>(result: Result<T>, fn: (errors: readonly AppError[]) => void): Result<T> {
-    if (!result.ok) fn(result.errors);
+    if (!result.ok) reportAsyncCallback(fn(result.errors), 'Result.tapError', TAP_ERROR_ASYNC);
     return result;
   },
 
@@ -179,7 +238,7 @@ export const Result = {
    * On success the mapper is never called.
    *
    * @example
-   * Result.mapEachError(r, e => ({ ...e, code: `Api.${e.code}` }));
+   * Result.mapEachError(r, e => Err.with(e, { code: `Api.${e.code}` }));
    */
   mapEachError<T>(result: Result<T>, fn: (error: AppError) => AppError): Result<T> {
     if (result.ok) return result;
@@ -381,14 +440,21 @@ export const Result = {
    *   user => console.log(`Fetched ${user.name}`),
    *   errs => console.error(errs[0].description),
    * );
+   *
+   * Warning: the callbacks are not awaited. A promise one returns is dropped, and its
+   * rejection surfaces as an unhandled rejection (a TypeError with the original error as
+   * `cause`). For async work use `await Result.match(result, onSuccess, onError)`.
    */
   switch<T>(
     result: Result<T>,
     onSuccess: (value: T) => void,
     onError: (errors: readonly AppError[]) => void,
   ): void {
-    if (result.ok) onSuccess(result.value);
-    else onError(result.errors);
+    reportAsyncCallback(
+      result.ok ? onSuccess(result.value) : onError(result.errors),
+      'Result.switch',
+      AWAIT_MATCH,
+    );
   },
 
   /**
@@ -424,40 +490,52 @@ export const Result = {
 
   /**
    * Void-only switch using only the first error.
+   * Warning: the callbacks are not awaited, see {@link Result.switch}.
    */
   switchFirst<T>(
     result: Result<T>,
     onSuccess: (value: T) => void,
     onFirstError: (error: AppError) => void,
   ): void {
-    if (result.ok) onSuccess(result.value);
-    else onFirstError(result.errors[0] ?? Err.unexpected('Result.Empty', 'No errors found.'));
+    reportAsyncCallback(
+      result.ok
+        ? onSuccess(result.value)
+        : onFirstError(result.errors[0] ?? Err.unexpected('Result.Empty', 'No errors found.')),
+      'Result.switchFirst',
+      AWAIT_MATCH,
+    );
   },
 
   /**
    * Void-only switch using only the last error.
+   * Warning: the callbacks are not awaited, see {@link Result.switch}.
    */
   switchLast<T>(
     result: Result<T>,
     onSuccess: (value: T) => void,
     onLastError: (error: AppError) => void,
   ): void {
-    if (result.ok) onSuccess(result.value);
-    else
-      onLastError(
-        result.errors[result.errors.length - 1] ??
-          Err.unexpected('Result.Empty', 'No errors found.'),
-      );
+    reportAsyncCallback(
+      result.ok
+        ? onSuccess(result.value)
+        : onLastError(
+            result.errors[result.errors.length - 1] ??
+              Err.unexpected('Result.Empty', 'No errors found.'),
+          ),
+      'Result.switchLast',
+      AWAIT_MATCH,
+    );
   },
 
   /**
    * Runs a side effect on the first error only.
    * Complement of `tapError` which receives all errors.
+   * Warning: `fn` is not awaited, see {@link Result.tapError}.
    */
   tapErrorFirst<T>(result: Result<T>, fn: (firstError: AppError) => void): Result<T> {
     if (!result.ok && result.errors.length > 0) {
       const [firstError] = result.errors;
-      if (firstError) fn(firstError);
+      if (firstError) reportAsyncCallback(fn(firstError), 'Result.tapErrorFirst', TAP_ERROR_ASYNC);
     }
     return result;
   },
@@ -657,6 +735,10 @@ export const Result = {
   /**
    * Runs a side effect only when condition is true (or predicate returns true).
    * Passes result through unchanged.
+   *
+   * Warning: `fn` is not awaited. A promise it returns is dropped, and its rejection surfaces
+   * as an unhandled rejection (a TypeError with the original error as `cause`). For async
+   * work use `ResultAsync.fromResult(result).tapIf(...)`, which awaits it.
    */
   tapIf<T>(
     result: Result<T>,
@@ -665,7 +747,7 @@ export const Result = {
   ): Result<T> {
     if (result.ok) {
       const cond = typeof condition === 'function' ? condition(result.value) : condition;
-      if (cond) fn(result.value);
+      if (cond) reportAsyncCallback(fn(result.value), 'Result.tapIf', TAP_IF_ASYNC);
     }
     return result;
   },
@@ -673,6 +755,10 @@ export const Result = {
   /**
    * Runs a side effect on failure only when condition is true (or predicate returns true).
    * Passes result through unchanged.
+   *
+   * Warning: `fn` is not awaited. A promise it returns is dropped, and its rejection surfaces
+   * as an unhandled rejection (a TypeError with the original error as `cause`). For async
+   * work use `ResultAsync.fromResult(result).tapErrorIf(...)`, which awaits it.
    */
   tapErrorIf<T>(
     result: Result<T>,
@@ -681,7 +767,7 @@ export const Result = {
   ): Result<T> {
     if (!result.ok) {
       const cond = typeof condition === 'function' ? condition(result.errors) : condition;
-      if (cond) fn(result.errors);
+      if (cond) reportAsyncCallback(fn(result.errors), 'Result.tapErrorIf', TAP_ERROR_IF_ASYNC);
     }
     return result;
   },
@@ -971,6 +1057,26 @@ export const Result = {
 export interface TraverseOptions extends AbortOptions {
   /** Maximum items in flight. Integer ≥ 1 or `Infinity`. Default: 1 (sequential). */
   readonly concurrency?: number | undefined;
+}
+
+const TAP_ASYNC = 'use Result.tapAsync() instead';
+const TAP_ERROR_ASYNC = 'use Result.tapErrorAsync() instead';
+const TAP_IF_ASYNC = 'use ResultAsync.fromResult(result).tapIf() instead';
+const TAP_ERROR_IF_ASYNC = 'use ResultAsync.fromResult(result).tapErrorIf() instead';
+const AWAIT_MATCH = 'use await Result.match() instead';
+
+/**
+ * A sync callback that returned a promise: its rejection would surface as an unhandled
+ * rejection with no hint of where it came from. Rethrow it (never swallow) as a TypeError
+ * naming the method and the async alternative, with the original error as `cause`.
+ */
+function reportAsyncCallback(returned: unknown, method: string, instead: string): void {
+  if (!isThenable(returned)) return;
+  returned.then(undefined, (error: unknown) => {
+    throw new TypeError(`${method} callback returned a promise that rejected; ${instead}.`, {
+      cause: error,
+    });
+  });
 }
 
 function resolveError<T>(error: AppError | ((value: T) => AppError), value: T): AppError {

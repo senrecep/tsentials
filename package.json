@@ -86,6 +86,10 @@
       "import": "./dist/string/index.js",
       "types": "./dist/string/index.d.ts"
     },
+    "./uuid": {
+      "import": "./dist/uuid/index.js",
+      "types": "./dist/uuid/index.d.ts"
+    },
     "./validation": {
       "import": "./dist/validation/index.js",
       "types": "./dist/validation/index.d.ts"
