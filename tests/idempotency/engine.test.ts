@@ -271,20 +271,23 @@ describe('runIdempotent: observe', () => {
       true,
     ],
     ['fingerprint', { fingerprint: () => Promise.reject(new Error('bad body')) }, true],
-  ] as const)('runs without idempotency when the %s resolver throws', async (_name, overrides, hashed) => {
-    const store = new InMemoryIdempotencyStore();
-    const h = harness({ store, mode: 'observe' });
-    expect(await runIdempotent(h.call(overrides))).toBe('out1');
-    expect(await runIdempotent(h.call(overrides))).toBe('out2');
-    expect(h.events).toEqual([]);
-    expect(names(h)).toEqual([
-      IdempotencyEventNames.ResolutionFailed,
-      IdempotencyEventNames.ResolutionFailed,
-    ]);
-    expect(h.logs[0]?.level).toBe('warning');
-    expect(h.logs[0]?.properties.Exception).toBeInstanceOf(Error);
-    expect('KeyHash' in (h.logs[0]?.properties ?? {})).toBe(hashed);
-  });
+  ] as const)(
+    'runs without idempotency when the %s resolver throws',
+    async (_name, overrides, hashed) => {
+      const store = new InMemoryIdempotencyStore();
+      const h = harness({ store, mode: 'observe' });
+      expect(await runIdempotent(h.call(overrides))).toBe('out1');
+      expect(await runIdempotent(h.call(overrides))).toBe('out2');
+      expect(h.events).toEqual([]);
+      expect(names(h)).toEqual([
+        IdempotencyEventNames.ResolutionFailed,
+        IdempotencyEventNames.ResolutionFailed,
+      ]);
+      expect(h.logs[0]?.level).toBe('warning');
+      expect(h.logs[0]?.properties.Exception).toBeInstanceOf(Error);
+      expect('KeyHash' in (h.logs[0]?.properties ?? {})).toBe(hashed);
+    },
+  );
 
   it('rethrows a resolver error in enforce mode and after a caller abort', async () => {
     const throwing = { fingerprint: () => Promise.reject(new Error('bad body')) };

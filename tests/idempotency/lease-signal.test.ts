@@ -72,30 +72,30 @@ describe('lease signal: mediator', () => {
     );
   }
 
-  it.each([
-    'inner',
-    'outer',
-  ] as const)('answers ReservationLost when the handler rethrows the lease abort (exception handling %s)', async (order) => {
-    const s = store('lost');
-    const send = mediator(
-      s,
-      async (signal) => {
-        await aborted(signal);
-        signal.throwIfAborted();
-      },
-      order,
-    );
-    const result = await send.send('Capture', request);
-    expect(result.ok).toBe(false);
-    expect(Result.firstError(result)?.code).toBe(IdempotencyErrorCodes.ReservationLost);
-    // The key was released: a retry runs the handler again.
-    const again = await createMediator<Requests>({
-      behaviors: [idempotencyBehavior({ store: s, leaseMs: 60_000 })],
-    })
-      .register('Capture', async () => Result.success('again'))
-      .send('Capture', request);
-    expect(again).toEqual(Result.success('again'));
-  });
+  it.each(['inner', 'outer'] as const)(
+    'answers ReservationLost when the handler rethrows the lease abort (exception handling %s)',
+    async (order) => {
+      const s = store('lost');
+      const send = mediator(
+        s,
+        async (signal) => {
+          await aborted(signal);
+          signal.throwIfAborted();
+        },
+        order,
+      );
+      const result = await send.send('Capture', request);
+      expect(result.ok).toBe(false);
+      expect(Result.firstError(result)?.code).toBe(IdempotencyErrorCodes.ReservationLost);
+      // The key was released: a retry runs the handler again.
+      const again = await createMediator<Requests>({
+        behaviors: [idempotencyBehavior({ store: s, leaseMs: 60_000 })],
+      })
+        .register('Capture', async () => Result.success('again'))
+        .send('Capture', request);
+      expect(again).toEqual(Result.success('again'));
+    },
+  );
 
   it('answers ReservationLost when the handler throws an abort-like error after the loss', async () => {
     const send = mediator(store('lost'), async (signal) => {

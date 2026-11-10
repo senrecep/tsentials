@@ -170,7 +170,7 @@ export class InProcessResourceLock implements ResourceLock {
 
   #return(key: string, entry: Entry): void {
     if (--entry.references > 0) return;
-    if (this.#entries.get(key) === entry) this.#entries.delete(key);
+    this.#entries.delete(key);
   }
 
   #handle(key: string, entry: Entry): LockHandle {

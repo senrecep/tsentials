@@ -395,6 +395,37 @@ describe('withIdempotency', () => {
       ]);
     });
 
+    it('treats a too large body as unreplayable when cancelling its stream rejects', async () => {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        const s = setup(
+          () => {
+            const body = new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode('x'.repeat(10)));
+              },
+              cancel() {
+                throw new Error('cancel failed');
+              },
+            });
+            return new Response(body, { status: 201 });
+          },
+          { maxResponseBodyBytes: 4 },
+        );
+        const first = await s.handler(post('k'));
+        expect(first.status).toBe(201);
+        // The tee'd source is cancelled (and throws) only once both branches are cancelled.
+        await first.body?.cancel().catch(() => undefined);
+        await expectResultUnavailable(await s.handler(post('k')));
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
+
     it('logs ResponseNotReplayable only after the marker was stored', async () => {
       let logsAtComplete = -1;
       const store = new InMemoryIdempotencyStore();

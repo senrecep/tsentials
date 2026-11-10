@@ -44,6 +44,13 @@ describe('RuleContext.forEachAsync', () => {
 });
 
 describe('RuleContext.satisfies (model level)', () => {
+  it('adds no error for a passing rule', () => {
+    const result = Validator.validate(tagsModel, (rules) => {
+      rules.satisfies(() => Result.ok());
+    });
+    expect(result.ok).toBe(true);
+  });
+
   it('throws a TypeError for an async rule', () => {
     const asyncRule = (async () => Result.ok()) as unknown as Rule<TagsModel>;
     expect(() =>
@@ -55,6 +62,13 @@ describe('RuleContext.satisfies (model level)', () => {
 });
 
 describe('RuleContext.satisfiesAsync (model level)', () => {
+  it('adds no error for a passing async rule', async () => {
+    const result = await Validator.validateAsync(tagsModel, async (rules) => {
+      await rules.satisfiesAsync(async () => Result.ok());
+    });
+    expect(result.ok).toBe(true);
+  });
+
   it('passes the options signal to the rule instead of the run signal', async () => {
     const run = new AbortController();
     const own = new AbortController();

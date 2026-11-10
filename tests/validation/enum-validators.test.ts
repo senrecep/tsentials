@@ -37,13 +37,12 @@ const first = (result: Result<unknown>): AppError | undefined =>
 
 describe('enum validators', () => {
   describe('isDefinedEnum', () => {
-    it.each([
-      OrderStatus.Pending,
-      OrderStatus.InProgress,
-      OrderStatus.Unknown,
-    ])('passes for the string member %s', (value) => {
-      expect(validate(value, (c) => c.isDefinedEnum(OrderStatus, 'OrderStatus')).ok).toBe(true);
-    });
+    it.each([OrderStatus.Pending, OrderStatus.InProgress, OrderStatus.Unknown])(
+      'passes for the string member %s',
+      (value) => {
+        expect(validate(value, (c) => c.isDefinedEnum(OrderStatus, 'OrderStatus')).ok).toBe(true);
+      },
+    );
 
     it('fails for an undefined string value, listing the member values', () => {
       const error = first(
@@ -54,6 +53,14 @@ describe('enum validators', () => {
       expect(error?.description).toBe(
         "'shipped' is not a valid OrderStatus. Allowed values: pending, in_progress, unknown.",
       );
+    });
+
+    it('numeric enums with duplicate values name the value after the first member', () => {
+      const Aliased = { Low: 1, Min: 1, High: 2 } as const;
+      const error = first(
+        validate(3 as number, (c) => c.isOneOf(Aliased, 'Aliased', [1 as number])),
+      );
+      expect(error?.description).toBe("'3' is not a valid Aliased. Allowed values: Low.");
     });
 
     it('numeric enums: members pass, undefined values fail listing member names', () => {
@@ -212,12 +219,12 @@ describe('enum validators', () => {
   });
 
   describe('hasOnlyDefinedFlags', () => {
-    it.each([
-      Channels.None,
-      Channels.Email | Channels.Sms | Channels.Push,
-    ])('passes for defined bits %d', (value) => {
-      expect(validate(value, (c) => c.hasOnlyDefinedFlags(Channels, 'Channels')).ok).toBe(true);
-    });
+    it.each([Channels.None, Channels.Email | Channels.Sms | Channels.Push])(
+      'passes for defined bits %d',
+      (value) => {
+        expect(validate(value, (c) => c.hasOnlyDefinedFlags(Channels, 'Channels')).ok).toBe(true);
+      },
+    );
 
     it('fails for undefined bits', () => {
       const error = first(validate(17, (c) => c.hasOnlyDefinedFlags(Channels, 'Channels')));
@@ -236,6 +243,12 @@ describe('enum validators', () => {
       expect(
         first(validate(5, (c) => c.hasOnlyDefinedFlags(PlainAccess, 'PlainAccess')))?.description,
       ).toBe("'5' is not a valid PlainAccess. Allowed values: None, Read, Write.");
+    });
+
+    it('ignores a non-integer member value when building the flag mask', () => {
+      const Fractional = { None: 0, Half: 1.5, One: 1 } as const;
+      expect(validate(1, (c) => c.hasOnlyDefinedFlags(Fractional, 'Fractional')).ok).toBe(true);
+      expect(validate(2, (c) => c.hasOnlyDefinedFlags(Fractional, 'Fractional')).ok).toBe(false);
     });
 
     it('rejects non-integer numbers and undeclared strings', () => {

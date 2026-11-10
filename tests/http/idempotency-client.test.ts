@@ -38,16 +38,12 @@ describe('parseRetryAfter', () => {
     expect(parseRetryAfter('Wed, 21 Oct 2026 07:27:00 GMT', now)).toBe(0);
   });
 
-  it.each([
-    null,
-    '',
-    '-1',
-    '1.5',
-    'soon',
-    'Wed, not a date',
-  ])('returns undefined for %s', (value) => {
-    expect(parseRetryAfter(value)).toBeUndefined();
-  });
+  it.each([null, '', '-1', '1.5', 'soon', 'Wed, not a date'])(
+    'returns undefined for %s',
+    (value) => {
+      expect(parseRetryAfter(value)).toBeUndefined();
+    },
+  );
 });
 
 describe('fetchResult failure metadata', () => {

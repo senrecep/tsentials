@@ -567,58 +567,64 @@ describe('runIdempotent: lease heartbeat', () => {
   it.each([
     ['the lease reason', (signal: AbortSignal) => signal.reason],
     ['an abort-like error', () => new DOMException('stopped', 'AbortError')],
-  ] as const)('rejects with the caller reason when the caller aborts after a lost lease (%s)', async (_name, errorOf) => {
-    const { store } = storeWith(async () => false);
-    const h = harness({ store });
-    const controller = new AbortController();
-    let lease: AbortSignal | undefined;
-    let fail: () => void = () => undefined;
-    const handler = started(
-      (signal) =>
-        new Promise<string>((_resolve, reject) => {
-          lease = signal;
-          fail = () => reject(errorOf(signal!));
-        }),
-    );
-    const result = runIdempotent(h.call(handler.run, { signal: controller.signal }));
-    const rejected = expect(result).rejects.toBe('caller');
-    await handler.started;
-    await vi.advanceTimersByTimeAsync(100);
-    expect(lease?.reason).toBeInstanceOf(IdempotencyReservationLostError);
-    controller.abort('caller');
-    // The combined signal keeps the lease reason; the engine still answers with the caller's.
-    expect(lease?.reason).toBeInstanceOf(IdempotencyReservationLostError);
-    fail();
-    await rejected;
-    expect(h.events.map((e) => e.decision)).toEqual(['reserved']);
-  });
+  ] as const)(
+    'rejects with the caller reason when the caller aborts after a lost lease (%s)',
+    async (_name, errorOf) => {
+      const { store } = storeWith(async () => false);
+      const h = harness({ store });
+      const controller = new AbortController();
+      let lease: AbortSignal | undefined;
+      let fail: () => void = () => undefined;
+      const handler = started(
+        (signal) =>
+          new Promise<string>((_resolve, reject) => {
+            lease = signal;
+            fail = () => reject(errorOf(signal!));
+          }),
+      );
+      const result = runIdempotent(h.call(handler.run, { signal: controller.signal }));
+      const rejected = expect(result).rejects.toBe('caller');
+      await handler.started;
+      await vi.advanceTimersByTimeAsync(100);
+      expect(lease?.reason).toBeInstanceOf(IdempotencyReservationLostError);
+      controller.abort('caller');
+      // The combined signal keeps the lease reason; the engine still answers with the caller's.
+      expect(lease?.reason).toBeInstanceOf(IdempotencyReservationLostError);
+      fail();
+      await rejected;
+      expect(h.events.map((e) => e.decision)).toEqual(['reserved']);
+    },
+  );
 
   it.each([
     ['enforce', ['reserved', 'released']],
     ['observe', ['reserved', 'stored']],
-  ] as const)('after a lost lease a failure output is released in enforce only (%s)', async (mode, decisions) => {
-    const { store } = storeWith(async () => false);
-    const h = harness({ store, mode });
-    const handler = started(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      return 'failed';
-    });
-    const result = runIdempotent(
-      h.call(handler.run, {
-        complete: (output) => ({
-          action: 'store',
-          payload: output,
-          retentionMs: 10,
-          failure: true,
+  ] as const)(
+    'after a lost lease a failure output is released in enforce only (%s)',
+    async (mode, decisions) => {
+      const { store } = storeWith(async () => false);
+      const h = harness({ store, mode });
+      const handler = started(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return 'failed';
+      });
+      const result = runIdempotent(
+        h.call(handler.run, {
+          complete: (output) => ({
+            action: 'store',
+            payload: output,
+            retentionMs: 10,
+            failure: true,
+          }),
         }),
-      }),
-    );
-    await handler.started;
-    await vi.advanceTimersByTimeAsync(200);
-    expect(await result).toBe('failed');
-    expect(h.events.map((e) => e.decision)).toEqual(decisions);
-    expect(h.lostLogs()).toHaveLength(1);
-  });
+      );
+      await handler.started;
+      await vi.advanceTimersByTimeAsync(200);
+      expect(await result).toBe('failed');
+      expect(h.events.map((e) => e.decision)).toEqual(decisions);
+      expect(h.lostLogs()).toHaveLength(1);
+    },
+  );
 
   it('rethrows an abort-like error after a lost lease when the handler did not receive the signal', async () => {
     const { store } = storeWith(async () => false);
@@ -700,7 +706,7 @@ describe('runIdempotent: lease heartbeat', () => {
     expect(h.events.map((e) => e.decision)).toEqual(['reserved']);
     const failed = h.logs.filter((l) => l.name === IdempotencyEventNames.CompleteFailed);
     expect(failed).toHaveLength(1);
-    expect((failed[0]?.exception as Error).message).toBe('release down');
+    expect((failed[0]?.exception as Error | undefined)?.message).toBe('release down');
   });
 
   it('stores a success output after a lost lease (token-fenced)', async () => {
