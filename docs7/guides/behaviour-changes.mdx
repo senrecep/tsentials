@@ -2,9 +2,11 @@
 title: "Migration guide: behaviour changes"
 ---
 
-This guide lists every change that alters the runtime behaviour of an existing tsentials API. Read the 4.0.0 section when upgrading from 3.x, the 3.1.0 section when upgrading from 3.0.x, the 3.0.0 section when upgrading from 2.x, the 2.0.0 section when upgrading from 1.x and the 1.0.0 section when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](https://github.com/senrecep/tsentials/blob/main/CHANGELOG.md).
+This guide lists every change that alters the runtime behaviour of an existing tsentials API. Read the 4.1.0 section when upgrading from 4.0.x, the 4.0.0 section when upgrading from 3.x, the 3.1.0 section when upgrading from 3.0.x, the 3.0.0 section when upgrading from 2.x, the 2.0.0 section when upgrading from 1.x and the 1.0.0 section when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](https://github.com/senrecep/tsentials/blob/main/CHANGELOG.md).
 
 ## Behaviour changes in the next release (unreleased)
+
+## Behaviour changes in 4.1.0
 
 * **http:** the `retryAfterMs` metadata of a failed `fetchResult` / `RequestBuilder` response measures an HTTP-date `Retry-After` from the response `Date` header, as CSharpEssentials does, so a client whose clock is off still waits what the server asked. It used to measure from the local clock, which is still used when the response has no valid `Date` header. Delta-seconds are unchanged.
 * **validation:** `satisfies` and `satisfiesAsync` (on `rules` and on `rules.for(...)`) now record a failure with code `Rule.EvaluationFailed` (type `Unexpected`, the thrown message as description) when the rule throws or rejects, as `RuleEngine.evaluate` does. `Validator.validate` used to throw and `validateAsync` used to reject. The caller's abort still rejects with `signal.reason`, and passing an async rule to the sync `satisfies` still throws a `TypeError`.
