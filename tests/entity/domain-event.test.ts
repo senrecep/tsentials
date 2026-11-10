@@ -34,6 +34,15 @@ describe('DomainEvent interface', () => {
   });
 });
 
+describe('DomainEvent timing', () => {
+  it('is optional and can be set per event', () => {
+    const preSave: DomainEvent = { occurredOn: new Date(), timing: 'pre-save' };
+    const byDefault: DomainEvent = { occurredOn: new Date() };
+    expect(preSave.timing).toBe('pre-save');
+    expect(byDefault.timing ?? 'post-save').toBe('post-save');
+  });
+});
+
 describe('DomainEventTiming type', () => {
   it('accepts pre-save', () => {
     const timing: DomainEventTiming = 'pre-save';
