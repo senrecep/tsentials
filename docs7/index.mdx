@@ -84,7 +84,7 @@ npm install tsentials
 | `tsentials/maybe` | `Maybe<T>`, collection utilities |
 | `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata` |
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
-| `tsentials/entity` | `createEntityBase`, `createSoftDeletable`, `DomainEvent` |
+| `tsentials/entity` | `createEntityBase`, `createEntityBaseWithId`, `createSoftDeletable`, `DomainEvent` |
 | `tsentials/http` | `fetchResult`, `RequestBuilder` |
 | `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider`, `nextDayOfWeek`, `getAge`, `toDateOnly`, `toTimeOnly`, `msToDate` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
@@ -507,7 +507,7 @@ Err.forbidden('Permissions.Denied', 'Insufficient permissions');
 Err.fromException(new Error('timeout'));
 Err.fromException(new Error('timeout'), ErrorType.Unexpected, 'Network.Timeout');
 
-// Equality: code + description + type + metadata (same keys, Object.is per value)
+// Equality: code + description + type + metadata (same keys; nested maps and Err errors by value, else Object.is)
 Err.equals(errA, errB);
 
 // Combine errors and error arrays into one flat array

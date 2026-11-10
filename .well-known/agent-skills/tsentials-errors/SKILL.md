@@ -51,7 +51,7 @@ try {
 // Combine multiple AppErrors into an array
 const errs: AppError[] = Err.combine(Err.validation('A', 'a'), Err.notFound('B', 'b'));
 
-// Structural equality (compares code + description + type)
+// Structural equality: code + description + type + metadata (nested maps and Err errors by value, cycle-safe)
 Err.equals(errA, errB); // boolean
 ```
 
