@@ -95,6 +95,12 @@ const toVoid = <T>(result: Result<T>): VoidResult =>
  * Validator.validate(user, (rules) => { rules.for('name').notEmpty(); });
  */
 export abstract class Validator<T> implements SyncValidator<T>, AsyncValidator<T> {
+  /**
+   * Run order when used with the mediator's `validationBehavior`: lower runs first, same
+   * order runs concurrently. Default 0.
+   */
+  declare readonly order?: number | undefined;
+
   /** Declares the rules. `signal` is the caller's abort signal (`undefined` for `validate`). */
   protected abstract configure(
     rules: RuleContext<T>,
