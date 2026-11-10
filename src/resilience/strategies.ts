@@ -1,9 +1,8 @@
 import type { AppError } from '../errors/app-error.js';
-import { Err } from '../errors/app-error.js';
 import { isAbortError, isCallerAbort } from '../result/abort.js';
 import type { Result } from '../result/result.js';
 import { Result as R } from '../result/result.js';
-import { TimeoutRejectedError } from './classifier.js';
+import { TimeoutRejectedError, toResilienceError } from './classifier.js';
 import type { Clock, Next, Operation, Outcome, Strategy } from './pipeline.js';
 import { invoke, thrown } from './pipeline.js';
 
@@ -206,7 +205,7 @@ export function timeoutStrategy(timeout: number, time: Clock): Strategy {
  * @internal Fallback: handles ANY failed Result and any thrown value
  * except this layer's caller abort. Does not run when the signal is aborted. A value or
  * Result from `fallback` replaces the outcome; if `fallback` throws (not a caller abort) the
- * outcome is `Err.fromException(e)` (type Failure).
+ * outcome is {@link toResilienceError} of the thrown value (Unexpected for an ordinary error).
  */
 export function fallbackStrategy<T>(fallback: Operation<T>): Strategy {
   const run = async (signal: AbortSignal, next: Next<T>): Promise<Outcome<T>> => {
@@ -219,7 +218,7 @@ export function fallbackStrategy<T>(fallback: Operation<T>): Strategy {
       return { thrown: false, result };
     } catch (error) {
       if (isCallerAbort(error, signal)) return thrown(error);
-      return { thrown: false, result: R.failure(Err.fromException(error)) };
+      return { thrown: false, result: R.failure(toResilienceError(error)) };
     }
   };
   return run as Strategy;

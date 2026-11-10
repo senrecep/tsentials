@@ -286,14 +286,14 @@ describe('fetchResult — header handling (HeadersInit)', () => {
     expect(sent().get('content-type')).toBe('application/vnd.api+json');
   });
 
-  it('serialization errors become an Unexpected failure instead of throwing', async () => {
+  it('serialization errors become a Validation failure instead of throwing', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
     const result = await fetchResult.post(URL_, { big: 1n });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errors[0]!.code).toBe('TypeError');
-      expect(result.errors[0]!.type).toBe(ErrorType.Unexpected);
+      expect(result.errors[0]!.type).toBe(ErrorType.Validation);
     }
     expect(fetchSpy).not.toHaveBeenCalled();
   });

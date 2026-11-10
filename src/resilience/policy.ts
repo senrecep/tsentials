@@ -162,7 +162,7 @@ export class ResiliencePolicy<T = never> {
   /**
    * Places a fallback OUTSIDE all strategies. It replaces ANY failure (including Validation) and
    * any thrown value except the caller's abort with `Result.success(await fallback(signal))`.
-   * If `fallback` itself throws, the result is `Err.fromException(e)` (type Failure).
+   * If `fallback` itself throws, the result is an Unexpected error coded with the thrown value's name.
    */
   withFallback(fallback: (signal: AbortSignal) => PromiseLike<T> | T): ResiliencePolicy<T> {
     return this.withFallbackResult(async (signal) => R.success(await fallback(signal)));

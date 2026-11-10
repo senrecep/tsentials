@@ -154,6 +154,7 @@ await RequestBuilder.get('/users')
 ```
 
 - **AbortSignal convention:** the caller's abort rejects the promise with `signal.reason`; it never becomes a `Result`. Network, HTTP and body-parse errors become failures.
+- A 2xx JSON body that cannot be parsed is a `Validation` failure (code `SyntaxError`, with `httpStatus` metadata), so a retry does not repeat it. A JSON request body that cannot be serialized (cyclic object, BigInt) is a `Validation` failure (code `TypeError`) and no request is sent. `RequestBuilder.json()` never throws: it serializes the value once, in `send()`.
 - Default timeout is 30 s (`timeout` in ms; `0` or `Infinity` disables it). On expiry the result is a failure with code `Http.Timeout` (`Unexpected`).
 
 ---
@@ -244,6 +245,8 @@ HTTP errors are automatically mapped to `AppError` with descriptive codes via `h
 | 5xx | Unexpected | All server errors |
 | Other | Failure | Unmapped status codes |
 | Network error | Unexpected | TypeError from fetch |
+| Malformed 2xx JSON body | Validation | Code `SyntaxError` |
+| Unserializable JSON request body | Validation | Code `TypeError`, nothing sent |
 
 The error code format is `Http.{status}` (e.g., `Http.404`, `Http.500`).
 

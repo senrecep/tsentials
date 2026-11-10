@@ -659,7 +659,7 @@ describe('fetchResult empty / null 2xx bodies', () => {
       respond('{oops');
       const result = await del();
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.errors[0]?.type).toBe(ErrorType.Unexpected);
+      if (!result.ok) expect(result.errors[0]?.type).toBe(ErrorType.Validation);
     });
 
     it('an error status is still a failure', async () => {
@@ -680,10 +680,28 @@ describe('fetchResult empty / null 2xx bodies', () => {
     if (!result.ok) expect(result.errors[0]?.type).toBe(ErrorType.NotFound);
   });
 
-  it('malformed JSON body stays an Unexpected failure', async () => {
+  it('malformed JSON body is a Validation failure that keeps the status', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.resolve(new Response('{oops', { status: 200, headers: json }))),
+    );
+    const result = await fetchResult.get<unknown>('https://api.example.com/x');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({ code: 'SyntaxError', type: ErrorType.Validation });
+      expect(result.errors[0]?.metadata?.get('httpStatus')).toBe(200);
+    }
+  });
+
+  it('a 2xx body that cannot be read stays an Unexpected failure', async () => {
+    const body = new ReadableStream({
+      pull(controller) {
+        controller.error(new TypeError('connection reset'));
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(body, { status: 200, headers: json }))),
     );
     const result = await fetchResult.get<unknown>('https://api.example.com/x');
     expect(result.ok).toBe(false);

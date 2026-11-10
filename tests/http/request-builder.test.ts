@@ -1,3 +1,4 @@
+import { ErrorType } from '../../src/errors/error-type.js';
 import { RequestBuilder } from '../../src/http/request-builder.js';
 
 describe('RequestBuilder static factories', () => {
@@ -717,4 +718,63 @@ describe('RequestBuilder.send empty / null 2xx bodies', () => {
       expect(result).toEqual({ ok: true, value: undefined });
     });
   }
+});
+
+describe('RequestBuilder json() serialization', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const okFetch = (): ReturnType<typeof vi.fn<typeof fetch>> => {
+    const fetchSpy = vi.fn<typeof fetch>(() =>
+      Promise.resolve(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+    return fetchSpy;
+  };
+
+  it.each([
+    [
+      'a cyclic object',
+      (): unknown => {
+        const cyclic: Record<string, unknown> = {};
+        cyclic['self'] = cyclic;
+        return cyclic;
+      },
+    ],
+    ['a BigInt', (): unknown => ({ big: 1n })],
+  ])(
+    '%s does not throw in json() and send() resolves to a Validation failure',
+    async (_n, make) => {
+      const fetchSpy = okFetch();
+      const builder = RequestBuilder.post('https://api.example.com/x').json(make());
+      const result = await builder.send<unknown>();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.errors[0]).toMatchObject({ code: 'TypeError', type: ErrorType.Validation });
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('serializes the payload once, when sending', async () => {
+    const fetchSpy = okFetch();
+    const toJSON = vi.fn(() => ({ a: 1 }));
+    const builder = RequestBuilder.put('https://api.example.com/x').json({ toJSON });
+    expect(toJSON).not.toHaveBeenCalled();
+    await builder.send<unknown>();
+    expect(toJSON).toHaveBeenCalledTimes(1);
+    expect((fetchSpy.mock.calls[0]![1] as RequestInit).body).toBe('{"a":1}');
+  });
+
+  it('sends a JSON body on DELETE', async () => {
+    const fetchSpy = okFetch();
+    await RequestBuilder.delete('https://api.example.com/x').json({ id: 1 }).send<unknown>();
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    expect(init.method).toBe('DELETE');
+    expect(init.body).toBe('{"id":1}');
+    expect(new Headers(init.headers).get('content-type')).toBe('application/json');
+  });
 });
