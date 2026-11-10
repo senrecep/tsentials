@@ -17,7 +17,8 @@ export const HttpErrorMetadataKeys = {
 
 /**
  * Parses a `Retry-After` value: delta-seconds or an HTTP-date. Returns milliseconds (a date in
- * the past gives 0), or `undefined` when the value is neither.
+ * the past gives 0), or `undefined` when the value is neither. An HTTP-date is measured from `now`
+ * ({@link fetchResult} passes the response `Date` header when it is a valid HTTP-date).
  */
 export function parseRetryAfter(
   value: string | null,
@@ -26,10 +27,15 @@ export function parseRetryAfter(
   if (value === null) return undefined;
   const trimmed = value.trim();
   if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+  const date = parseHttpDate(trimmed);
+  return date === undefined ? undefined : Math.max(0, date - now);
+}
+
+function parseHttpDate(value: string | null): number | undefined {
   // Every HTTP-date format starts with the day name; `Date.parse` alone would read '-1' as a year.
-  if (!/^[A-Za-z]{3,9},?\s/.test(trimmed)) return undefined;
-  const date = Date.parse(trimmed);
-  return Number.isNaN(date) ? undefined : Math.max(0, date - now);
+  if (value === null || !/^[A-Za-z]{3,9},?\s/.test(value.trim())) return undefined;
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? undefined : date;
 }
 
 /**
@@ -45,7 +51,10 @@ export function withResponseMetadata(
   if (response.headers.get(IDEMPOTENCY_REPLAYED_HEADER)?.trim().toLowerCase() === 'true') {
     extra.set(HttpErrorMetadataKeys.IdempotencyReplayed, true);
   }
-  const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+  const retryAfterMs = parseRetryAfter(
+    response.headers.get('retry-after'),
+    parseHttpDate(response.headers.get('date')),
+  );
   if (retryAfterMs !== undefined) extra.set(HttpErrorMetadataKeys.RetryAfterMs, retryAfterMs);
   const code =
     typeof body === 'object' && body !== null ? (body as { code?: unknown }).code : undefined;

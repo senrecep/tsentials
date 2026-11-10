@@ -530,6 +530,64 @@ describe('RequestBuilder — URL, query, headers, signal, timeout', () => {
     vi.unstubAllGlobals();
   });
 
+  it('repeats the key for each item of an array query value', async () => {
+    const sent = capture();
+    await RequestBuilder.get('/items')
+      .query('tag', ['a', 'b c'])
+      .query({ id: [1, 2], none: [], q: undefined })
+      .send<unknown>();
+    expect(sent.url()).toBe('/items?tag=a&tag=b+c&id=1&id=2');
+  });
+
+  it('sends a Date query value as ISO 8601', async () => {
+    const sent = capture();
+    const at = new Date(Date.UTC(2026, 0, 2, 3, 4, 5, 6));
+    await RequestBuilder.get('/events')
+      .query('from', at)
+      .query({ at: [at] })
+      .send<unknown>();
+    expect(sent.url()).toBe(
+      '/events?from=2026-01-02T03%3A04%3A05.006Z&at=2026-01-02T03%3A04%3A05.006Z',
+    );
+  });
+
+  it('throws RangeError for an invalid Date', () => {
+    expect(() => RequestBuilder.get('/e').query('from', new Date(Number.NaN))).toThrow(RangeError);
+    expect(() => RequestBuilder.get('/e/{d}').route('d', new Date(Number.NaN))).toThrow(RangeError);
+  });
+
+  it('fills {name} route placeholders with URL-encoded values', async () => {
+    const sent = capture();
+    await RequestBuilder.get('https://api.test/users/{id}/posts/{slug}?a=1#f')
+      .route('id', '4 2/x')
+      .route({ slug: 7 })
+      .query('q', '1')
+      .send<unknown>();
+    expect(sent.url()).toBe('https://api.test/users/4%202%2Fx/posts/7?a=1&q=1#f');
+  });
+
+  it('replaces every occurrence of a placeholder and does not re-expand values', async () => {
+    const sent = capture();
+    await RequestBuilder.get('/{a}/{a}/{b}').route('a', '{b}').route('b', true).send<unknown>();
+    expect(sent.url()).toBe('/%7Bb%7D/%7Bb%7D/true');
+  });
+
+  it('fails with Validation, without a request, for a missing placeholder or value', async () => {
+    const fetchSpy = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchSpy);
+    const missing = await RequestBuilder.get('/users/{id}').route('other', 1).send<unknown>();
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) {
+      expect(missing.errors[0]?.code).toBe('RequestBuilder.RouteParameterNotFound');
+      expect(missing.errors[0]?.type).toBe(ErrorType.Validation);
+    }
+    const empty = await RequestBuilder.get('/users/{id}')
+      .route({ id: undefined as unknown as string })
+      .send<unknown>();
+    expect(!empty.ok && empty.errors[0]?.code).toBe('RequestBuilder.RouteValueRequired');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('keeps a relative URL relative when appending query params', async () => {
     const sent = capture();
     await RequestBuilder.get('/api/users').query('page', 1).send<unknown>();

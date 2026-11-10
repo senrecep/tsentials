@@ -92,6 +92,13 @@ const result = await RequestBuilder.get('https://api.example.com/users')
   .query('limit', '20')
   .send<User[]>();
 
+// Route placeholders, array and Date query values
+const posts = await RequestBuilder.get('https://api.example.com/users/{id}/posts')
+  .route('id', userId)                 // URL-encoded
+  .query('tag', ['news', 'tech'])      // tag=news&tag=tech
+  .query('since', new Date(2026, 0, 1)) // ISO 8601
+  .send<Post[]>();
+
 // POST with JSON body
 const posted = await RequestBuilder.post('https://api.example.com/orders')
   .header('Authorization', `Bearer ${token}`)
@@ -138,7 +145,8 @@ const uploaded = await RequestBuilder.post('https://api.example.com/upload')
 | Builder Method | Description |
 |----------------|-------------|
 | `.header(name, value)` | Add a request header; the same name again adds another value (`Content-Type` is replaced) |
-| `.query(name, value)` | Append a query string parameter |
+| `.query(name, value)` / `.query(record)` | Append query string parameters; an array repeats the key (`tag=a&tag=b`), a `Date` is sent as ISO 8601, `null`/`undefined` record values are skipped |
+| `.route(name, value)` / `.route(record)` | Replace every `{name}` placeholder in the URL with the URL-encoded value; a missing placeholder or a `null`/`undefined` value makes `send()` a Validation failure (`RequestBuilder.RouteParameterNotFound`, `RequestBuilder.RouteValueRequired`) with no request sent |
 | `.json(body)` | Set body as JSON + Content-Type header |
 | `.body(body: BodyInit)` | Set raw body |
 | `.idempotencyKey(key?, { idempotencyKeyGenerator }?)` | Set `Idempotency-Key` (a UUID, or your generator's result, created once when omitted and validated like an explicit key; every `send()` reuses it) |
@@ -180,7 +188,7 @@ await ResiliencePolicy.create()
 ```
 
 - `idempotentRetryClassifier(method, hasKey)` treats GET, HEAD, PUT, DELETE and OPTIONS as safe and every other method as unsafe. It never retries an unsafe method without a key or a replayed response. It retries network errors, timeouts, 408, 429, 503 and 504, any other 5xx for a safe method only, and 409 `Idempotency.InFlight` only when `hasKey` is `true`.
-- A failed response's first error carries `HttpErrorMetadataKeys` metadata: `httpStatus`, `retryAfterMs` (from `Retry-After`, see `parseRetryAfter`), `idempotencyReplayed`, `problemCode`.
+- A failed response's first error carries `HttpErrorMetadataKeys` metadata: `httpStatus`, `retryAfterMs` (from `Retry-After`, see `parseRetryAfter`; an HTTP-date is measured from the response `Date` header, or the local clock without a valid one), `idempotencyReplayed`, `problemCode`.
 - Server side: `tsentials/idempotency` (`withIdempotency`).
 
 ---
