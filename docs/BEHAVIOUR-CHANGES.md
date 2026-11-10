@@ -5,6 +5,7 @@ This guide lists every change that alters the runtime behaviour of an existing t
 ## Behaviour changes in the next release (unreleased)
 
 * **mediator:** `validationBehavior` now calls an object validator as a method, and uses its `validateAsync(request, { signal })` when it has one, instead of calling a detached `validate`. A `Validator` subclass from `tsentials/validation` used to fail every request with `Validator.Exception` because it lost `this`; it now validates, honours its `order`, and receives the caller's signal. An object with both methods now runs `validateAsync`, not `validate`.
+* **mediator:** `cachingBehavior` no longer throws `Failed to deserialize cached value for key {key}` when a cached entry cannot be read (the serializer returns `undefined` or throws, for example on invalid JSON). It logs a `warning` (`Cached value for key {key} could not be deserialized; calling the handler`), runs the handler and overwrites the entry with the new result, as a miss would. A request used to fail until the entry expired. `Cache hit for key {key}` is now logged only after the entry deserializes.
 
 ## Behaviour changes in 3.0.0
 
