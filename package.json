@@ -122,7 +122,9 @@
     "lint:fix": "biome lint --write src tests",
     "format": "biome format --write src tests",
     "check": "biome check src tests",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "docs7": "node scripts/docs7.mjs",
+    "docs7:check": "node scripts/docs7.mjs --check"
   },
   "files": [
     "dist",
