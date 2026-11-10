@@ -162,6 +162,17 @@ describe('loggingBehavior', () => {
     expect(logger.entries[1]?.message).toBe('Handled User response: {"ok":true,"value":"u"}');
   });
 
+  it('skips payload logging when information is disabled', async () => {
+    const logger = memoryLogger(['information']);
+    const result = await loggingBehavior({ logger, logRequest: true, logResponse: true })(
+      { id: 1 },
+      nextOf(() => Result.success('u')),
+      ctx(),
+    );
+    expect(result).toEqual(Result.success('u'));
+    expect(logger.entries).toEqual([]);
+  });
+
   it('never throws when payloads are not JSON-serializable (BigInt, circular)', async () => {
     const logger = memoryLogger();
     const behavior = loggingBehavior({ logger, logRequest: true, logResponse: true });

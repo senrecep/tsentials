@@ -302,6 +302,13 @@ describe('RuleChain.satisfies (Rule / RuleEngine integration)', () => {
     expect(result.ok ? [] : result.errors.map((e) => e.code)).toEqual(['Text.Long']);
   });
 
+  it('satisfiesAsync adds no error for a passing async rule', async () => {
+    const result = await Validator.validateAsync(model('abc'), async (rules) => {
+      await rules.for('text').satisfiesAsync(async (v) => short(v));
+    });
+    expect(result.ok).toBe(true);
+  });
+
   it('satisfies throws a TypeError for an async rule', () => {
     expect(() =>
       Validator.validate(model('a'), (rules) => {

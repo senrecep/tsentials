@@ -120,36 +120,26 @@ describe('parse accepted in both modes', () => {
 });
 
 describe('parse malformed values', () => {
-  it.each([
-    '',
-    ' pending',
-    'pending ',
-    '1.0',
-    '0x1',
-    '+1',
-    '-0',
-    '99999999999',
-    '.5',
-  ])('rejects %j in both modes with the raw value', (text) => {
-    for (const opts of [INPUT, DATA]) {
-      const r = ParserStatus.parse(text, opts);
-      expect(r.ok).toBe(false);
-      if (!r.ok) expect(r.errors[0]?.metadata?.get('value')).toBe(text);
-    }
-  });
+  it.each(['', ' pending', 'pending ', '1.0', '0x1', '+1', '-0', '99999999999', '.5'])(
+    'rejects %j in both modes with the raw value',
+    (text) => {
+      for (const opts of [INPUT, DATA]) {
+        const r = ParserStatus.parse(text, opts);
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.errors[0]?.metadata?.get('value')).toBe(text);
+      }
+    },
+  );
 });
 
 describe('parse unknown values', () => {
-  it.each([
-    'bogus',
-    '99',
-    'unknown',
-    '100',
-    '-5',
-  ])('%s is rejected in input mode and maps to Unknown in data mode', (text) => {
-    expect(ParserStatus.parse(text, INPUT).ok).toBe(false);
-    expect(okValue(ParserStatus.parse(text, DATA))).toBe('Unknown');
-  });
+  it.each(['bogus', '99', 'unknown', '100', '-5'])(
+    '%s is rejected in input mode and maps to Unknown in data mode',
+    (text) => {
+      expect(ParserStatus.parse(text, INPUT).ok).toBe(false);
+      expect(okValue(ParserStatus.parse(text, DATA))).toBe('Unknown');
+    },
+  );
 
   it('data mode with reject keeps known values but rejects unknown ones', () => {
     expect(ParserStatus.parse('bogus', DATA_REJECT).ok).toBe(false);
@@ -353,6 +343,8 @@ describe('naming', () => {
     ['A B', 'snake_case_lower', 'a_b'],
     ['a b', 'snake_case_lower', 'a_b'],
     ['a.B', 'snake_case_lower', 'a.b'],
+    [' a', 'snake_case_lower', 'a'],
+    ['_ b', 'snake_case_lower', '_b'],
     ['InProgress', 'PascalCase', 'InProgress'],
     ['InProgress', 'camelCase', 'inProgress'],
     ['HTTPStatus', 'camelCase', 'httpStatus'],
