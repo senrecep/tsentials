@@ -120,16 +120,25 @@ describe('parse accepted in both modes', () => {
 });
 
 describe('parse malformed values', () => {
-  it.each(['', ' pending', 'pending ', '1.0', '0x1', '+1', '-0', '-00', '-000', '99999999999', '.5'])(
-    'rejects %j in both modes with the raw value',
-    (text) => {
-      for (const opts of [INPUT, DATA]) {
-        const r = ParserStatus.parse(text, opts);
-        expect(r.ok).toBe(false);
-        if (!r.ok) expect(r.errors[0]?.metadata?.get('value')).toBe(text);
-      }
-    },
-  );
+  it.each([
+    '',
+    ' pending',
+    'pending ',
+    '1.0',
+    '0x1',
+    '+1',
+    '-0',
+    '-00',
+    '-000',
+    '99999999999',
+    '.5',
+  ])('rejects %j in both modes with the raw value', (text) => {
+    for (const opts of [INPUT, DATA]) {
+      const r = ParserStatus.parse(text, opts);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.errors[0]?.metadata?.get('value')).toBe(text);
+    }
+  });
 });
 
 describe('parse unknown values', () => {

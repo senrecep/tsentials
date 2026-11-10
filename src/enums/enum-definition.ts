@@ -376,11 +376,7 @@ export function defineEnum<K extends string>(
     const found = findByName(text, ctx);
     if (found !== undefined) return accept(found, text, ctx);
     if (isNumericStart(text.charAt(0))) {
-      if (
-        !ctx.acceptNumbers ||
-        text.length > MAX_NUMERIC_TEXT_LENGTH ||
-        !/^-?[0-9]+$/.test(text)
-      ) {
+      if (!ctx.acceptNumbers || text.length > MAX_NUMERIC_TEXT_LENGTH || !/^-?[0-9]+$/.test(text)) {
         return fail(text, ctx);
       }
       const n = Number(text);
