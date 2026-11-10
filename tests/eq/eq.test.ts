@@ -60,3 +60,14 @@ describe('Eq getArrayEq', () => {
     expect(eq.equals([1, 2], [1, 2, 3])).toBe(false);
   });
 });
+
+describe('Eq.number edge cases', () => {
+  it('treats NaN as equal to NaN, like Ord.number', () => {
+    expect(Eq.number.equals(Number.NaN, Number.NaN)).toBe(true);
+    expect(Eq.number.equals(Number.NaN, 0)).toBe(false);
+  });
+
+  it('treats 0 and -0 as equal', () => {
+    expect(Eq.number.equals(0, -0)).toBe(true);
+  });
+});

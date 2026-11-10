@@ -106,6 +106,10 @@ export function mapLeft<E, A, F>(these: These<E, A>, f: (error: E) => F): These<
 
 /**
  * Chains a These-returning function (monadic bind).
+ * - Left: returned as is, `f` is not called
+ * - Right: the result of `f`
+ * - Both: a Left from `f` is returned as is; otherwise Both with the original
+ *   left and the new value (a left from an `f` Both is dropped)
  */
 export function flatMap<E, A, B>(these: These<E, A>, f: (value: A) => These<E, B>): These<E, B> {
   switch (these._tag) {
@@ -113,15 +117,7 @@ export function flatMap<E, A, B>(these: These<E, A>, f: (value: A) => These<E, B
       return these;
     case 'Both': {
       const next = f(these.right);
-      switch (next._tag) {
-        case 'Left':
-          return both(these.left, next.left as unknown as B);
-        case 'Both':
-          return both(these.left, next.right);
-        case 'Right':
-          return both(these.left, next.right);
-      }
-      break;
+      return next._tag === 'Left' ? next : both(these.left, next.right);
     }
     case 'Right':
       return f(these.right);

@@ -40,8 +40,10 @@ export const strict: Eq<unknown> = {
 /** String equality. */
 export const string: Eq<string> = strict as Eq<string>;
 
-/** Number equality. */
-export const number: Eq<number> = strict as Eq<number>;
+/** Number equality. `NaN` equals `NaN` and `0` equals `-0`, consistent with `Ord.number`. */
+export const number: Eq<number> = {
+  equals: (first, second) => first === second || (Number.isNaN(first) && Number.isNaN(second)),
+};
 
 /** Boolean equality. */
 export const boolean: Eq<boolean> = strict as Eq<boolean>;

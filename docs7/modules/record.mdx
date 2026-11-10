@@ -40,4 +40,5 @@ Record.partition(users, u => u.name.startsWith('A'));
 
 - Use `Record.map` instead of `Object.entries(...).reduce(...)`.
 - Use `pick` / `omit` for whitelist/blacklist field selection.
+- An own `__proto__` key (e.g. from `JSON.parse`) stays an own data property in every result; it never changes the result's prototype.
 - `upsert`'s `key` must belong to the record's existing key union — `Record.upsert(users, 'c', ...)` above would not compile since `users` only has keys `'a' | 'b'`. Widen the record's type first if you need to add a genuinely new key.

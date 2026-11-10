@@ -5,6 +5,7 @@ Use when you need composable, reusable boolean conditions.
 ## API
 
 ```typescript
+import { Err } from 'tsentials/errors';
 import { Predicate } from 'tsentials/predicate';
 import type { Refinement } from 'tsentials/predicate';
 
@@ -28,11 +29,12 @@ const isNumber = Predicate.refinement((x: unknown): x is number => typeof x === 
 // Combine refinements (narrows to intersection)
 const isStringAndNumber = Predicate.andRefinement(isString, isNumber); // Refinement<unknown, string & number>
 
-// Convert predicate to a Rule-compatible function
-Predicate.toRule(isAdult, validationError); // (value) => error | undefined
+// Convert a predicate to a Rule<User> (tsentials/rules): Result.ok() or a failure with the error
+const adultRule = Predicate.toRule(isAdult, Err.validation('User.Minor', 'Must be 18 or older'));
+adultRule(user); // VoidResult
 ```
 
 ## Patterns
 
 - Use `Predicate.and` / `Predicate.or` instead of inline `&&` / `||` for reusable conditions.
-- Convert a `Predicate` to a `Rule` with `Predicate.toRule`.
+- Convert a `Predicate` to a `Rule<T>` with `Predicate.toRule(p, error)`; the error is an `AppError`, and the rule works with `RuleEngine.evaluate` and the combinators.
