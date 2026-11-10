@@ -161,7 +161,7 @@ The wrapper guards `POST` and `PATCH` (`methods` changes this) and reads the `Id
 | Same key, same request, completed | The stored status, whitelisted headers and body, plus `Idempotency-Replayed: true` |
 | The reservation was lost while the handler ran and the handler then threw the abort of its `bindRequest` signal (the signal's reason, or an abort-like error such as `AbortError` or `TimeoutError`; without `bindRequest` only the signal's reason counts) (`enforce`) | 503 `Idempotency.ReservationLost` with `Retry-After`; the key is released, so a retry runs the handler again |
 
-Errors are `application/problem+json` bodies `{ title, status, detail, code }`. The `code` is the contract, so clients classify on it.
+Errors are `application/problem+json` bodies `{ type, title, status, detail, code, errorCodes }` built with `toProblemResponse` from `tsentials/http`, plus `errors: [{ code, description }]` for the `Validation` codes (`KeyMissing`, `KeyInvalid`, `ScopeRequired`, `KeyReused`). The `code` is the contract, so clients classify on it.
 
 What is stored:
 

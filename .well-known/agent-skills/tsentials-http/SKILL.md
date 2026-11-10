@@ -1,6 +1,6 @@
 ---
 name: tsentials-http
-description: Use when making HTTP calls that should return Result<T> instead of throwing — fetchResult const object with get/post/put/patch/delete methods, RequestBuilder for fluent header/query-param/body construction with .send<T>(), httpStatusToError for status-to-AppError mapping, extractErrorDescription for ProblemDetails parsing, and server-side conditional request helpers (computeETag, formatETag, notModified for 304, checkIfMatch for 412/428).
+description: Use when making HTTP calls that should return Result<T> instead of throwing — fetchResult const object with get/post/put/patch/delete methods, RequestBuilder for fluent header/query-param/body construction with .send<T>(), httpStatusToError for status-to-AppError mapping, extractErrorDescription for ProblemDetails parsing, server-side conditional request helpers (computeETag, formatETag, notModified for 304, checkIfMatch for 412/428), and server-side problem+json responses from AppErrors or a Result (toProblemDetails, toProblemResponse, resultToResponse).
 ---
 
 # tsentials/http
@@ -18,6 +18,7 @@ npm install tsentials
 ```typescript
 import { fetchResult, RequestBuilder, httpStatusToError, extractErrorDescription } from 'tsentials/http';
 import { computeETag, formatETag, notModified, checkIfMatch } from 'tsentials/http';
+import { toProblemDetails, toProblemResponse, resultToResponse } from 'tsentials/http';
 ```
 
 ---
@@ -204,6 +205,25 @@ async function updateItem(request: Request): Promise<Response> {
 - `checkIfMatch(request, current, { required })` only evaluates `POST`, `PUT`, `PATCH`, `DELETE`. `current` is `null`/`undefined` when the resource does not exist. Strong comparison, so weak tags never match; `*` passes for any existing resource. Responses: 428 `Http.PreconditionRequired` (missing header with `required`), 400 `Http.InvalidIfMatch` (malformed, or `*` mixed with tags), 412 `Http.PreconditionFailed` (mismatch or missing resource). Codes are in `ConditionalErrorCodes`.
 - `parseETagList(header)` returns `'*'`, the tags as written, `[]` for a missing header, or `undefined` when malformed. `compareETags(a, b, 'strong' | 'weak')` follows RFC 9110 section 8.8.3.2.
 - The `If-Match` check is not atomic with the write. `If-Unmodified-Since` and `If-None-Match` on unsafe methods are not evaluated.
+
+## Problem responses (server side)
+
+```typescript
+import { resultToResponse, toProblemDetails, toProblemResponse } from 'tsentials/http';
+
+return resultToResponse(await createUser(input));        // 200 JSON, 204 for Result.ok(), or problem+json
+return toProblemResponse([Err.notFound('User.NotFound', 'User 7 was not found.')], {
+  extensions: { traceId },
+  headers: { 'cache-control': 'no-store' },
+});
+const body = toProblemDetails(errors);                    // the plain object
+```
+
+- The body matches CSharpEssentials.AspNetCore: `{ type, title, status, detail, ...extensions, errorCodes, errors? }`. The primary error is the one with the highest `errorTypeToHttpStatus` status (the first on a tie) and gives `status`, `title` (from its `ErrorType`, such as `Not Found` or `Validation Error`) and `detail`.
+- `type` is the RFC 9110 section link (`rfc9110TypeUri`), left out for statuses without one. `errorCodes` lists every code once, in order. `errors` lists the `Validation` errors as `{ code, description }` and is left out when there are none.
+- Options: `status` and `title` replace the defaults (an overridden status without `title` has no title), `typeUri` replaces the link resolver, `extensions` adds members, `headers` adds response headers.
+- The body reads back with `problemDetailsToErrors` (and so with `fetchResult` on the client): codes, order and types are kept; a non-validation error that is not primary takes the primary error's description and the type of the status.
+- `toProblemDetails([])` throws a `TypeError`.
 
 ---
 
