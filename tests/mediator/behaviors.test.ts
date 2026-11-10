@@ -530,10 +530,7 @@ describe('cachingBehavior', () => {
     expect(r).toEqual(Result.success(1));
     expect(data.get('user:1')).toBe('{"ok":true,"value":1}');
     expect(logger.entries.map((e) => [e.level, e.message])).toEqual([
-      [
-        'warning',
-        'Cached value for key user:1 could not be deserialized; calling the handler',
-      ],
+      ['warning', 'Cached value for key user:1 could not be deserialized; calling the handler'],
       ['information', 'Cache set for key user:1'],
     ]);
   });
