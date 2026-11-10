@@ -42,6 +42,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check the packed package (publint, attw, import smoke test)
+        run: npm run check:package
+
       - name: Test
         if: matrix.node-version != '22.x'
         run: npm test
