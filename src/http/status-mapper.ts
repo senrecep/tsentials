@@ -100,9 +100,7 @@ const toErrorType = (type: unknown, numericType: unknown, fallback: ErrorType): 
 
 const problemDescription = (body: unknown): string | undefined => {
   if (!isRecord(body)) return undefined;
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature tsconfig requires bracket notation
   if (typeof body['detail'] === 'string') return body['detail'];
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature tsconfig requires bracket notation
   if (typeof body['title'] === 'string') return body['title'];
   return undefined;
 };
@@ -128,7 +126,6 @@ export function problemDetailsToErrors(status: number, body: unknown): AppError[
   const fallback = (): AppError[] => [httpStatusToError(status, problemDescription(body))];
   if (!isRecord(body)) return fallback();
 
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature tsconfig requires bracket notation
   const errors = body['errors'];
   const parsed: AppError[] = [];
 
