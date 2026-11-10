@@ -50,19 +50,22 @@ export function withIdempotencyKey<I extends RequestInit>(
 }
 
 const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([408, 429, 503, 504]);
+const SAFE_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']);
 
 /**
- * Retry classifier for an HTTP call, for `shouldRetry` of `withRetry` or `retryIfFailed`:
+ * Retry classifier for an HTTP call, for `shouldRetry` of `withRetry` or `retryIfFailed`. It
+ * follows the CSharpEssentials `IdempotentRetry` table. GET, HEAD, PUT, DELETE and OPTIONS are
+ * safe; every other method (POST, PATCH, TRACE, ...) is unsafe.
  *
- * 1. POST or PATCH without an idempotency key → never retried (the server may have run it).
+ * 1. An unsafe method without an idempotency key → never retried (the server may have run it).
  * 2. A replayed response (`Idempotency-Replayed: true`) → not retried, it will not change.
  * 3. No response (network error, timeout: no `httpStatus` metadata, type Unexpected) → retried.
  *    A response whose body cannot be read, parsed or finished before the timeout carries
  *    `httpStatus`, so rules 4 to 7 apply to it.
- * 4. 409 `Idempotency.InFlight` → retried (after `Retry-After`).
+ * 4. 409 `Idempotency.InFlight` → retried (after `Retry-After`) only when the request had a key.
  * 5. 409 `Idempotency.ResultUnavailable`, or any other 409 → not retried.
- * 6. 408, 429, 503, 504 → retried.
- * 7. Anything else, 500 and 502 included → not retried.
+ * 6. 408, 429, 503, 504 → retried (503 `Idempotency.ReservationLost` included).
+ * 7. Any other 5xx → retried for a safe method only. Anything else → not retried.
  *
  * ```ts
  * const init = withIdempotencyKey({ method: 'POST', body });
@@ -75,8 +78,8 @@ export function idempotentRetryClassifier(
   method: string,
   hasIdempotencyKey: boolean,
 ): (error: AppError) => boolean {
-  const upper = method.toUpperCase();
-  const unsafe = (upper === 'POST' || upper === 'PATCH') && !hasIdempotencyKey;
+  const safe = SAFE_METHODS.has(method.toUpperCase());
+  const unsafe = !safe && !hasIdempotencyKey;
   return (error) => {
     if (unsafe) return false;
     const metadata = error.metadata;
@@ -85,10 +88,11 @@ export function idempotentRetryClassifier(
     if (typeof status !== 'number') return error.type === ErrorType.Unexpected;
     if (status === 409) {
       return (
-        metadata?.get(HttpErrorMetadataKeys.ProblemCode) === IdempotencyErrorCodes.InFlight ||
-        error.code === IdempotencyErrorCodes.InFlight
+        hasIdempotencyKey &&
+        (metadata?.get(HttpErrorMetadataKeys.ProblemCode) === IdempotencyErrorCodes.InFlight ||
+          error.code === IdempotencyErrorCodes.InFlight)
       );
     }
-    return RETRYABLE_STATUSES.has(status);
+    return RETRYABLE_STATUSES.has(status) || (safe && status >= 500);
   };
 }

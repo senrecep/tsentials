@@ -7,6 +7,7 @@ This guide lists every change that alters the runtime behaviour of an existing t
 ## Behaviour changes in the next release (unreleased)
 
 * **mediator:** `validationBehavior` now calls an object validator as a method, and uses its `validateAsync(request, { signal })` when it has one, instead of calling a detached `validate`. A `Validator` subclass from `tsentials/validation` used to fail every request with `Validator.Exception` because it lost `this`; it now validates, honours its `order`, and receives the caller's signal. An object with both methods now runs `validateAsync`, not `validate`.
+* **http:** `idempotentRetryClassifier` now follows the CSharpEssentials `IdempotentRetry` table. GET, HEAD, PUT, DELETE and OPTIONS are safe and every other method is unsafe: TRACE, CONNECT or a custom method without a key is no longer retried (before, only POST and PATCH were treated as unsafe). A safe method is now retried on every 5xx, 500 and 502 included; a keyed unsafe method still retries only 408, 429, 503 and 504. A 409 `Idempotency.InFlight` is retried only when `hasIdempotencyKey` is `true`; before, a GET or PUT without a key retried it too.
 
 ## Behaviour changes in 3.0.0
 
