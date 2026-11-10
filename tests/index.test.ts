@@ -17,6 +17,7 @@ import {
   fetchResult,
   httpStatusToError,
   Maybe,
+  MaybeAsync,
   // result
   maybeToResult,
   RequestBuilder,
@@ -60,6 +61,7 @@ describe('index exports', () => {
   it('exports Maybe utilities', () => {
     expect(typeof Maybe.some).toBe('function');
     expect(typeof Maybe.none).toBe('function');
+    expect(typeof MaybeAsync.from).toBe('function');
     expect(typeof asMaybe).toBe('function');
     expect(typeof choose).toBe('function');
     expect(typeof tryFind).toBe('function');

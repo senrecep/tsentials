@@ -1409,3 +1409,72 @@ describe('Result.try / tryAsync with values String() rejects', () => {
     if (!r.ok) expect(r.errors[0]?.description).toBe('[object Object]');
   });
 });
+
+describe('Result.fromJSON', () => {
+  const err = Err.validation('User.Email', 'Bad email');
+  const invalid = (json: unknown) => {
+    const r = Result.fromJSON(json);
+    if (r.ok) throw new Error('expected failure');
+    return r.errors.map((e) => [e.code, e.metadata?.get('path')]);
+  };
+
+  it('round-trips the tsentials shape', () => {
+    expect(Result.fromJSON<number>(JSON.parse(JSON.stringify(Result.success(42))))).toEqual(
+      Result.success(42),
+    );
+    expect(Result.fromJSON(JSON.parse(JSON.stringify(Result.ok())))).toEqual(Result.ok());
+    const failed = Result.fromJSON(JSON.parse(JSON.stringify(Result.failure(err))));
+    expect(failed).toEqual(Result.failure(err));
+    expect(!failed.ok && Object.isFrozen(failed.errors[0])).toBe(true);
+  });
+
+  it('accepts the CSharpEssentials Result<T> shapes (PascalCase and camelCase)', () => {
+    expect(Result.fromJSON({ IsFailure: false, IsSuccess: true, Value: 42, errors: [] })).toEqual(
+      Result.success(42),
+    );
+    expect(
+      Result.fromJSON({
+        isFailure: true,
+        isSuccess: false,
+        value: 0,
+        errors: [
+          { code: 'User.Email', description: 'Bad email', type: 'Validation', numericType: 2 },
+        ],
+      }),
+    ).toEqual(Result.failure(err));
+  });
+
+  it('accepts the CSharpEssentials non-generic Result shape', () => {
+    expect(Result.fromJSON({ IsFailure: false, IsSuccess: true, errors: [] })).toEqual(Result.ok());
+    expect(Result.fromJSON({ IsFailure: false, errors: [] })).toEqual(Result.ok());
+    expect(Result.fromJSON({ ok: true, errors: null })).toEqual(Result.ok());
+  });
+
+  it('rejects a failure without errors, like the C# deserializer', () => {
+    for (const json of [
+      { IsFailure: true },
+      { IsFailure: true, errors: null },
+      { IsFailure: true, errors: [] },
+    ]) {
+      expect(invalid(json)).toEqual([['Result.InvalidJson', 'result.errors']]);
+    }
+    expect(invalid({ IsSuccess: false })).toEqual([['Result.InvalidJson', 'result.errors']]);
+  });
+
+  it('rejects bad shapes', () => {
+    expect(invalid('x')).toEqual([['Result.InvalidJson', 'result']]);
+    expect(invalid({ value: 1 })).toEqual([['Result.InvalidJson', 'result']]);
+    expect(invalid({ ok: 'yes' })).toEqual([['Result.InvalidJson', 'result']]);
+    expect(invalid({ isSuccess: true, isFailure: true })).toEqual([
+      ['Result.InvalidJson', 'result'],
+    ]);
+    expect(invalid({ ok: true, errors: [{}] })).toEqual([['Result.InvalidJson', 'result.errors']]);
+  });
+
+  it('reports every bad error entry', () => {
+    expect(invalid({ ok: false, errors: [{ code: 1 }, Err.toJSON(err), null] })).toEqual([
+      ['AppError.InvalidJson', 'result.errors[0].code'],
+      ['AppError.InvalidJson', 'result.errors[2]'],
+    ]);
+  });
+});

@@ -49,7 +49,15 @@ export {
   safeJsonStringify,
 } from './json/index.js';
 // Maybe monad
-export { asMaybe, choose, Maybe, tryFind, tryFirst, tryLast } from './maybe/index.js';
+export {
+  asMaybe,
+  choose,
+  Maybe,
+  MaybeAsync,
+  tryFind,
+  tryFirst,
+  tryLast,
+} from './maybe/index.js';
 export { Ord, type Ord as OrdType, type Ordering } from './ord/index.js';
 export { Predicate, type Predicate as PredicateType, type Refinement } from './predicate/index.js';
 export { Record } from './record/index.js';

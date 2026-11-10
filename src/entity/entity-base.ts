@@ -24,6 +24,12 @@ export interface EntityBaseWithId<TId> extends EntityBase {
   setId(id: TId): void;
 }
 
+function assertValidDate(value: Date, name: string): void {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    throw new RangeError(`${name} must be a valid Date.`);
+  }
+}
+
 /**
  * Mixin factory that adds domain event tracking and audit capabilities
  * to any object.
@@ -61,6 +67,9 @@ export function createEntityBase(): EntityBase {
     },
 
     raise(event: DomainEvent): void {
+      if (event === null || event === undefined) {
+        throw new TypeError('Domain event must not be null or undefined.');
+      }
       _domainEvents.push(event);
     },
 
@@ -69,11 +78,13 @@ export function createEntityBase(): EntityBase {
     },
 
     setCreatedInfo(createdAt: Date, createdBy: string): void {
+      assertValidDate(createdAt, 'createdAt');
       _createdAt = createdAt;
       _createdBy = createdBy;
     },
 
     setUpdatedInfo(updatedAt: Date, updatedBy: string): void {
+      assertValidDate(updatedAt, 'updatedAt');
       _updatedAt = updatedAt;
       _updatedBy = updatedBy;
     },
@@ -92,19 +103,24 @@ export function createEntityBase(): EntityBase {
  * }
  */
 export function createEntityBaseWithId<TId>(id?: TId): EntityBaseWithId<TId> {
-  const base = createEntityBase();
   let _id: TId | undefined = id;
 
-  return {
-    ...base,
-    get id(): TId {
-      if (_id === undefined) {
-        throw new Error('Entity ID has not been set.');
-      }
-      return _id;
+  // defineProperties, not spread: a spread would copy the base getters' current values
+  return Object.defineProperties(createEntityBase(), {
+    id: {
+      get(): TId {
+        if (_id === undefined) {
+          throw new Error('Entity ID has not been set.');
+        }
+        return _id;
+      },
+      enumerable: true,
     },
-    setId(idValue: TId): void {
-      _id = idValue;
+    setId: {
+      value(idValue: TId): void {
+        _id = idValue;
+      },
+      enumerable: true,
     },
-  };
+  }) as EntityBaseWithId<TId>;
 }

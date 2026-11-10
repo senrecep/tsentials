@@ -1,6 +1,6 @@
 ---
 name: tsentials-errors
-description: Use when creating structured error values — Err factory methods (failure/validation/notFound/conflict/unauthorized/forbidden/unexpected/fromException/combine/equals), AppError with code/description/type/metadata, ErrorType enum, and ErrorMetadata namespace.
+description: Use when creating structured error values — Err factory methods (failure/validation/notFound/conflict/unauthorized/forbidden/unexpected/fromException/combine/equals/with/toJSON/fromJSON), AppError with code/description/type/metadata, ErrorType enum, and ErrorMetadata namespace.
 ---
 
 # tsentials/errors
@@ -51,7 +51,7 @@ try {
 // Combine multiple AppErrors into an array
 const errs: AppError[] = Err.combine(Err.validation('A', 'a'), Err.notFound('B', 'b'));
 
-// Structural equality (compares code + description + type)
+// Structural equality: code + description + type + metadata (nested maps and Err errors by value, cycle-safe)
 Err.equals(errA, errB); // boolean
 ```
 
@@ -86,6 +86,29 @@ error.metadata     // ErrorMetadata | undefined  (ReadonlyMap<string, unknown>)
 | `Err.fromException(error, type?, code?, metadata?)` | `Failure` (default) | `error.constructor.name` |
 | `Err.combine(...errors)` | — | returns `AppError[]` |
 | `Err.equals(a, b)` | — | returns `boolean` |
+| `Err.with(error, patch)` | patch or original | frozen copy with `code`/`description`/`type`/`metadata` replaced |
+| `Err.toJSON(error)` | n/a | returns `AppErrorJson` |
+| `Err.fromJSON(json)` | from JSON | returns `Result<AppError>` |
+
+---
+
+## Copying and JSON
+
+Spreading an AppError (`{ ...err, code }`) gives an unfrozen object without `toJSON`. Use `Err.with` instead:
+
+```typescript
+const wrapped = Err.with(err, { code: `Api.${err.code}` }); // frozen, keeps toJSON
+const bare = Err.with(err, { metadata: undefined });       // drops metadata
+```
+
+`JSON.stringify(err)` writes `{ code, description, type, numericType, metadata? }`. `Err.fromJSON` validates a parsed value and revives it:
+
+```typescript
+const r = Err.fromJSON(JSON.parse(raw)); // Result<AppError>
+if (!r.ok) r.errors[0].code;             // 'AppError.InvalidJson', metadata.path names the bad field
+```
+
+It also reads the CSharpEssentials `Error` shape: keys in any case (`Code` or `code`), `type` as a name in any case or an ordinal (0 to 7), falling back to `numericType`, and `metadata` as an object, `null` or absent. Nested metadata records such as `innerException` stay plain objects, so an error from `Err.fromException` does not come back `Err.equals` to the original. Use `Result.fromJSON` from `tsentials/result` for a whole Result.
 
 ---
 

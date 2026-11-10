@@ -399,11 +399,11 @@ describe('validationBehavior with Validator subclasses', () => {
       }
     }
     const h = handler();
-    const r = await validationBehavior<Cmd>([new Tagged('b', 2), new Tagged('a', -1), new Tagged('z')])(
-      { name: 'x' },
-      h.next,
-      ctx(),
-    );
+    const r = await validationBehavior<Cmd>([
+      new Tagged('b', 2),
+      new Tagged('a', -1),
+      new Tagged('z'),
+    ])({ name: 'x' }, h.next, ctx());
     expect(started).toEqual(['a', 'z', 'b']);
     expect(r.ok || r.errors.map((e) => e.code)).toEqual(['a', 'z', 'b']);
   });

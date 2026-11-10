@@ -3,7 +3,11 @@
  *
  * TypeScript `enum`s compile to plain objects; numeric enums also carry reverse mappings
  * (`{ 0: 'Red', Red: 0 }`) which are filtered out here. `as const` objects work too.
+ * An `EnumDefinition` from `tsentials/enums` is used through its own `parse` / `parseNumber`.
  */
+
+import type { EnumDefinition } from '../enums/enum-definition.js';
+import type { Result } from '../result/result.js';
 
 /** A TypeScript `enum` object or an `as const` object of string / number members. */
 export type EnumLike = { readonly [key: string]: string | number };
@@ -67,10 +71,17 @@ export function hasOnlyDefinedBits(enumObject: EnumLike, value: string | number)
   return (BigInt(value) & ~info.mask) === 0n;
 }
 
+/** Same limit as the C# enum errors and `EnumDefinition.createError`. */
+const MAX_ERROR_VALUE_LENGTH = 64;
+
 function enumMessage(valueText: string, enumName: string, allowed: readonly string[]): string {
+  const shown =
+    valueText.length > MAX_ERROR_VALUE_LENGTH
+      ? `${valueText.slice(0, MAX_ERROR_VALUE_LENGTH)}…`
+      : valueText;
   return allowed.length === 0
-    ? `'${valueText}' is not a valid ${enumName}.`
-    : `'${valueText}' is not a valid ${enumName}. Allowed values: ${allowed.join(', ')}.`;
+    ? `'${shown}' is not a valid ${enumName}.`
+    : `'${shown}' is not a valid ${enumName}. Allowed values: ${allowed.join(', ')}.`;
 }
 
 /** Message listing every declared member. */
@@ -95,5 +106,33 @@ export function notAllowedEnumMessage(
     textOf(info, value),
     enumName,
     allowed.map((v) => textOf(info, v)),
+  );
+}
+
+/** True for an `EnumDefinition` (plain enum objects never hold functions). */
+export function isEnumDefinition(
+  source: EnumLike | EnumDefinition<string>,
+): source is EnumDefinition<string> {
+  return typeof (source as { parse?: unknown }).parse === 'function';
+}
+
+/** Parses in input mode: wire names, member names, aliases and int32 values; never the fallback. */
+export function parseWithDefinition(
+  definition: EnumDefinition<string>,
+  value: string | number,
+): Result<string> {
+  return typeof value === 'number' ? definition.parseNumber(value) : definition.parse(value);
+}
+
+/** Message listing the given members of a definition by wire name. */
+export function notAllowedDefinitionMessage(
+  definition: EnumDefinition<string>,
+  value: string | number,
+  allowed: readonly string[],
+): string {
+  return enumMessage(
+    String(value),
+    definition.name,
+    allowed.map((member) => definition.format(member)),
   );
 }
