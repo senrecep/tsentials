@@ -55,7 +55,7 @@ function harness(settings: IdempotencySettings = {}): Harness {
 }
 
 const decisions = (h: Harness) => h.events.map((e) => e.decision);
-const names = (h: Harness) => h.logs.map((l) => l.properties.EventName);
+const names = (h: Harness) => h.logs.map((l) => l.properties['EventName']);
 
 describe('runIdempotent: enforce', () => {
   it('runs once, stores and replays', async () => {
@@ -129,7 +129,7 @@ describe('runIdempotent: enforce', () => {
       ),
     ).toBe('out1');
     expect(names(h)).toEqual([IdempotencyEventNames.CompleteFailed]);
-    expect(h.logs[0]?.properties.Exception).toBeInstanceOf(Error);
+    expect(h.logs[0]?.properties['Exception']).toBeInstanceOf(Error);
     expect(h.logs[0]?.level).toBe('warning');
   });
 
@@ -284,7 +284,7 @@ describe('runIdempotent: observe', () => {
         IdempotencyEventNames.ResolutionFailed,
       ]);
       expect(h.logs[0]?.level).toBe('warning');
-      expect(h.logs[0]?.properties.Exception).toBeInstanceOf(Error);
+      expect(h.logs[0]?.properties['Exception']).toBeInstanceOf(Error);
       expect('KeyHash' in (h.logs[0]?.properties ?? {})).toBe(hashed);
     },
   );
@@ -317,7 +317,7 @@ describe('runIdempotent: observe', () => {
     expect(await runIdempotent(h.call({ scope: () => 'global' as never }))).toBe('out1');
     expect(reserve).not.toHaveBeenCalled();
     expect(names(h)).toEqual([IdempotencyEventNames.ResolutionFailed]);
-    expect(h.logs[0]?.properties.Exception).toBeInstanceOf(TypeError);
+    expect(h.logs[0]?.properties['Exception']).toBeInstanceOf(TypeError);
   });
 
   it('runs a throwing handler once in observe, with or without a failing resolver', async () => {

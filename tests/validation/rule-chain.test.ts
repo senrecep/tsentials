@@ -304,7 +304,7 @@ describe('RuleChain.satisfies (Rule / RuleEngine integration)', () => {
 
   it('satisfiesAsync adds no error for a passing async rule', async () => {
     const result = await Validator.validateAsync(model('abc'), async (rules) => {
-      await rules.for('text').satisfiesAsync(async (v) => short(v));
+      await rules.for('text').satisfiesAsync(async (v: string | null) => short(v));
     });
     expect(result.ok).toBe(true);
   });

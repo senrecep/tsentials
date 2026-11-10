@@ -35,7 +35,7 @@ function harness(settings: IdempotencySettings) {
         onDecision: (e) => events.push(e),
         logger: {
           log: (level, _message, properties) =>
-            logs.push({ level, name: properties.EventName, exception: properties.Exception }),
+            logs.push({ level, name: properties['EventName'], exception: properties['Exception'] }),
         },
       },
     ]),

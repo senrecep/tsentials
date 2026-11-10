@@ -5,7 +5,7 @@ import { deepClone } from '../../src/clone/index.js';
 describe('deepClone vs structuredClone', () => {
   const buf = new ArrayBuffer(8);
   const circ: Record<string, unknown> = { a: 1 };
-  circ.self = circ;
+  circ['self'] = circ;
   const shared = { s: 1 };
   const sparse: number[] = [];
   sparse[0] = 1;

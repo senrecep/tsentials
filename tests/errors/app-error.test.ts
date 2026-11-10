@@ -76,7 +76,7 @@ describe('Err factory', () => {
     const extra = ErrorMetadata.fromRecord({ extra: true });
     const err = Err.fromException(new Error('boom'), ErrorType.Unexpected, undefined, extra);
     expect(err.metadata).toBeDefined();
-    expect(ErrorMetadata.toRecord(err.metadata!).extra).toBe(true);
+    expect(ErrorMetadata.toRecord(err.metadata!)['extra']).toBe(true);
   });
 
   it('creates error from string exception', () => {

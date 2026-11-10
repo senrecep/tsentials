@@ -50,12 +50,12 @@ function fakeRedis(clock: ContractClock) {
       }
       if (script === RedisIdempotencyScripts.extend) {
         const [token, lease] = args as [string, string];
-        if (h?.get('t') !== token || h.has('p')) return 0;
+        if (h === undefined || h.get('t') !== token || h.has('p')) return 0;
         data.set(key, { fields: h, expiresAt: clock.utcNowMs() + Number(lease) });
         return 1;
       }
       if (script !== RedisIdempotencyScripts.release) throw new Error('unknown script');
-      if (h?.get('t') === args[0] && !h.has('p')) {
+      if (h !== undefined && h.get('t') === args[0] && !h.has('p')) {
         data.delete(key);
         return 1;
       }

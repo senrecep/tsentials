@@ -67,9 +67,10 @@ describe('lease signal: mediator', () => {
         : order === 'inner'
           ? [idem, exceptionHandlingBehavior()]
           : [exceptionHandlingBehavior(), idem];
-    return createMediator<Requests>({ behaviors }).register('Capture', async (_req, ctx) =>
-      Result.success(String(await onSignal(ctx.signal))),
-    );
+    return createMediator<Requests>({ behaviors }).register('Capture', async (_req, ctx) => {
+      if (ctx.signal === undefined) throw new Error('lease signal missing');
+      return Result.success(String(await onSignal(ctx.signal)));
+    });
   }
 
   it.each(['inner', 'outer'] as const)(
@@ -166,7 +167,7 @@ describe('lease signal: idempotent', () => {
   it('passes the lease signal through bindSignal', async () => {
     const capture = idempotent(
       async (cmd: Cmd) => Result.success(reasonName(await aborted(cmd.signal!))),
-      { ...options(store('lost')), bindSignal: (signal, cmd) => [{ ...cmd, signal }] },
+      { ...options(store('lost')), bindSignal: (signal, cmd): [Cmd] => [{ ...cmd, signal }] },
     );
     expect(await capture({ orderId: 'o1' })).toEqual(Result.success('ReservationLost'));
   });
@@ -178,7 +179,7 @@ describe('lease signal: idempotent', () => {
         cmd.signal!.throwIfAborted();
         return Result.success('unreachable');
       },
-      { ...options(store('lost')), bindSignal: (signal, cmd) => [{ ...cmd, signal }] },
+      { ...options(store('lost')), bindSignal: (signal, cmd): [Cmd] => [{ ...cmd, signal }] },
     );
     const result = await capture({ orderId: 'o1' });
     expect(Result.firstError(result)?.code).toBe(IdempotencyErrorCodes.ReservationLost);
@@ -215,7 +216,7 @@ describe('lease signal: idempotent', () => {
         const reason = await aborted(cmd.signal!);
         return Result.failure<string>(Err.fromException(reason));
       },
-      { ...options(s), bindSignal: (signal, cmd) => [{ ...cmd, signal }] },
+      { ...options(s), bindSignal: (signal, cmd): [Cmd] => [{ ...cmd, signal }] },
     );
     expect(Result.isFailure(await capture({ orderId: 'o1' }))).toBe(true);
     expect(Result.isFailure(await capture({ orderId: 'o1' }))).toBe(true);
@@ -227,7 +228,7 @@ describe('lease signal: idempotent', () => {
     let fail = true;
     const capture = idempotent(async (cmd: Cmd) => Result.success(cmd.orderId), {
       ...options(s),
-      bindSignal: (signal, cmd) => {
+      bindSignal: (signal, cmd): [Cmd] => {
         if (fail) throw new TypeError('cannot bind');
         return [{ ...cmd, signal }];
       },

@@ -257,7 +257,7 @@ describe('withIdempotency', () => {
       expect((await observe.handler(post('k'))).status).toBe(201);
       expect((await observe.handler(post('k'))).status).toBe(201);
       expect(observe.runs()).toBe(2);
-      expect(observe.logs.map((l) => l.properties.EventName)).toEqual([
+      expect(observe.logs.map((l) => l.properties['EventName'])).toEqual([
         IdempotencyEventNames.ResolutionFailed,
         IdempotencyEventNames.ResolutionFailed,
       ]);
@@ -441,7 +441,7 @@ describe('withIdempotency', () => {
       });
       await s.handler(post('k'));
       expect(logsAtComplete).toBe(0);
-      expect(s.logs.map((l) => l.properties.EventName)).toEqual([
+      expect(s.logs.map((l) => l.properties['EventName'])).toEqual([
         IdempotencyEventNames.ResponseNotReplayable,
       ]);
     });
@@ -453,7 +453,7 @@ describe('withIdempotency', () => {
         store: Object.assign(store, { complete: async () => false }),
       });
       expect((await s.handler(post('k'))).status).toBe(201);
-      expect(s.logs.map((l) => l.properties.EventName)).toEqual([
+      expect(s.logs.map((l) => l.properties['EventName'])).toEqual([
         IdempotencyEventNames.ReservationLost,
       ]);
     });
@@ -481,7 +481,7 @@ describe('withIdempotency', () => {
       expect(retry.status).toBe(409);
       expect(await problemOf(retry)).toMatchObject({ code: IdempotencyErrorCodes.InFlight });
       expect(s.runs()).toBe(1);
-      expect(s.logs.map((l) => l.properties.EventName)).toEqual([
+      expect(s.logs.map((l) => l.properties['EventName'])).toEqual([
         IdempotencyEventNames.ResponseTooLarge,
       ]);
     });
@@ -514,7 +514,7 @@ describe('withIdempotency', () => {
       await s.handler(post('k'));
       await expectResultUnavailable(await s.handler(post('k')));
       expect(s.runs()).toBe(1);
-      expect(s.logs.map((l) => [l.properties.EventName, l.properties.Reason])).toEqual([
+      expect(s.logs.map((l) => [l.properties['EventName'], l.properties['Reason']])).toEqual([
         [IdempotencyEventNames.ResponseNotReplayable, reason],
       ]);
     });
@@ -701,7 +701,7 @@ describe('withIdempotency', () => {
           store: storeReturning(payload),
           scope: () => idempotencyScopes.tenant('s'),
           logger: {
-            log: (_level, _message, properties) => logs.push(String(properties.EventName)),
+            log: (_level, _message, properties) => logs.push(String(properties['EventName'])),
           },
         },
       );
@@ -767,7 +767,7 @@ describe('withIdempotency', () => {
       expect(await observed.text()).toBe(await off.text());
       expect(s.runs()).toBe(1);
       expect(s.events).toEqual([]);
-      expect(s.logs.map((l) => l.properties.EventName)).toEqual([
+      expect(s.logs.map((l) => l.properties['EventName'])).toEqual([
         IdempotencyEventNames.ResolutionFailed,
       ]);
       await expect(setup(respond).handler(await consumed())).rejects.toThrow(TypeError);

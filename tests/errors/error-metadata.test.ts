@@ -132,8 +132,8 @@ describe('ErrorMetadata.toRecord', () => {
   it('preserves boolean and null values', () => {
     const meta = ErrorMetadata.fromRecord({ flag: true, nil: null });
     const record = ErrorMetadata.toRecord(meta);
-    expect(record.flag).toBe(true);
-    expect(record.nil).toBeNull();
+    expect(record['flag']).toBe(true);
+    expect(record['nil']).toBeNull();
   });
 });
 

@@ -177,7 +177,7 @@ describe('loggingBehavior', () => {
     const logger = memoryLogger();
     const behavior = loggingBehavior({ logger, logRequest: true, logResponse: true });
     const circular: Record<string, unknown> = { name: 'c' };
-    circular.self = circular;
+    circular['self'] = circular;
     const r = await behavior(
       { id: 10n },
       nextOf(() => Result.success(circular)),
@@ -188,7 +188,7 @@ describe('loggingBehavior', () => {
     expect(logger.entries[1]?.message).toBe('Handled Result response: [object Object]');
 
     const bare = Object.create(null) as Record<string, unknown>;
-    bare.self = bare;
+    bare['self'] = bare;
     await behavior(
       bare,
       nextOf(() => Result.ok()),
