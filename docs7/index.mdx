@@ -86,7 +86,7 @@ npm install tsentials
 | `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata`, `DomainError` |
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
 | `tsentials/entity` | `createEntityBase`, `createEntityBaseWithId`, `createSoftDeletable`, `DomainEvent` |
-| `tsentials/http` | `fetchResult`, `RequestBuilder`, `notModified`, `checkIfMatch`, `computeETag` |
+| `tsentials/http` | `fetchResult`, `RequestBuilder`, `notModified`, `checkIfMatch`, `computeETag`, `isBlockedAddress` |
 | `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider`, `nextDayOfWeek`, `getAge`, `toDateOnly`, `toTimeOnly`, `msToDate` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
 | `tsentials/union` | `Union<T>` |
@@ -94,7 +94,7 @@ npm install tsentials
 | `tsentials/function` | `pipe`, `flow`, `identity`, `constant`, `flip` |
 | `tsentials/array` | `NonEmptyArray<T>`, `head`, `tail`, `last`, `asNonEmptyArray` |
 | `tsentials/eq` | `Eq<T>`, `contramap`, `struct`, `getArrayEq` |
-| `tsentials/ord` | `Ord<T>`, `sortBy`, `min`, `max`, `clamp`, `between` |
+| `tsentials/ord` | `Ord<T>`, `sortBy`, `min`, `max`, `clamp`, `between`, `betweenExclusive` |
 | `tsentials/predicate` | `Predicate<T>`, `Refinement<A, B>`, `and`, `or`, `not`, `all`, `any` |
 | `tsentials/these` | `These<E, A>`, `toResult`, `fromResult`, `partition` |
 | `tsentials/tree` | `Tree<T>`, `map`, `filter`, `fold`, `drawTree` |
@@ -501,6 +501,11 @@ RuleEngine.andAllAsync(asyncRule, anotherAsyncRule);
 RuleEngine.linearAsync(asyncRule, anotherAsyncRule);
 RuleEngine.orAsync(asyncRule, fallbackAsyncRule);
 RuleEngine.ifAsync(asyncRule, onTrue, onFalse);
+RuleEngine.andAsync(isAdult, asyncRule);   // async combinators accept sync rules too
+
+// Typed conditional: onTrue when the condition succeeds, else onFalse (or the condition's failure)
+RuleEngine.ifTyped(hasCoupon, couponPrice, listPrice);
+RuleEngine.ifTypedAsync(hasCoupon, couponPrice, listPrice);
 
 // Evaluation — evaluate is synchronous and never throws
 const result = RuleEngine.evaluate(isAdult, user);                  // VoidResult
@@ -584,6 +589,7 @@ import type { DomainEvent } from 'tsentials/entity';
 interface OrderCreatedEvent extends DomainEvent {
   readonly orderId: string;
 }
+// Optional: { timing: 'pre-save' } asks the dispatcher to publish before the save; absent means 'post-save'.
 
 class Order implements EntityBase, SoftDeletable {
   private readonly _base = createEntityBase();
@@ -724,6 +730,21 @@ toProblemDetails([Err.notFound('User.NotFound', 'User 7 was not found.')]);
 ```
 
 The primary error is the one with the highest status (the first on a tie); it gives `status`, `title` and `detail`. `errorCodes` lists every code once, in order, and `errors` lists the `Validation` errors as `{ code, description }`. Options: `status`, `title`, `typeUri`, `extensions` and (for responses) `headers`.
+
+### Blocked addresses (SSRF checks)
+
+`isBlockedAddress` tells whether an IP literal is loopback, private, link-local, unique local, CGNAT, multicast, reserved or a documentation range, using the ranges of the CSharpEssentials SSRF guard. Resolve the host and check every address before a server-side request to a user-supplied URL.
+
+```typescript
+import { lookup } from 'node:dns/promises';
+import { isBlockedAddress } from 'tsentials/http';
+
+const host = new URL(target).hostname.replace(/^\[|\]$/g, '');
+const addresses = await lookup(host, { all: true });
+if (addresses.some((a) => isBlockedAddress(a.address))) throw new Error('Blocked host');
+```
+
+Parsing is strict: anything that is not a plain IPv4 or IPv6 literal (`127.1`, `0177.0.0.1`, a host name) counts as blocked. This is not a full SSRF defence: also handle redirects and DNS rebinding.
 
 ---
 
@@ -1014,7 +1035,7 @@ Composable, type-safe equality and ordering. `Eq<A>` provides `equals`, `Ord<A>`
 
 ```typescript
 import { Eq } from 'tsentials/eq';
-import { Ord, sortBy, min, max, clamp, between, reverse } from 'tsentials/ord';
+import { Ord, sortBy, min, max, clamp, between, betweenExclusive, reverse } from 'tsentials/ord';
 
 interface User { readonly id: number; readonly name: string; readonly age: number; }
 
@@ -1040,6 +1061,7 @@ min(byAge, a, b);                // Alice (30)
 max(byAge, a, b);                // Carol (35)
 clamp(Ord.number, 0, 100, 150);  // 100
 between(Ord.number, 0, 100, 42); // true
+betweenExclusive(Ord.number, 0, 100, 100); // false
 
 // Multi-field ordering — compares fields in order, short-circuits
 const byNameThenAge = Ord.struct({ name: Ord.string, age: Ord.number });
@@ -1139,6 +1161,8 @@ console.log(drawTree(tree));
 // │   └── Android
 // └── Laptops
 ```
+
+Every function walks the tree with an explicit stack, so a tree 100k levels deep does not overflow the call stack.
 
 ## Record Utilities
 
@@ -1282,7 +1306,7 @@ if (first.ok) {
 // bad cursor → failure 'KeysetPagination.InvalidCursor'; after + before → 'KeysetPagination.AfterAndBefore'
 ```
 
-For database queries use `planKeysetPage` + `createKeysetPageResponse` ; `encodeCursor`/`decodeCursor` and a `CursorProtector` (e.g. HMAC) are exported.
+For database queries use `planKeysetPage` + `createKeysetPageResponse`; `keysetPredicate` builds the cursor filter as plain data and `keysetPredicateToSql` renders it as a parameterised `WHERE` fragment; `encodeCursor`/`decodeCursor` and a `CursorProtector` (e.g. HMAC) are exported.
 
 ---
 

@@ -66,38 +66,56 @@ export function children<T>(tree: Tree<T>): ReadonlyArray<Tree<T>> {
 }
 
 /**
- * Gets the number of nodes in the Tree (recursive).
+ * Gets the number of nodes in the Tree.
  */
 export function size<T>(tree: Tree<T>): number {
-  return 1 + tree.forest.reduce((acc, child) => acc + size(child), 0);
+  let count = 0;
+  const stack: Array<Tree<T>> = [tree];
+  for (let t = stack.pop(); t; t = stack.pop()) {
+    count++;
+    for (const child of t.forest) stack.push(child);
+  }
+  return count;
+}
+
+// All traversals use an explicit stack instead of recursion, so deep trees cannot overflow the call stack.
+
+/** Visits every node in pre-order (parent first, children left to right) until `visit` returns true. */
+function preOrder<T>(tree: Tree<T>, visit: (t: Tree<T>, depth: number) => unknown): void {
+  const stack: Array<[Tree<T>, number]> = [[tree, 0]];
+  for (let top = stack.pop(); top; top = stack.pop()) {
+    const [t, depth] = top;
+    if (visit(t, depth) === true) return;
+    for (let i = t.forest.length - 1; i >= 0; i--) stack.push([t.forest[i] as Tree<T>, depth + 1]);
+  }
 }
 
 // ─── Transformations ─────────────────────────────────────────────────────────
 
 /**
- * Maps over all values in the Tree, preserving structure.
+ * Maps over all values in the Tree, preserving structure. `f` is called in pre-order.
  */
 export function map<T, U>(tree: Tree<T>, f: (value: T) => U): Tree<U> {
-  return {
-    value: f(tree.value),
-    forest: tree.forest.map((child) => map(child, f)),
-  };
+  const rootForest: Array<Tree<U>> = [];
+  const stack: Array<[Tree<T>, Array<Tree<U>>]> = [[tree, rootForest]];
+  for (let top = stack.pop(); top; top = stack.pop()) {
+    const [t, parentForest] = top;
+    const forest: Array<Tree<U>> = [];
+    parentForest.push({ value: f(t.value), forest });
+    for (let i = t.forest.length - 1; i >= 0; i--) stack.push([t.forest[i] as Tree<T>, forest]);
+  }
+  return rootForest[0] as Tree<U>;
 }
 
 /**
  * Filters the tree, keeping only nodes that match the predicate.
- * A parent is kept if any descendant matches.
+ * A parent is kept if any descendant matches. `predicate` is called in post-order.
  */
 export function filter<T>(tree: Tree<T>, predicate: (value: T) => boolean): Tree<T> | null {
-  const filteredChildren = tree.forest
-    .map((child) => filter(child, predicate))
-    .filter((child): child is Tree<T> => child !== null);
-
-  if (predicate(tree.value) || filteredChildren.length > 0) {
-    return { value: tree.value, forest: filteredChildren };
-  }
-
-  return null;
+  return fold<T, Tree<T> | null>(tree, (value, children) => {
+    const forest = children.filter((child): child is Tree<T> => child !== null);
+    return predicate(value) || forest.length > 0 ? { value, forest } : null;
+  });
 }
 
 /**
@@ -105,11 +123,9 @@ export function filter<T>(tree: Tree<T>, predicate: (value: T) => boolean): Tree
  */
 export function toArray<T>(tree: Tree<T>): Array<T> {
   const result: Array<T> = [];
-  function traverse(t: Tree<T>): void {
+  preOrder(tree, (t) => {
     result.push(t.value);
-    for (const child of t.forest) traverse(child);
-  }
-  traverse(tree);
+  });
   return result;
 }
 
@@ -118,11 +134,9 @@ export function toArray<T>(tree: Tree<T>): Array<T> {
  */
 export function toArrayWithDepth<T>(tree: Tree<T>): Array<{ value: T; depth: number }> {
   const result: Array<{ value: T; depth: number }> = [];
-  function traverse(t: Tree<T>, depth: number): void {
+  preOrder(tree, (t, depth) => {
     result.push({ value: t.value, depth });
-    for (const child of t.forest) traverse(child, depth + 1);
-  }
-  traverse(tree, 0);
+  });
   return result;
 }
 
@@ -130,12 +144,13 @@ export function toArrayWithDepth<T>(tree: Tree<T>): Array<{ value: T; depth: num
  * Finds the first node matching the predicate (depth-first).
  */
 export function find<T>(tree: Tree<T>, predicate: (value: T) => boolean): Tree<T> | null {
-  if (predicate(tree.value)) return tree;
-  for (const child of tree.forest) {
-    const found = find(child, predicate);
-    if (found) return found;
-  }
-  return null;
+  let found: Tree<T> | null = null;
+  preOrder(tree, (t) => {
+    if (!predicate(t.value)) return false;
+    found = t;
+    return true;
+  });
+  return found;
 }
 
 /**
@@ -143,11 +158,9 @@ export function find<T>(tree: Tree<T>, predicate: (value: T) => boolean): Tree<T
  */
 export function findAll<T>(tree: Tree<T>, predicate: (value: T) => boolean): Array<Tree<T>> {
   const result: Array<Tree<T>> = [];
-  function traverse(t: Tree<T>): void {
+  preOrder(tree, (t) => {
     if (predicate(t.value)) result.push(t);
-    for (const child of t.forest) traverse(child);
-  }
-  traverse(tree);
+  });
   return result;
 }
 
@@ -157,8 +170,20 @@ export function findAll<T>(tree: Tree<T>, predicate: (value: T) => boolean): Arr
  * Folds the Tree into a single value (post-order traversal).
  */
 export function fold<T, U>(tree: Tree<T>, f: (value: T, children: ReadonlyArray<U>) => U): U {
-  const childResults = tree.forest.map((child) => fold(child, f));
-  return f(tree.value, childResults);
+  type Frame = { tree: Tree<T>; next: number; results: Array<U> };
+  const stack: Array<Frame> = [{ tree, next: 0, results: [] }];
+  for (;;) {
+    const top = stack[stack.length - 1] as Frame;
+    if (top.next < top.tree.forest.length) {
+      stack.push({ tree: top.tree.forest[top.next++] as Tree<T>, next: 0, results: [] });
+      continue;
+    }
+    stack.pop();
+    const result = f(top.tree.value, top.results);
+    const parent = stack[stack.length - 1];
+    if (!parent) return result;
+    parent.results.push(result);
+  }
 }
 
 // ─── Pretty printing ─────────────────────────────────────────────────────────
@@ -167,21 +192,24 @@ export function fold<T, U>(tree: Tree<T>, f: (value: T, children: ReadonlyArray<
  * Draws a Tree as an indented string.
  */
 export function drawTree<T>(tree: Tree<T>, show: (value: T) => string = String): string {
-  function draw(t: Tree<T>, prefix: string): string {
-    const lines = [prefix + show(t.value)];
-    for (let i = 0; i < t.forest.length; i++) {
+  const lines: Array<string> = [];
+  // head prefixes a node's first line, indent its other lines and its children's lines.
+  const stack: Array<[Tree<T>, string, string]> = [[tree, '', '']];
+  for (let top = stack.pop(); top; top = stack.pop()) {
+    const [t, head, indent] = top;
+    const [first, ...rest] = show(t.value).split('\n');
+    lines.push(head + first);
+    for (const line of rest) lines.push(indent + line);
+    for (let i = t.forest.length - 1; i >= 0; i--) {
       const isLast = i === t.forest.length - 1;
-      const childPrefix = prefix + (isLast ? '└── ' : '├── ');
-      const nextPrefix = prefix + (isLast ? '    ' : '│   ');
-      const childLines = draw(t.forest[i] as Tree<T>, '').split('\n');
-      lines.push(childPrefix + childLines[0]);
-      for (let j = 1; j < childLines.length; j++) {
-        lines.push(nextPrefix + childLines[j]);
-      }
+      stack.push([
+        t.forest[i] as Tree<T>,
+        indent + (isLast ? '└── ' : '├── '),
+        indent + (isLast ? '    ' : '│   '),
+      ]);
     }
-    return lines.join('\n');
   }
-  return draw(tree, '');
+  return lines.join('\n');
 }
 
 // ─── Namespace ───────────────────────────────────────────────────────────────

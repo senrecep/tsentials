@@ -128,5 +128,6 @@ const response = Union.match(createOrder(request), {
 - Use `Union<T>` over `Result<T>` when failure branches carry distinct, typed payloads
 - Always use `Union.match()` — it enforces exhaustiveness at compile time
 - `Union.is()` + accessing `.value` is the escape hatch when `match()` is too verbose
+- `Union.match()` only calls own handler properties, and `Union.groupBy()` returns own keys, so tags like `constructor`, `toString` or `__proto__` are safe
 - Avoid `any`-typed union members — defeats type safety
 - For simple nullable values, prefer `Maybe<T>` over `Union<{ some: T; none: {} }>`
