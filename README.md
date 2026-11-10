@@ -671,7 +671,7 @@ Status code mapping:
 | 408, ≥500 | `Unexpected` |
 | anything else (402, 405, 406, other 4xx, 1xx-3xx) | `Failure` |
 
-Supports `application/problem+json` (RFC 9457). An `errors` extension (list or dictionary shape) yields one `AppError` per entry; otherwise `detail`, then `title`, becomes the description (`problemDetailsToErrors`).
+Supports `application/problem+json` (RFC 9457). An `errors` extension (list or dictionary shape) yields one `AppError` per entry, and an `errorCodes` extension (written by CSharpEssentials.AspNetCore) keeps the server's domain codes, such as `User.NotFound` instead of `Http.404`; otherwise `detail`, then `title`, becomes the description (`problemDetailsToErrors`).
 
 ```typescript
 import { HttpCodes } from 'tsentials/http';

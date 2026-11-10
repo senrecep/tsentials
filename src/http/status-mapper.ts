@@ -118,6 +118,12 @@ const problemDescription = (body: unknown): string | undefined => {
  * Entries without a type are `Validation`: an untyped `errors` extension carries only
  * validation errors (field / model-state errors).
  *
+ * An `errorCodes` extension (string array, as CSharpEssentials.AspNetCore writes it) gives the
+ * codes of every error and their order. A code with entries in `errors` yields those entries;
+ * a code without one yields an error with that code, the type of the status
+ * ({@link httpStatusToErrorType}) and the description `detail`, then `title`. Entries of `errors`
+ * whose code is not listed follow.
+ *
  * If nothing can be parsed, returns the single status error from {@link httpStatusToError}
  * (description from `detail`, then `title`).
  */
@@ -154,6 +160,20 @@ export function problemDetailsToErrors(status: number, body: unknown): AppError[
         if (typeof message === 'string') parsed.push(createError(untypedType, key, message));
       }
     }
+  }
+
+  const codes = body['errorCodes'];
+  if (Array.isArray(codes)) {
+    const listed = new Set(codes.filter((code): code is string => typeof code === 'string'));
+    const description = problemDescription(body) ?? `HTTP request failed with status ${status}.`;
+    const ordered = [...listed].flatMap((code) => {
+      const matching = parsed.filter((e) => e.code === code);
+      // The body carries only the primary error's description, so code-only errors share it.
+      return matching.length > 0
+        ? matching
+        : [createError(httpStatusToErrorType(status), code, description)];
+    });
+    parsed.splice(0, parsed.length, ...ordered, ...parsed.filter((e) => !listed.has(e.code)));
   }
 
   return parsed.length > 0 ? parsed : fallback();
