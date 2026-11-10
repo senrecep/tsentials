@@ -59,6 +59,7 @@ Railway-oriented programming for TypeScript: `Result<T>`, `Maybe<T>`, Rule Engin
 - [Tree\<T\>](#treet)
 - [Record Utilities](#record-utilities)
 - [String Utilities](#string-utilities)
+- [UUIDv7](#uuidv7)
 - [Validation](#validation)
 - [Resilience](#resilience)
 - [Pagination](#pagination)
@@ -99,6 +100,7 @@ npm install tsentials
 | `tsentials/tree` | `Tree<T>`, `map`, `filter`, `fold`, `drawTree` |
 | `tsentials/record` | `Record` utilities, `map`, `filter`, `pick`, `omit`, `reduce` |
 | `tsentials/string` | String case conversion utilities (Pascal, Camel, Kebab, Snake, Macro, Train, Title, _camelCase) |
+| `tsentials/uuid` | RFC 9562 UUIDv7 generators (`uuidv7`, `monotonicUuidv7`) |
 | `tsentials/validation` | `Validator<T>`, `RuleContext`, `RuleChain`, `CascadeMode` |
 | `tsentials/resilience` | `ResiliencePolicy`, `retryIfFailed` |
 | `tsentials/pagination` | `paginate`, `keysetOrdering`, `keysetPaginate`, cursor helpers |
@@ -1132,6 +1134,19 @@ toUnderscoreCamelCase('helloWorld') // '_helloWorld'
 ```
 
 All functions handle: spaces, hyphens, underscores, camelCase, PascalCase, and mixed input.
+
+## UUIDv7
+
+RFC 9562 version 7 ids: a 48-bit Unix millisecond timestamp, then random bits from `crypto.getRandomValues`. They sort by creation time, which keeps database indexes compact.
+
+```typescript
+import { uuidv7, monotonicUuidv7 } from 'tsentials/uuid';
+
+uuidv7();          // '019a6f3c-8d2e-7b41-9f3a-1c2d3e4f5a6b'
+monotonicUuidv7(); // always sorts after the previous monotonicUuidv7() in this process
+```
+
+`monotonicUuidv7` puts an 18-bit counter in `rand_a` and the 6 bits after the variant, as the CSharpEssentials `Guider` version 7 monotonic generator does. The counter restarts at zero on each new millisecond. When it overflows, or the clock goes back, the timestamp moves one millisecond ahead so order holds. Use `uuidv7` when ids only need to be unique and roughly ordered.
 
 ## Validation
 
