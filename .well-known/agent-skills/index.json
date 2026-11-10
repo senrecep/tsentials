@@ -96,6 +96,11 @@
       "files": ["SKILL.md"]
     },
     {
+      "name": "tsentials-uuid",
+      "description": "Use when generating time-ordered ids: uuidv7() for RFC 9562 UUIDv7 strings and monotonicUuidv7() for ids that keep strict order within one millisecond, using Web Crypto and no dependencies.",
+      "files": ["SKILL.md"]
+    },
+    {
       "name": "tsentials-validation",
       "description": "Use when validating a model with fluent, eager, Result-based rules — Validator.validate with rules.for('path') chains, nested paths and forEach for collections, cascade modes, subclassable Validator<T>, validateAsync with mustAsync and AbortSignal, validateWith as a railway step. Subpath-only import.",
       "files": ["SKILL.md"]

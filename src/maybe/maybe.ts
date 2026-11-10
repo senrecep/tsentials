@@ -282,6 +282,15 @@ export const Maybe = {
   },
 
   /**
+   * Async version of Maybe.tapNone.
+   * Runs an async side effect when the Maybe is None, without altering it.
+   */
+  async tapNoneAsync<T>(maybe: Maybe<T>, fn: () => Promise<void>): Promise<Maybe<T>> {
+    if (!maybe.hasValue) await fn();
+    return maybe;
+  },
+
+  /**
    * Async version of Maybe.match.
    */
   async matchAsync<T, U>(
