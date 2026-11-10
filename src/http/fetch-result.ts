@@ -16,7 +16,18 @@ export type FetchResultInit = RequestInit & {
    * A negative, NaN or too-large (> 2^31-1) value rejects with a RangeError (programmer error).
    */
   timeout?: number;
+  /**
+   * How a 2xx body is read. `'json'` (default) parses JSON as described on {@link fetchResult}.
+   * `'text'`, `'blob'` and `'arrayBuffer'` read the body with the matching `Response` method
+   * whatever its content type, so the value is a `string`, `Blob` or `ArrayBuffer` (empty for
+   * an empty body or 204/205). Error responses, read failures, timeouts and aborts are handled
+   * exactly as for JSON.
+   */
+  responseType?: ResponseBodyType;
 };
+
+/** Value of {@link FetchResultInit.responseType}. */
+export type ResponseBodyType = 'json' | 'text' | 'blob' | 'arrayBuffer';
 
 /** Default request timeout in milliseconds (30 seconds). */
 const DEFAULT_HTTP_TIMEOUT_MS = 30_000;
@@ -54,6 +65,7 @@ async function responseToResult<T>(
   response: Response,
   signal: AbortSignal,
   allowEmptyBody: boolean,
+  responseType: ResponseBodyType,
 ): Promise<Result<T>> {
   const isJson = isJsonContentType(response.headers.get('content-type') ?? '');
 
@@ -72,6 +84,17 @@ async function responseToResult<T>(
     return R.failureFrom(
       withResponseMetadata(problemDetailsToErrors(response.status, body), response, body),
     );
+  }
+
+  if (responseType !== 'json') {
+    try {
+      return R.success((await response[responseType]()) as T);
+    } catch (e) {
+      if (signal.aborted) throw e;
+      return R.failureFrom(
+        withResponseMetadata([Err.fromException(e, ErrorType.Unexpected)], response, undefined),
+      );
+    }
   }
 
   // 204 No Content / 205 Reset Content never carry a body, and a non-JSON body is not
@@ -117,7 +140,12 @@ async function execute<T>(
   build: () => RequestInit,
   allowEmptyBody = false,
 ): Promise<Result<T>> {
-  const { timeout = DEFAULT_HTTP_TIMEOUT_MS, signal: callerSignal, ...rest } = init ?? {};
+  const {
+    timeout = DEFAULT_HTTP_TIMEOUT_MS,
+    responseType = 'json',
+    signal: callerSignal,
+    ...rest
+  } = init ?? {};
   if (
     Number.isNaN(timeout) ||
     timeout < 0 ||
@@ -157,7 +185,7 @@ async function execute<T>(
   let response: Response | undefined;
   try {
     response = await fetch(url, { ...rest, ...request, signal: controller.signal });
-    return await responseToResult<T>(response, controller.signal, allowEmptyBody);
+    return await responseToResult<T>(response, controller.signal, allowEmptyBody, responseType);
   } catch (e) {
     if (callerSignal?.aborted && (e === callerSignal.reason || isAbortError(e))) throw e;
     const error = timedOut
@@ -207,6 +235,8 @@ export function sendJson<T>(
  *   content type with an empty body or a literal `null` is a NotFound failure
  *   (code `NotFound`, "Response body was empty or could not be deserialized."), except for
  *   {@link fetchResult.delete}, where it is a void success.
+ * - `init.responseType` `'text'`, `'blob'` or `'arrayBuffer'` reads a 2xx body of any content type
+ *   as a `string`, `Blob` or `ArrayBuffer` instead of parsing JSON.
  * - Default timeout 30 s (`init.timeout`), failure code `Http.Timeout`.
  * - Aborting the caller's `init.signal` rejects the promise with the abort reason
  *   (cancellation is not converted to an error Result).

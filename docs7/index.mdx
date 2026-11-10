@@ -615,7 +615,7 @@ class Order implements EntityBase, SoftDeletable {
 
 ## HTTP (fetchResult)
 
-`fetchResult` captures network errors, body parse errors and HTTP error responses as `Result<T>`. The only rejection is the caller's own abort (`signal`), which rejects with the abort reason. The default timeout is 30 s (`timeout` option; `0` or `Infinity` disables it); on expiry the result is a failure with code `Http.Timeout` (`Unexpected`). A 2xx JSON response with an empty or `null` body is a `NotFound` failure ("Response body was empty or could not be deserialized."), except for `fetchResult.delete`, where it is a void success; 204/205 and non-JSON responses are void successes. A 2xx JSON body that cannot be parsed is a `Validation` failure (code `SyntaxError`), and a JSON request body that cannot be serialized (cyclic object, BigInt) is a `Validation` failure (code `TypeError`) with no request sent; `RequestBuilder.json()` serializes once, in `send()`, and never throws.
+`fetchResult` captures network errors, body parse errors and HTTP error responses as `Result<T>`. The only rejection is the caller's own abort (`signal`), which rejects with the abort reason. The default timeout is 30 s (`timeout` option; `0` or `Infinity` disables it); on expiry the result is a failure with code `Http.Timeout` (`Unexpected`). A 2xx JSON response with an empty or `null` body is a `NotFound` failure ("Response body was empty or could not be deserialized."), except for `fetchResult.delete`, where it is a void success; 204/205 and non-JSON responses are void successes. To read a 2xx body as text or bytes, set `responseType` to `'text'`, `'blob'` or `'arrayBuffer'` (`RequestBuilder.responseType()`); the body is then read whatever its content type, and errors, timeouts and aborts behave as for JSON. A 2xx JSON body that cannot be parsed is a `Validation` failure (code `SyntaxError`), and a JSON request body that cannot be serialized (cyclic object, BigInt) is a `Validation` failure (code `TypeError`) with no request sent; `RequestBuilder.json()` serializes once, in `send()`, and never throws.
 
 ```typescript
 import { fetchResult, RequestBuilder } from 'tsentials/http';
@@ -630,6 +630,10 @@ await fetchResult.put('/users/1', { name: 'Bob' });
 await fetchResult.patch('/users/1', { active: true });
 await fetchResult.delete('/users/1');
 await fetchResult.get<User>('/users/42', { signal, timeout: 5_000 });
+
+// Text or binary bodies
+const csv = await fetchResult.get<string>('/export.csv', { responseType: 'text' });
+const pdf = await RequestBuilder.get('/invoice/7').responseType('blob').send<Blob>();
 
 // Network errors are caught automatically
 const r = await fetchResult.get('/offline'); // Result.failure with TypeError metadata

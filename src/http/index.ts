@@ -14,7 +14,7 @@ export {
   notModified,
   parseETagList,
 } from './conditional.js';
-export type { FetchResultInit } from './fetch-result.js';
+export type { FetchResultInit, ResponseBodyType } from './fetch-result.js';
 export { fetchResult } from './fetch-result.js';
 export type { HttpCode } from './http-codes.js';
 export { HttpCodes } from './http-codes.js';
