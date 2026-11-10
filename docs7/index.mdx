@@ -165,6 +165,10 @@ Result.ensure(
   n => Err.validation('Value.TooSmall', `Value ${n} is too small`),
 );
 
+// Validate with a Result-returning check; the original value is kept on success
+// (use Result.then to replace the value)
+Result.thenEnsure(Result.success(user), u => checkQuota(u)); // Result<User>
+
 // Side effects
 Result.tap(price, v => console.log('computed', v));
 Result.tapError(price, errs => console.error('failed', errs[0].code));
@@ -232,6 +236,14 @@ Result.unwrapOr(Result.success(42), 0);       // 42
 Result.unwrapOr(Result.failure(err), 0);      // 0
 Result.unwrapOrElse(Result.failure(err), errs => errs.length); // 1
 
+// Unwrap or throw with your own message (still a ResultUnwrapError carrying the errors),
+// or throw your own Error instance as-is
+Result.unwrapOrThrow(configResult, 'Config must load before startup');
+
+// else: a function-typed fallback is always called with the errors.
+// To recover with a function VALUE, wrap it in a factory.
+Result.else(Result.failure<() => number>(err), () => () => 0);
+
 // Deconstruct to tuple
 const [ok, value, errors] = Result.deconstruct(result);
 ```
@@ -256,7 +268,7 @@ const profile = await fromAsync(fetchUser(userId))
   );
 ```
 
-Async variants of all sync operations are available: `thenAsync`, `mapAsync`, `ensureAsync`, `tapAsync`, `tapErrorAsync`, `compensateAsync`, `mapErrorAsync`.
+Async variants of all sync operations are available: `thenAsync`, `mapAsync`, `ensureAsync`, `thenEnsureAsync`, `tapAsync`, `tapErrorAsync`, `compensateAsync`, `mapErrorAsync`.
 
 ```typescript
 // Conditional async bind — the bind fn preserves T; when the condition is
@@ -300,6 +312,8 @@ import { Result } from 'tsentials/result';
 // Collect all — succeeds only if ALL succeed
 Result.and([Result.success(1), Result.success(2)]); // Result<[1, 2]>
 Result.and([Result.success(1), Result.failure(err)]); // collects ALL errors
+// Also on void results: Result.and([Result.ok(), f1, f2]) fails with the errors of f1 AND f2.
+// C# non-generic Result.And stops at the first failure instead.
 
 // First success — short-circuits on first ok
 Result.or([Result.failure(err1), Result.success(99), Result.failure(err2)]);
@@ -531,6 +545,8 @@ Err.forbidden('Permissions.Denied', 'Insufficient permissions');
 // From exceptions with metadata — type defaults to Failure, code to the constructor name
 Err.fromException(new Error('timeout'));
 Err.fromException(new Error('timeout'), ErrorType.Unexpected, 'Network.Timeout');
+// Replace the description too (either field may be left out)
+Err.fromException(e, ErrorType.Unexpected, { code: 'Db.Down', description: 'Database is unreachable' });
 
 // Equality: code + description + type + metadata (same keys; nested maps and Err errors by value, else Object.is)
 Err.equals(errA, errB);
@@ -576,6 +592,9 @@ const record = ErrorMetadata.toRecord(meta);
 const exceptionMeta = ErrorMetadata.fromException(new TypeError('fail'));
 // { exceptionType: 'TypeError', exceptionMessage: 'fail', exceptionStackTrace: '...' }
 // plus a nested `innerException` map when error.cause is an Error
+
+// Capture the current call stack under `stackTrace`
+const traced = ErrorMetadata.combine(meta, ErrorMetadata.withStackTrace());
 ```
 
 ---
@@ -683,6 +702,8 @@ Status code mapping:
 | 409, 412, 429 | `Conflict` |
 | 408, ≥500 | `Unexpected` |
 | anything else (402, 405, 406, other 4xx, 1xx-3xx) | `Failure` |
+
+This is the C# `HttpStatusCodeMapper.ToErrorType` table. It is intentionally richer than C# `int.ToErrorType` from `CSharpEssentials.Errors` (only 400, 401, 403, 404 and 409; 500 to `Failure`; anything else `Unexpected`), and it is not the inverse of `errorTypeToHttpStatus`: 500 maps to `Unexpected`, while `Failure` maps back to 500.
 
 Supports `application/problem+json` (RFC 9457). An `errors` extension (list or dictionary shape) yields one `AppError` per entry, and an `errorCodes` extension (written by CSharpEssentials.AspNetCore) keeps the server's domain codes, such as `User.NotFound` instead of `Http.404`; otherwise `detail`, then `title`, becomes the description (`problemDetailsToErrors`).
 

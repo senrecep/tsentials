@@ -43,6 +43,7 @@ try {
 } catch (e) {
   const err = Err.fromException(e);                                    // ErrorType.Failure by default
   const err2 = Err.fromException(e, ErrorType.Validation, 'Json.Invalid'); // override type and code
+  const err3 = Err.fromException(e, ErrorType.Unexpected, { code: 'Db.Down', description: 'Database is unreachable' }); // override description too
 }
 
 // Combine multiple AppErrors into an array
@@ -80,7 +81,7 @@ error.metadata     // ErrorMetadata | undefined  (ReadonlyMap<string, unknown>)
 | `Err.notFound(code?, desc?, metadata?)` | `NotFound` | `'NotFound'` |
 | `Err.unauthorized(code?, desc?, metadata?)` | `Unauthorized` | `'Unauthorized'` |
 | `Err.forbidden(code?, desc?, metadata?)` | `Forbidden` | `'Forbidden'` |
-| `Err.fromException(error, type?, code?, metadata?)` | `Failure` (default) | `error.constructor.name` |
+| `Err.fromException(error, type?, code? \| { code?, description? }, metadata?)` | `Failure` (default) | `error.constructor.name` |
 | `Err.combine(...errors)` | — | returns `AppError[]` |
 | `Err.equals(a, b)` | — | returns `boolean` |
 | `Err.with(error, patch)` | patch or original | frozen copy with `code`/`description`/`type`/`metadata` replaced |
@@ -139,6 +140,7 @@ import { ErrorMetadata } from 'tsentials/errors';
 ErrorMetadata.empty()                          // empty map
 ErrorMetadata.fromRecord({ field: 'email', value: 'bad@' })  // from plain object
 ErrorMetadata.fromException(caughtError)       // extracts exceptionType, exceptionMessage, exceptionStackTrace (+ nested innerException when `cause` is an Error)
+ErrorMetadata.withStackTrace()                 // current call stack under `stackTrace`
 
 // Combine (additional overrides base on key conflict)
 ErrorMetadata.combine(base, additional?)

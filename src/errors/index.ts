@@ -1,4 +1,9 @@
-export type { AppError, AppErrorJson, AppErrorPatch } from './app-error.js';
+export type {
+  AppError,
+  AppErrorJson,
+  AppErrorPatch,
+  ExceptionErrorOverride,
+} from './app-error.js';
 export { Err, errorTypeToHttpStatus } from './app-error.js';
 export { DomainError } from './domain-error.js';
 export { ErrorMetadata } from './error-metadata.js';
