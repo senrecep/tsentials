@@ -1,6 +1,6 @@
 ---
 name: tsentials-maybe
-description: Use when representing optional values explicitly — Maybe<T> as a null-safe container with hasValue discriminant, Maybe.from()/some()/none()/fromTry() for creation, map/bind/filter/tap/tapNone chaining, match/switch for consumption, conditional mapIf/bindIf, fallback or/orElse, extraction getOrDefault/getOrElse/getOrUndefined/getOrThrow/deconstruct, flatten/toArray utilities, async support with mapAsync/bindAsync/filterAsync/tapAsync/matchAsync/orAsync, and collection utilities tryFirst/tryLast/tryFind/choose/asMaybe.
+description: Use when representing optional values explicitly — Maybe<T> as a null-safe container with hasValue discriminant, Maybe.from()/some()/none()/fromTry() for creation, map/bind/filter/tap/tapNone chaining, match/switch for consumption, conditional mapIf/bindIf, fallback or/orElse, extraction getOrDefault/getOrElse/getOrUndefined/getOrThrow/deconstruct, flatten/toArray utilities, async support with mapAsync/bindAsync/filterAsync/tapAsync/tapNoneAsync/matchAsync/orAsync, a fluent MaybeAsync chain with optional AbortSignal, and collection utilities tryFirst/tryLast/tryFind/choose/asMaybe.
 ---
 
 # tsentials/maybe
@@ -16,7 +16,7 @@ npm install tsentials
 ## Import
 
 ```typescript
-import { Maybe, tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
+import { Maybe, MaybeAsync, tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
 ```
 
 ---
@@ -213,6 +213,9 @@ const valid: Maybe<User> = await Maybe.filterAsync(
 // tapAsync: async side effect without altering the Maybe
 await Maybe.tapAsync(maybe, async value => await logAccess(value));
 
+// tapNoneAsync: async side effect when None
+await Maybe.tapNoneAsync(maybe, async () => await logMiss());
+
 // matchAsync: async pattern match
 const result = await Maybe.matchAsync(
   maybe,
@@ -222,6 +225,46 @@ const result = await Maybe.matchAsync(
 
 // orAsync: async fallback — factory only invoked when None
 const result2 = await Maybe.orAsync(maybe, async () => await fetchFallback());
+```
+
+---
+
+## Fluent Async Chain (MaybeAsync)
+
+`MaybeAsync<T>` wraps a `Promise<Maybe<T>>`, like `ResultAsync` does for `Result`. Every step
+returns a `MaybeAsync` synchronously and you await once at the end (`await` gives a `Maybe<T>`).
+Callbacks can be sync or async.
+
+```typescript
+import { MaybeAsync } from 'tsentials/maybe';
+
+const name: string = await MaybeAsync.from(repo.find(id)) // Promise<Maybe<T>>, Maybe<T> or MaybeAsync<T>
+  .filter(user => user.isActive)
+  .bind(async user => Maybe.from(await loadProfile(user.id)))
+  .map(profile => profile.displayName)                    // null/undefined result → None
+  .tap(async n => audit(n))
+  .tapNone(() => log('missing'))
+  .orElse(() => Maybe.some('guest'))
+  .getOrElse(() => 'anonymous');
+
+// Factories: MaybeAsync.from / some / none / try (same rules as Maybe.fromTryAsync)
+// Terminals: match(onSome, onNone), getOrElse(fn), getOrDefault(value), or just await
+// Bridge: toResult(error?) → ResultAsync<T> (default error as Maybe.toResult)
+const user = await MaybeAsync.from(repo.find(id)).toResult(Err.notFound('User.NotFound', 'No user'));
+```
+
+Every step (`map`, `bind`, `filter`, `tap`, `tapNone`, `orElse`, `match`, `getOrElse`) takes an
+optional last argument `{ signal }`:
+
+- the callback receives the signal as its last parameter;
+- if the signal is already aborted when the callback would run, the step rejects with
+  `signal.reason` and the callback is not called;
+- if the signal aborts while the callback is pending, the step rejects at once (the callback's
+  work is not stopped; pass the signal into it for that);
+- a step whose callback does not run (for example `map` on None) ignores the signal.
+
+```typescript
+await MaybeAsync.some(id).bind((id, signal) => repo.find(id, { signal }), { signal });
 ```
 
 ---
@@ -320,8 +363,13 @@ const display = Maybe.getOrElse(
 | | `bindAsync` | `<T, U>(m, fn) => Promise<Maybe<U>>` |
 | | `filterAsync` | `<T>(m, pred) => Promise<Maybe<T>>` |
 | | `tapAsync` | `<T>(m, fn) => Promise<Maybe<T>>` |
+| | `tapNoneAsync` | `<T>(m, fn: () => Promise<void>) => Promise<Maybe<T>>` |
 | | `matchAsync` | `<T, U>(m, onSome, onNone) => Promise<U>` |
 | | `orAsync` | `<T>(m, fn) => Promise<Maybe<T>>` |
+| **MaybeAsync** | `from` / `some` / `none` / `try` | static factories → `MaybeAsync<T>` |
+| | `map` / `bind` / `filter` / `tap` / `tapNone` / `orElse` | `(fn, { signal }?) => MaybeAsync` |
+| | `toResult` | `(error?) => ResultAsync<T>` |
+| | `match` / `getOrElse` / `getOrDefault` | terminal, `=> Promise<...>` |
 | **Collection** | `tryFirst` | `<T>(arr, pred?) => Maybe<T>` |
 | | `tryLast` | `<T>(arr, pred?) => Maybe<T>` |
 | | `tryFind` | `<T>(arr, pred) => Maybe<T>`; also `(map, key)` and `(record, key)` |

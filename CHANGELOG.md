@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0](https://github.com/senrecep/tsentials/compare/v3.0.0...v3.1.0) (2026-11-10)
+
+
+### Added
+
+* add uuidv7 and monotonicUuidv7 generators ([#38](https://github.com/senrecep/tsentials/issues/38)) ([4ac608c](https://github.com/senrecep/tsentials/commit/4ac608cded4c24f0e98545b24b569554257fe7c8))
+* **errors:** add DomainError so thrown typed errors keep their AppError ([#44](https://github.com/senrecep/tsentials/issues/44)) ([df71f4f](https://github.com/senrecep/tsentials/commit/df71f4f932ff15b33d28f75c1b9b609f13bb2c82))
+* **errors:** add Err.fromJSON, Result.fromJSON and Err.with ([#42](https://github.com/senrecep/tsentials/issues/42)) ([b59a805](https://github.com/senrecep/tsentials/commit/b59a80580f9891285d75befe380adc25c4d30154))
+* **http:** add conditional request helpers for ETag, 304 and If-Match ([#47](https://github.com/senrecep/tsentials/issues/47)) ([4e43e0e](https://github.com/senrecep/tsentials/commit/4e43e0e63509ce49c8637d2518d3af7df172d52a))
+* **maybe:** add a fluent MaybeAsync chain and Maybe.tapNoneAsync ([#40](https://github.com/senrecep/tsentials/issues/40)) ([7be612c](https://github.com/senrecep/tsentials/commit/7be612c212f124a8d5bc4f2ba366689fc456f34d))
+* **validation:** accept EnumDefinition in enum validators and truncate echoed values ([#39](https://github.com/senrecep/tsentials/issues/39)) ([84b29bb](https://github.com/senrecep/tsentials/commit/84b29bb4bfa2c54f526cac10f9ce0ee9a9a994e0))
+
+
+### Fixed
+
+* **entity:** keep createEntityBaseWithId state live and export it from tsentials/entity ([#32](https://github.com/senrecep/tsentials/issues/32)) ([7989b54](https://github.com/senrecep/tsentials/commit/7989b54d2c46054bb85895645524ecd5262a5e5c))
+* **errors:** compare nested error metadata by value in Err.equals ([#31](https://github.com/senrecep/tsentials/issues/31)) ([026f8ac](https://github.com/senrecep/tsentials/commit/026f8ac7aa5d2ffb4f21ebfa69ad92c2e936a9f9))
+* **http:** cancel response bodies that fetchResult does not read ([#30](https://github.com/senrecep/tsentials/issues/30)) ([9d42e2c](https://github.com/senrecep/tsentials/commit/9d42e2cca1dcb3e8db22e4602e8095b5601dd01b))
+* **mediator:** call Validator instances through their own methods in validationBehavior ([#33](https://github.com/senrecep/tsentials/issues/33)) ([11c608b](https://github.com/senrecep/tsentials/commit/11c608b5f048e7700fdc9e47057b1854d7b6f69f))
+* **result:** warn when a sync tap or switch callback returns a promise ([#45](https://github.com/senrecep/tsentials/issues/45)) ([a51e4e8](https://github.com/senrecep/tsentials/commit/a51e4e83e5b41b711ad6841453abc935978eb6c5))
+
 ## [3.0.0] - 2026-10-20
 
 ### Changed

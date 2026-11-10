@@ -10,6 +10,7 @@ import {
 } from '../../src/mediator/index.js';
 import { Result } from '../../src/result/index.js';
 import { RuleEngine } from '../../src/rules/index.js';
+import { type RuleContext, Validator } from '../../src/validation/index.js';
 
 interface Cmd {
   readonly name: string;
@@ -346,5 +347,64 @@ describe('loggingValidationFailureObserver', () => {
     await loggingValidationFailureObserver(l, { count })(failure('enforce'), undefined);
     expect(l.entries).toHaveLength(0);
     expect(count).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('validationBehavior with Validator subclasses', () => {
+  class NameValidator extends Validator<Cmd> {
+    protected configure(rules: RuleContext<Cmd>) {
+      rules.for('name').notEmpty();
+    }
+  }
+
+  class AsyncNameValidator extends Validator<Cmd> {
+    seen: AbortSignal | undefined;
+    protected async configure(rules: RuleContext<Cmd>, _model: Cmd, signal?: AbortSignal) {
+      this.seen = signal;
+      await rules.for('name').mustAsync(async (n) => n !== 'taken', 'Name.Taken', 'taken');
+    }
+  }
+
+  it('calls a sync Validator subclass as a method', async () => {
+    const h = handler();
+    await validationBehavior<Cmd>([new NameValidator()])({ name: 'a' }, h.next, ctx());
+    expect(h.fn).toHaveBeenCalled();
+    const r = await validationBehavior<Cmd>([new NameValidator()])({ name: '' }, h.next, ctx());
+    expect(r.ok || r.errors.map((e) => e.type)).toEqual([ErrorType.Validation]);
+  });
+
+  it('uses validateAsync for a Validator subclass and passes the signal', async () => {
+    const h = handler();
+    const v = new AsyncNameValidator();
+    const controller = new AbortController();
+    await validationBehavior<Cmd>([v])({ name: 'a' }, h.next, ctx(controller.signal));
+    expect(h.fn).toHaveBeenCalled();
+    expect(v.seen).toBe(controller.signal);
+    const r = await validationBehavior<Cmd>([v])({ name: 'taken' }, h.next, ctx());
+    expect(r.ok || r.errors.map((e) => e.code)).toEqual(['Name.Taken']);
+  });
+
+  it('sorts Validator subclasses by their order property', async () => {
+    const started: string[] = [];
+    class Tagged extends Validator<Cmd> {
+      constructor(
+        readonly tag: string,
+        override readonly order?: number,
+      ) {
+        super();
+      }
+      protected configure(rules: RuleContext<Cmd>) {
+        started.push(this.tag);
+        rules.for('name').must(() => false, this.tag, this.tag);
+      }
+    }
+    const h = handler();
+    const r = await validationBehavior<Cmd>([
+      new Tagged('b', 2),
+      new Tagged('a', -1),
+      new Tagged('z'),
+    ])({ name: 'x' }, h.next, ctx());
+    expect(started).toEqual(['a', 'z', 'b']);
+    expect(r.ok || r.errors.map((e) => e.code)).toEqual(['a', 'z', 'b']);
   });
 });
