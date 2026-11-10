@@ -2,9 +2,11 @@
 title: "Migration guide: behaviour changes"
 ---
 
-This guide lists every change that alters the runtime behaviour of an existing tsentials API. Read the 2.0.0 section when upgrading from 1.x and the 1.0.0 section when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](https://github.com/senrecep/tsentials/blob/main/CHANGELOG.md).
+This guide lists every change that alters the runtime behaviour of an existing tsentials API. Read the 3.0.0 section when upgrading from 2.x, the 2.0.0 section when upgrading from 1.x and the 1.0.0 section when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](https://github.com/senrecep/tsentials/blob/main/CHANGELOG.md).
 
 ## Behaviour changes in the next release (unreleased)
+
+## Behaviour changes in 3.0.0
 
 * **idempotency:** `withIdempotency` now defaults `unscopedKeyBehavior` to `'reject'`: a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) gets 400 `Idempotency.ScopeRequired` in `enforce`; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. It used to run without idempotency (`'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to restore the old behaviour.
 * **idempotency:** a 2xx response that `withIdempotency` cannot store (body over `maxResponseBodyBytes`, a non-identity `Content-Encoding`, or `text/event-stream`) now stores a marker for `retentionMs`: a retry with the same key and request gets 409 `Idempotency.ResultUnavailable` (no `Retry-After`) and the handler does not run. It used to get 409 `Idempotency.InFlight` until the lease ended and then run the handler again. Use `idempotentRetryClassifier`, which never retries this code; a generic `withRetry` without it retries any 409 Conflict. Use a new key only if repeating the side effect is intended. `onDecision` reports such a key as `'result_unavailable'` (in `observe`: `Idempotency.Observe.WouldRejectResultUnavailable`), not as `'replay'`. **Rolling deploy:** an instance still on 2.0.x that reads a marker answers 500 `Idempotency.StoredResponseUnreadable` (the handler does not run), so deploy every instance before relying on the 409.
