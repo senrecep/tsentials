@@ -120,6 +120,8 @@ All static functions take `(result, ...)` as first argument. They are NOT currie
 | `Result.tryCatch(r, fn, err?)` | Apply fn to value, catch exceptions |
 | `Result.always(r, fn)` | Unconditional — returns `fn(result)` |
 
+The sync `tap`, `tapError`, `tapErrorFirst`, `tapIf`, `tapErrorIf` and `switch*` never await `fn`. Use `Result.tapAsync` / `Result.tapErrorAsync`, a `ResultAsync` chain or `await Result.match(...)` for async work. A promise returned to them is dropped; its rejection surfaces as an unhandled `TypeError` naming the method, with the original error as `cause`.
+
 ### Conditional Pipeline
 
 | Function | Description |

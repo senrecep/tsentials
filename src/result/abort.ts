@@ -113,3 +113,11 @@ export function withAbort<T>(promise: PromiseLike<T>, signal: AbortSignal | unde
 export function observe(promise: PromiseLike<unknown>): void {
   Promise.resolve(promise).then(undefined, () => undefined);
 }
+
+export function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    (typeof value === 'object' || typeof value === 'function') &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}
