@@ -61,7 +61,12 @@ export function isEmpty(record: Readonly<Record<string, unknown>>): boolean {
 /** Writes an own data property; a plain `obj['__proto__'] = v` would set the prototype instead. */
 function set(target: object, key: string, value: unknown): void {
   if (key === '__proto__') {
-    Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
   } else {
     (target as Record<string, unknown>)[key] = value;
   }
