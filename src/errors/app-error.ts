@@ -284,7 +284,8 @@ export const Err = {
   ): AppError {
     const err = error instanceof Error ? error : new Error(safeString(error));
     const exceptionMeta = ErrorMetadata.fromException(err);
-    const override: ExceptionErrorOverride = typeof code === 'object' ? code : { code };
+    const override: ExceptionErrorOverride =
+      typeof code === 'object' && code !== null ? code : { code };
     return make(
       override.code ?? err.constructor.name,
       override.description ?? err.message,

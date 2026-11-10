@@ -144,6 +144,12 @@ describe('Err.fromException overrides', () => {
     expect(e.description).toBe('d');
     expect(Err.fromException(new TypeError('raw'), ErrorType.Failure, {}).description).toBe('raw');
   });
+
+  it('treats a null code from untyped callers like a missing code', () => {
+    const e = Err.fromException(new TypeError('raw'), ErrorType.Failure, null as unknown as string);
+    expect(e.code).toBe('TypeError');
+    expect(e.description).toBe('raw');
+  });
 });
 
 describe('ErrorMetadata.withStackTrace', () => {
