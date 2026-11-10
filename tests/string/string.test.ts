@@ -260,3 +260,80 @@ describe('toUnderscoreCamelCase', () => {
     expect(toUnderscoreCamelCase('hello')).toBe('_hello');
   });
 });
+
+// Ported from CSharpEssentials.Tests/Core/StringExtensionsTests.cs. Expected values are the
+// JS results where the platforms differ: tsentials keeps acronym splitting ("IDs" -> "I", "Ds";
+// C# gives "ids"), and JS upper-cases "ß" to "SS" (C# keeps "ß"). C# culture rows are left out.
+describe('Unicode, digit and punctuation word boundaries', () => {
+  const converters = {
+    pascal: toPascalCase,
+    camel: toCamelCase,
+    underscoreCamel: toUnderscoreCamelCase,
+    kebab: toKebabCase,
+    snake: toSnakeCase,
+    macro: toMacroCase,
+    train: toTrainCase,
+    title: toTitleCase,
+  };
+  type Converter = keyof typeof converters;
+
+  const cases: [string, Converter, string][] = [
+    ['HelloWorld', 'pascal', 'HelloWorld'],
+    ['helloworld', 'pascal', 'Helloworld'],
+    ['HELLOWORLD', 'pascal', 'Helloworld'],
+    ['HELLOWORLD', 'camel', 'helloworld'],
+    ['Hello123World', 'snake', 'hello_123_world'],
+    ['', 'pascal', ''],
+    ['a', 'pascal', 'A'],
+    ['A', 'pascal', 'A'],
+    ['hello_world-test', 'pascal', 'HelloWorldTest'],
+    ['_hello', 'pascal', 'Hello'],
+    ['hello_', 'pascal', 'Hello'],
+    ['---hello', 'pascal', 'Hello'],
+    ['hello---world', 'pascal', 'HelloWorld'],
+    ['', 'kebab', ''],
+    ['a', 'kebab', 'a'],
+    ['hello_world-test', 'kebab', 'hello-world-test'],
+    ['---hello', 'kebab', 'hello'],
+    ['hello---world', 'kebab', 'hello-world'],
+    ['', 'snake', ''],
+    ['hello_world-test', 'snake', 'hello_world_test'],
+    ['---hello', 'snake', 'hello'],
+    ['İstanbul Ankara', 'pascal', 'İstanbulAnkara'],
+    ['çok güzel', 'pascal', 'ÇokGüzel'],
+    ['çok güzel', 'camel', 'çokGüzel'],
+    ['用户名', 'snake', '用户名'],
+    ['user用户Name', 'snake', 'user用户_name'],
+    ['café', 'snake', 'café'],
+    ['fooǅemal', 'snake', 'foo_ǆemal'],
+    ['עברית שלום', 'snake', 'עברית_שלום'],
+    ['สวัสดีWorld', 'snake', 'สวัสดี_world'],
+    ['مرحبا بالعالم', 'kebab', 'مرحبا-بالعالم'],
+    ['user_用户_name', 'pascal', 'User用户Name'],
+    ['A1A1A1', 'snake', 'a_1_a_1_a_1'],
+    ['A1A1', 'title', 'A 1 A 1'],
+    ['Über_straßeName用户ID9', 'snake', 'über_straße_name用户_id_9'],
+    ['Über_straßeName用户ID9', 'macro', 'ÜBER_STRASSE_NAME用户_ID_9'],
+    ['__userIDs2Name', 'pascal', 'UserIDs2Name'],
+    ['__userIDs2Name', 'snake', 'user_i_ds_2_name'],
+    ['Über-straßeID', 'pascal', 'ÜberStraßeId'],
+    ['Über-straßeID', 'camel', 'überStraßeId'],
+    ['Über-straßeID', 'underscoreCamel', '_überStraßeId'],
+    ['Über-straßeID', 'kebab', 'über-straße-id'],
+    ['Über-straßeID', 'snake', 'über_straße_id'],
+    ['Über-straßeID', 'macro', 'ÜBER_STRASSE_ID'],
+    ['Über-straßeID', 'train', 'Über-Straße-Id'],
+    ['Über-straßeID', 'title', 'Über Straße Id'],
+    // tsentials additions: punctuation separates words, acronyms split before a capitalized word
+    ['foo.bar/baz', 'snake', 'foo_bar_baz'],
+    ['XMLParser', 'kebab', 'xml-parser'],
+    ['ÄÖÜStraße', 'kebab', 'äöü-straße'],
+    ['überÄpfel', 'kebab', 'über-äpfel'],
+    ['𐐀𐐨𐐨 word', 'pascal', '𐐀𐐨𐐨Word'],
+    ['𐐨𐐨 word', 'pascal', '𐐀𐐨Word'],
+  ];
+
+  it.each(cases)('%j to %s is %j', (input, converter, expected) => {
+    expect(converters[converter](input)).toBe(expected);
+  });
+});

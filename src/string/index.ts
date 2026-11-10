@@ -1,24 +1,30 @@
 /**
  * String casing utilities.
  *
- * All functions split the input into words by detecting:
- * - camelCase / PascalCase boundaries
- * - Consecutive uppercase runs (e.g. "XMLParser" → ["XML", "Parser"])
- * - Whitespace, hyphens, underscores
+ * All functions split the input into words like CSharpEssentials does:
+ * - Any character that is not a letter, combining mark or digit separates words and is dropped
+ * - An uppercase or titlecase letter starts a word unless it follows another one (Unicode aware)
+ * - A run of digits is its own word ("Hello123World" → ["Hello", "123", "World"])
+ * - Consecutive uppercase runs split before the last capital (e.g. "XMLParser" → ["XML", "Parser"])
  */
 
+const WORD = /[\p{L}\p{Mn}\p{Mc}\p{N}]+/gu;
+const BOUNDARY =
+  /(?<![\p{Lu}\p{Lt}])(?=[\p{Lu}\p{Lt}])|(?<!\p{N})(?=\p{N})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/u;
+
 function splitWords(str: string): string[] {
-  return str
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-    .split(/[\s\-_]+/)
-    .filter((w) => w.length > 0);
+  return (str.match(WORD) ?? []).flatMap((chunk) => chunk.split(BOUNDARY));
+}
+
+function capitalize(word: string): string {
+  const [first = ''] = word;
+  return first.toUpperCase() + word.slice(first.length).toLowerCase();
 }
 
 /** "hello world" / "helloWorld" / "hello-world" → "HelloWorld" */
 export function toPascalCase(str: string): string {
   return splitWords(str)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .map((w) => capitalize(w))
     .join('');
 }
 
@@ -27,7 +33,7 @@ export function toCamelCase(str: string): string {
   const words = splitWords(str);
   return words
     .map((w, i) =>
-      i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
+      i === 0 ? w.toLowerCase() : capitalize(w),
     )
     .join('');
 }
@@ -56,14 +62,14 @@ export function toMacroCase(str: string): string {
 /** "hello world" / "helloWorld" / "hello_world" → "Hello-World" */
 export function toTrainCase(str: string): string {
   return splitWords(str)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .map((w) => capitalize(w))
     .join('-');
 }
 
 /** "hello world" / "helloWorld" / "hello-world" → "Hello World" */
 export function toTitleCase(str: string): string {
   return splitWords(str)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .map((w) => capitalize(w))
     .join(' ');
 }
 

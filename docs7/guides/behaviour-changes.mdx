@@ -6,6 +6,8 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 ## Behaviour changes in the next release (unreleased)
 
+* **string:** the case converters split words on Unicode rules, as CSharpEssentials does. Any character that is not a letter, combining mark or digit now separates words and is dropped: `toSnakeCase('foo.bar')` gives `'foo_bar'` (it was `'foo.bar'`). A digit run is its own word: `toSnakeCase('hello123World')` gives `'hello_123_world'` (it was `'hello123world'`) and `toCamelCase('v2Api')` gives `'v2Api'` (it was `'v2api'`). Non-ASCII uppercase and titlecase letters start a word: `toKebabCase('überÄpfel')` gives `'über-äpfel'` (it was `'überäpfel'`), and `toSnakeCase('user用户Name')` gives `'user用户_name'`. Acronym splitting is unchanged (`'XMLParser'` gives `'xml_parser'`).
+
 ## Behaviour changes in 3.0.0
 
 * **idempotency:** `withIdempotency` now defaults `unscopedKeyBehavior` to `'reject'`: a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) gets 400 `Idempotency.ScopeRequired` in `enforce`; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. It used to run without idempotency (`'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to restore the old behaviour.

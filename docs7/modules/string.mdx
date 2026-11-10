@@ -30,6 +30,8 @@ toUnderscoreCamelCase('helloWorld');  // "_helloWorld"
 
 ## Patterns
 
-- Every function accepts any input casing (camelCase, PascalCase, kebab-case, snake_case, space-separated) — word boundaries are detected automatically, so there is no need to normalize input first.
-- Consecutive uppercase runs split before the trailing capitalized word: `"XMLParser"` → `["XML", "Parser"]`.
+- Every function accepts any input casing (camelCase, PascalCase, kebab-case, snake_case, space-separated), so there is no need to normalize input first.
+- Words split the way CSharpEssentials splits them, for any script: an uppercase or titlecase letter starts a word (`"überÄpfel"` → `"über-äpfel"`), a digit run is its own word (`"Hello123World"` → `"hello_123_world"`), and every character that is not a letter, combining mark or digit separates words and is dropped (`"foo.bar/baz"` → `"foo_bar_baz"`). Letters without case (CJK, Thai, Hebrew) stay inside the word: `"user用户Name"` → `"user用户_name"`.
+- Consecutive uppercase runs split before the trailing capitalized word: `"XMLParser"` → `["XML", "Parser"]`. CSharpEssentials does not do this, so `"userIDs"` gives `"user_i_ds"` here and `"user_ids"` in C#.
+- Case mapping is `toUpperCase` / `toLowerCase`, so `"ß"` becomes `"SS"` in `toMacroCase`.
 - All functions are pure and take a single `string` argument — no options object, no locale handling.
