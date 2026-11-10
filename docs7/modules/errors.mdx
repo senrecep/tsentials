@@ -13,7 +13,7 @@ npm install tsentials
 ## Import
 
 ```typescript
-import { Err, ErrorMetadata, ErrorType } from 'tsentials/errors';
+import { DomainError, Err, ErrorMetadata, ErrorType } from 'tsentials/errors';
 import type { AppError } from 'tsentials/errors';
 ```
 
@@ -190,6 +190,24 @@ function findUser(id: string): Result<User> {
 
 ---
 
+## DomainError: throwing typed errors
+
+When code has to throw (a constructor, a callback, a deep call chain), throw a `DomainError` instead of a plain `Error`. It is an `Error` subclass that carries one or more `AppError` values.
+
+```typescript
+throw new DomainError(Err.conflict('Order.Shipped', 'Order is already shipped'));
+throw new DomainError([errA, errB], 'optional message');
+
+const e = new DomainError(errA);
+e.errors;  // readonly AppError[] (a frozen copy)
+e.error;   // first error
+e.message; // first error's description unless a message is given
+```
+
+`Result.try`, `Result.tryAsync`, `Result.tryCatch`, `Result.tryCatchAsync` and the mediator's `exceptionHandlingBehavior` return the carried errors as-is instead of `Err.fromException(e)`, even when an `onError` mapper or fixed error is given. A `DomainError` with no errors is converted like any other exception. Abort errors still propagate. `ResultUnwrapError` (thrown by `Result.unwrap`) is a `DomainError`, so `Result.try(() => Result.unwrap(r))` keeps `r`'s errors.
+
+---
+
 ## Using with Result\<T\>
 
 ```typescript
@@ -230,3 +248,4 @@ async function fetchData(url: string): Promise<Result<Data>> {
 - Use `Err.unexpected()` for programming/infrastructure errors and `Err.validation()` for user input errors
 - Use `Err.failure()` for domain-level failures that are expected outcomes (not bugs, not user input)
 - Use `Err.fromException()` to convert caught exceptions into typed `AppError` values
+- Throw `DomainError` rather than a plain `Error` when you must throw a typed error

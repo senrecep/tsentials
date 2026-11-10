@@ -84,7 +84,7 @@ npm install tsentials
 |--------|----------|
 | `tsentials/result` | `Result<T>`, `ResultAsync<T>`, `ResultChain<T>`, `fromAsync`, `maybeToResult`, `resultToMaybe` |
 | `tsentials/maybe` | `Maybe<T>`, `MaybeAsync<T>`, collection utilities |
-| `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata` |
+| `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata`, `DomainError` |
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
 | `tsentials/entity` | `createEntityBase`, `createEntityBaseWithId`, `createSoftDeletable`, `DomainEvent` |
 | `tsentials/http` | `fetchResult`, `RequestBuilder` |
@@ -515,7 +515,7 @@ A rule that throws becomes a failure with code `Rule.EvaluationFailed` (`Unexpec
 ## AppError & Err Factory
 
 ```typescript
-import { Err } from 'tsentials/errors';
+import { DomainError, Err } from 'tsentials/errors';
 
 Err.validation('Field.Required', 'Name is required');
 Err.notFound('User.NotFound', 'User does not exist');
@@ -533,6 +533,10 @@ Err.equals(errA, errB);
 
 // Combine errors and error arrays into one flat array
 Err.combine(errA, [errB, errC], errD);
+
+// Throw typed errors when you have to throw: Result.try, tryAsync, tryCatch, tryCatchAsync
+// and the mediator's exceptionHandlingBehavior return the carried errors as-is
+throw new DomainError(Err.conflict('Order.Shipped', 'Order is already shipped'));
 
 // JSON wire shape: { code, description, type, numericType, metadata? }
 JSON.stringify(Err.validation('Field.Required', 'Name is required'));
