@@ -16,6 +16,7 @@ import {
   LockTimeoutError,
   lockBehavior,
   loggingBehavior,
+  type MediatorLogger,
   type MediatorLogLevel,
   type NextHandler,
   type RequestContext,
@@ -515,15 +516,42 @@ describe('cachingBehavior', () => {
     expect(store.get).not.toHaveBeenCalled();
   });
 
-  it('throws when the cached value is not a result', async () => {
+  it.each([
+    ['not a result', 'null'],
+    ['not JSON', '{bad'],
+  ])('runs the handler and overwrites an entry that is %s', async (_, entry) => {
+    const { store, data } = memoryCache({ 'user:1': entry });
+    const logger = memoryLogger();
+    const r = await cachingBehavior({ cache: store, logger })(
+      request,
+      nextOf(() => Result.success(1)),
+      ctx(),
+    );
+    expect(r).toEqual(Result.success(1));
+    expect(data.get('user:1')).toBe('{"ok":true,"value":1}');
+    expect(logger.entries.map((e) => [e.level, e.message])).toEqual([
+      ['warning', 'Cached value for key user:1 could not be deserialized; calling the handler'],
+      ['information', 'Cache set for key user:1'],
+    ]);
+  });
+
+  it('runs the handler on an unreadable entry when the logger throws or warnings are off', async () => {
     const { store } = memoryCache({ 'user:1': 'null' });
-    await expect(
-      cachingBehavior({ cache: store })(
-        request,
-        nextOf(() => Result.success(1)),
+    const throwing: MediatorLogger = {
+      log: () => {
+        throw new Error('log down');
+      },
+    };
+    const quiet = memoryLogger(['warning']);
+    for (const logger of [throwing, quiet]) {
+      const r = await cachingBehavior({ cache: store, logger })(
+        { cacheKey: 'user:1' },
+        nextOf(() => Result.failure(Err.failure('E', 'e'))),
         ctx(),
-      ),
-    ).rejects.toThrow('Failed to deserialize cached value for key user:1');
+      );
+      expect(r.ok).toBe(false);
+    }
+    expect(quiet.entries.map((e) => e.level)).not.toContain('warning');
   });
 
   it('passes the signal to the cache', async () => {
