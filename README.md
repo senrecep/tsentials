@@ -87,7 +87,7 @@ npm install tsentials
 | `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata`, `DomainError` |
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
 | `tsentials/entity` | `createEntityBase`, `createEntityBaseWithId`, `createSoftDeletable`, `DomainEvent` |
-| `tsentials/http` | `fetchResult`, `RequestBuilder` |
+| `tsentials/http` | `fetchResult`, `RequestBuilder`, `notModified`, `checkIfMatch`, `computeETag` |
 | `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider`, `nextDayOfWeek`, `getAge`, `toDateOnly`, `toTimeOnly`, `msToDate` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
 | `tsentials/union` | `Union<T>` |
@@ -682,6 +682,25 @@ const status: HttpCode = HttpCodes.Ok;           // 200
 const notFound = HttpCodes.NotFound;             // 404
 const serverErr = HttpCodes.InternalServerError; // 500
 ```
+
+### Conditional requests
+
+Framework-agnostic helpers on the standard `Request`/`Response` types (RFC 9110 section 13).
+
+```typescript
+import { checkIfMatch, computeETag, formatETag, notModified } from 'tsentials/http';
+
+// GET: 304 Not Modified when If-None-Match (weak comparison, * matches) or If-Modified-Since matches
+const etag = formatETag(item.version);   // '"7"'; or await computeETag(body) for a SHA-256 tag
+return notModified(request, { etag, lastModified: item.updatedAt }, { 'cache-control': 'max-age=60' })
+  ?? Response.json(item, { headers: { etag, 'cache-control': 'max-age=60' } });
+
+// PUT/PATCH/DELETE/POST: If-Match with strong comparison
+const rejected = checkIfMatch(request, item && { etag: formatETag(item.version) }, { required: true });
+if (rejected) return rejected;   // problem+json: 412 Http.PreconditionFailed, 428 Http.PreconditionRequired, 400 Http.InvalidIfMatch
+```
+
+`parseETagList` and `compareETags` expose the header parsing and the strong/weak comparison. The `If-Match` check is not atomic with the write, so also pass the version as a concurrency token to the update.
 
 ---
 
