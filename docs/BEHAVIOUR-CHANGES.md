@@ -4,6 +4,8 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 ## Behaviour changes in the next release (unreleased)
 
+* **errors:** `Err.equals` now compares nested metadata by value: a nested metadata `Map` (such as the `innerException` map from `Err.fromException`) and a nested error created by `Err` (such as a `cause` entry) are compared recursively, and cyclic metadata terminates. Two errors whose nested metadata was built separately with the same content are now equal; they used to differ because nested values were compared by reference. Other values (plain objects, arrays) are still compared with `Object.is`.
+
 ## Behaviour changes in 3.0.0
 
 * **idempotency:** `withIdempotency` now defaults `unscopedKeyBehavior` to `'reject'`: a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) gets 400 `Idempotency.ScopeRequired` in `enforce`; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. It used to run without idempotency (`'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to restore the old behaviour.

@@ -280,6 +280,56 @@ describe('Err.equals — metadata', () => {
   });
 });
 
+describe('Err.equals — nested metadata', () => {
+  const meta = (r: Record<string, unknown>) => ErrorMetadata.fromRecord(r);
+
+  it('compares nested metadata maps by value', () => {
+    const a = Err.failure('A', 'a', meta({ inner: meta({ x: 1, deep: meta({ y: 2 }) }) }));
+    const b = Err.failure('A', 'a', meta({ inner: meta({ x: 1, deep: meta({ y: 2 }) }) }));
+    const c = Err.failure('A', 'a', meta({ inner: meta({ x: 1, deep: meta({ y: 3 }) }) }));
+    expect(Err.equals(a, b)).toBe(true);
+    expect(Err.equals(a, c)).toBe(false);
+  });
+
+  it('compares a nested AppError cause chain by value', () => {
+    const chain = (leaf: string) =>
+      Err.failure(
+        'Outer',
+        'o',
+        meta({ cause: Err.unexpected('Mid', 'm', meta({ cause: Err.notFound('Leaf', leaf) })) }),
+      );
+    expect(Err.equals(chain('l'), chain('l'))).toBe(true);
+    expect(Err.equals(chain('l'), chain('other'))).toBe(false);
+  });
+
+  it('compares fromException metadata with an innerException chain by value', () => {
+    const inner = new Error('inner');
+    const outer = new Error('outer', { cause: inner });
+    expect(Err.equals(Err.fromException(outer), Err.fromException(outer))).toBe(true);
+  });
+
+  it('does not treat a map and an error as equal', () => {
+    const e = Err.failure('X', 'x');
+    expect(
+      Err.equals(Err.failure('A', 'a', meta({ v: e })), Err.failure('A', 'a', meta({ v: meta({}) }))),
+    ).toBe(false);
+  });
+
+  it('terminates on cyclic metadata', () => {
+    const cyclic = () => {
+      const m = new Map<string, unknown>([['x', 1]]);
+      m.set('self', m);
+      return m;
+    };
+    expect(Err.equals(Err.failure('A', 'a', cyclic()), Err.failure('A', 'a', cyclic()))).toBe(
+      true,
+    );
+    const other = new Map<string, unknown>([['x', 2]]);
+    other.set('self', other);
+    expect(Err.equals(Err.failure('A', 'a', cyclic()), Err.failure('A', 'a', other))).toBe(false);
+  });
+});
+
 describe('AppError JSON serialization', () => {
   it('JSON.stringify emits code, description, type, numericType and metadata record', () => {
     const err = Err.validation(
