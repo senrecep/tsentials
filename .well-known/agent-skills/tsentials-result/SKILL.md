@@ -99,6 +99,7 @@ All static functions take `(result, ...)` as first argument. They are NOT currie
 | `Result.then(r, fn)` | `(Result<T>, (T) => Result<U>) => Result<U>` | Monadic bind (flatMap) |
 | `Result.map(r, fn)` | `(Result<T>, (T) => U) => Result<U>` | Transform success value |
 | `Result.ensure(r, pred, err)` | `(Result<T>, pred, AppError \| (T) => AppError) => Result<T>` | Guard — fails if predicate false |
+| `Result.thenEnsure(r, validator)` | `(Result<T>, (T) => Result<unknown>) => Result<T>` | Validate with a Result-returning check; keeps the original value on success, returns the check's errors on failure (C# `ThenEnsure`; use `then` to replace the value) |
 | `Result.tap(r, fn)` | `(Result<T>, (T) => void) => Result<T>` | Side effect on success |
 | `Result.tapError(r, fn)` | `(Result<T>, (AppError[]) => void) => Result<T>` | Side effect on failure |
 | `Result.tapErrorFirst(r, fn)` | `(Result<T>, (AppError) => void) => Result<T>` | Side effect on first error only |
@@ -109,7 +110,7 @@ All static functions take `(result, ...)` as first argument. They are NOT currie
 | `Result.switch(r, onOk, onErr)` | Void-only pattern match (side effects) |
 | `Result.switchFirst(r, onOk, onErr)` | Void switch using first error |
 | `Result.switchLast(r, onOk, onErr)` | Void switch using last error |
-| `Result.else(r, fallback)` | `(Result<T>, T \| (AppError[]) => T) => Result<T>` | Fallback value on failure |
+| `Result.else(r, fallback)` | `(Result<T>, T \| (AppError[]) => T) => Result<T>` | Fallback value on failure; a function-typed `fallback` is always called with the errors, so wrap a function value: `Result.else(r, () => fn)` |
 | `Result.compensate(r, fn)` | `(Result<T>, (AppError[]) => Result<T>) => Result<T>` | Recover from failure |
 | `Result.compensateFirst(r, fn)` | Recover using first error only |
 | `Result.recover(r, match, fn)` | Recover if ANY error matches (`match`: `ErrorType` or predicate); the first match goes to `fn` |
@@ -137,6 +138,7 @@ The sync `tap`, `tapError`, `tapErrorFirst`, `tapIf`, `tapErrorIf` and `switch*`
 | `Result.unwrap(r)` | Returns value or throws `ResultUnwrapError` |
 | `Result.unwrapOr(r, defaultValue)` | Returns value or default |
 | `Result.unwrapOrElse(r, fn)` | Returns value or computes from errors |
+| `Result.unwrapOrThrow(r, messageOrError?)` | Returns value; on failure throws `ResultUnwrapError` with your message (still carrying the errors), or the given `Error` as-is (C# `GetValueOrThrow`) |
 | `Result.deconstruct(r)` | `[ok: true, value: T, errors: null] \| [ok: false, value: null, errors: AppError[]]` |
 | `Result.tryGet(r)` | `[ok, value, errors]` tuple with undefined instead of null |
 
@@ -144,7 +146,7 @@ The sync `tap`, `tapError`, `tapErrorFirst`, `tapIf`, `tapErrorIf` and `switch*`
 
 | Function | Description |
 |----------|-------------|
-| `Result.and(results)` | All must succeed -> `Result<T[]>`, collects ALL errors |
+| `Result.and(results)` | All must succeed -> `Result<T[]>`, collects ALL errors, also for void results (C# non-generic `Result.And` stops at the first failure) |
 | `Result.or(results)` | First success wins, else all errors |
 | `Result.combine(r1, r2, ...)` | Heterogeneous -> `Result<[T1, T2, ...]>`, collects ALL errors |
 | `Result.flatten(r)` | `Result<Result<T>>` -> `Result<T>` |
@@ -164,6 +166,7 @@ These take a sync `Result<T>` and an async function:
 | `Result.thenAsync(r, fn)` | Async monadic bind |
 | `Result.mapAsync(r, fn)` | Async map |
 | `Result.ensureAsync(r, pred, err)` | Async ensure |
+| `Result.thenEnsureAsync(r, validator)` | Async thenEnsure |
 | `Result.tapAsync(r, fn)` | Async tap |
 | `Result.tapErrorAsync(r, fn)` | Async tapError |
 | `Result.mapErrorAsync(r, fn)` | Async mapError |
@@ -210,6 +213,7 @@ const price = chain(Result.success(100))
 | `.bind(fn)` | FlatMap — `fn` returns `Result<U>` |
 | `.map(fn)` | Transform the success value |
 | `.ensure(pred, error)` | Guard; fails if predicate false. `error: AppError \| (T) => AppError` |
+| `.thenEnsure(validator)` | Validate with `(T) => Result<unknown>`; keeps the value |
 | `.tap(fn)` | Side-effect on success |
 | `.tapError(fn)` | Side-effect on failure |
 | `.mapError(fn)` | Transform error array |
@@ -225,6 +229,7 @@ const price = chain(Result.success(100))
 | `.unwrap()` | Returns the underlying `Result<T>` |
 | `.unwrapOr(default)` | Returns value or default |
 | `.unwrapOrElse(fn)` | Returns value or computes from errors |
+| `.unwrapOrThrow(messageOrError?)` | Returns value or throws (see `Result.unwrapOrThrow`) |
 
 > **CRITICAL:** `.unwrap()` returns the underlying `Result<T>`, NOT the raw value. There is NO `.toResult()` method and NO `.getOrElse()` method on ResultChain.
 
@@ -235,6 +240,7 @@ const price = chain(Result.success(100))
 | `.thenAsync(fn)` | Async bind -> `Promise<ResultChain<U>>` |
 | `.mapAsync(fn)` | Async map -> `Promise<ResultChain<U>>` |
 | `.ensureAsync(pred, err)` | Async ensure -> `Promise<ResultChain<T>>` |
+| `.thenEnsureAsync(validator)` | Async thenEnsure -> `ResultAsync<T>` |
 | `.tapAsync(fn)` | Async tap -> `Promise<ResultChain<T>>` |
 | `.tapErrorAsync(fn)` | Async tapError -> `Promise<ResultChain<T>>` |
 | `.compensateAsync(fn)` | Async compensate -> `Promise<ResultChain<T>>` |
@@ -290,6 +296,7 @@ const profile = await fromAsync(fetchUser(userId))
 | `.andThen(fn)` | Monadic bind — `fn` returns `Result<U>`, `ResultAsync<U>`, or `Promise<Result<U>>` |
 | `.map(fn)` | Transform value (sync or async fn) |
 | `.ensure(pred, error)` | Guard (sync or async predicate) |
+| `.thenEnsure(validator)` | Validate with a validator returning `Result`, `ResultAsync` or `Promise<Result>`; keeps the value |
 | `.tap(fn)` | Side-effect on success (sync or async) |
 | `.tapError(fn)` | Side-effect on failure (sync or async) |
 | `.mapError(fn)` | Transform errors (sync or async) |
@@ -303,6 +310,7 @@ const profile = await fromAsync(fetchUser(userId))
 | `.match(onOk, onErr)` | Exhaustive match — returns `Promise<U>` |
 | `.unwrap()` | Returns `Promise<T>` — throws `ResultUnwrapError` if failed |
 | `.unwrapOr(default)` | Returns `Promise<T>` — value or default |
+| `.unwrapOrThrow(messageOrError?)` | Returns `Promise<T>` — rejects with `ResultUnwrapError(message)` or the given `Error` |
 | `.toResult()` | Returns `Promise<Result<T>>` — raw promise |
 
 > **CRITICAL:** There is NO `.getOrElse()` on ResultAsync. Use `.unwrapOr(default)` instead.
@@ -350,6 +358,12 @@ await Result.tryAsync((signal) => fetch(url, { signal }), { signal: ctrl.signal 
 Helpers (exported from `tsentials/result`): `isAbortError(e)`, `isCallerAbort(e, signal)`, `rethrowIfAborted(e, signal)`, `throwIfAborted(signal)`, `withAbort(promise, signal)`.
 
 ---
+
+## Differences from CSharpEssentials
+
+- `Result.and` collects every error, also over void results. C# non-generic `Result.And` returns at the first failure.
+- `else(fallback)` on `Result`, `ResultChain` and `ResultAsync` calls any function-typed `fallback` with the errors. To recover with a function value, wrap it: `.else(() => fn)`.
+- `httpStatusToErrorType` (`tsentials/http`) follows the C# `HttpStatusCodeMapper.ToErrorType` table (400/411/413-417/422 Validation, 401/407 Unauthorized, 403 Forbidden, 404/410 NotFound, 409/412/429 Conflict, 408 and 5xx Unexpected, else Failure). It is intentionally richer than C# `int.ToErrorType` in `CSharpEssentials.Errors` (only 400/401/403/404/409, 500 to Failure, anything else Unexpected), and it is not the inverse of `errorTypeToHttpStatus`: 500 maps to `Unexpected`, while `Failure` maps to 500.
 
 ## Critical Naming Rules
 

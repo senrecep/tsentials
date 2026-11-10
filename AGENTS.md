@@ -74,6 +74,7 @@ Result.lastError(r)   // AppError
 Result.then(r, fn)                // monadic bind → Result<U>  ← NOT .bind()
 Result.map(r, fn)                 // transform value
 Result.ensure(r, pred, err)       // guard — err can be a factory fn
+Result.thenEnsure(r, validator)   // validator returns Result; keeps r's value, or its errors
 Result.tap(r, fn)                 // side effect on success
 Result.tapError(r, fn)            // side effect on failure
 Result.match(r, onOk, onErr)      // exhaustive exit
@@ -94,6 +95,7 @@ Result.else(r, fallback)          // fallback value on failure
 Result.unwrap(r)                  // throws if failure
 Result.unwrapOr(r, default)       // default value on failure
 Result.unwrapOrElse(r, fn)        // computed default on failure
+Result.unwrapOrThrow(r, msg?)     // value, or throws ResultUnwrapError(msg) / a given Error
 Result.deconstruct(r)             // [ok, value, errors] tuple
 
 // Combination
@@ -239,6 +241,7 @@ Err.unauthorized('Auth.InvalidToken', 'Token expired')
 Err.forbidden('Permissions.Denied', 'Insufficient permissions')
 Err.fromException(error)                                    // wraps native Error
 Err.fromException(error, ErrorType.Unexpected, 'Net.Timeout')
+Err.fromException(error, ErrorType.Unexpected, { code: 'Net.Timeout', description: 'Upstream timed out' })
 Err.equals(errA, errB)                                      // structural equality
 Err.with(err, { code: 'Api.X' })                            // frozen copy with overrides (not { ...err })
 Err.fromJSON(json)                                          // Result<AppError>; bad shape → AppError.InvalidJson
@@ -251,6 +254,7 @@ const meta = ErrorMetadata.fromRecord({ field: 'email' })
 Err.validation('Email.Invalid', 'Bad format', meta)
 ErrorMetadata.combine(meta1, meta2)
 ErrorMetadata.toRecord(meta)
+ErrorMetadata.withStackTrace()   // { stackTrace: <current stack> }
 ```
 
 ### Rules — RuleEngine
