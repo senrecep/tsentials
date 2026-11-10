@@ -25,6 +25,7 @@ export { createSoftDeletable } from './entity/soft-deletable.js';
 export { Eq, type Eq as EqType } from './eq/index.js';
 export type { AppError } from './errors/app-error.js';
 export { Err, errorTypeToHttpStatus } from './errors/app-error.js';
+export { DomainError } from './errors/domain-error.js';
 export { ErrorMetadata } from './errors/error-metadata.js';
 export { ErrorType } from './errors/error-type.js';
 export { constant, flip, flow, identity, pipe } from './function/index.js';

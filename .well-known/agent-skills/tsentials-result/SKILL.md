@@ -86,7 +86,7 @@ All static functions take `(result, ...)` as first argument. They are NOT currie
 | `Result.fromError(error)` | Alias for `Result.failure(error)` |
 | `Result.successIf(cond, value, error)` | Success if true, failure otherwise |
 | `Result.failIf(cond, value, error)` | Failure if true, success otherwise |
-| `Result.try(fn, onError?)` | Catches thrown exceptions -> `Result<T>` |
+| `Result.try(fn, onError?)` | Catches thrown exceptions -> `Result<T>`; a thrown `DomainError` keeps its errors as-is, even with `onError` |
 | `Result.tryAsync(fn, onError?, { signal }?)` | Async version of `try` -> `Promise<Result<T>>`; `fn` receives the signal |
 
 > **CRITICAL:** `Result.try()` — NOT `Result.trySync()`. `trySync` does not exist.
@@ -116,7 +116,7 @@ All static functions take `(result, ...)` as first argument. They are NOT currie
 | `Result.mapEachError(r, e => AppError)` | Map every error one by one, in order |
 | `Result.failWhen(r, pred, err)` | Opposite of ensure — fails if predicate true |
 | `Result.ensureNotNull(r, err)` | Guards against null/undefined value |
-| `Result.tryCatch(r, fn, err?)` | Apply fn to value, catch exceptions |
+| `Result.tryCatch(r, fn, err?)` | Apply fn to value, catch exceptions; a thrown `DomainError` keeps its errors as-is |
 | `Result.always(r, fn)` | Unconditional — returns `fn(result)` |
 
 ### Conditional Pipeline

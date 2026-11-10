@@ -1,5 +1,6 @@
 import type { AppError } from '../errors/app-error.js';
 import { Err } from '../errors/app-error.js';
+import { DomainError } from '../errors/domain-error.js';
 import type { ErrorType } from '../errors/error-type.js';
 import {
   type AbortOptions,
@@ -226,17 +227,19 @@ export const Result = {
 
   /**
    * Wraps a throwing function, catching exceptions as Result.failure.
+   * A thrown DomainError becomes a failure with its carried errors as-is, even when
+   * `onError` is given; anything else goes through `onError` or `Err.fromException`.
    */
   try<T>(fn: () => T, onError?: (error: unknown) => AppError): Result<T> {
     try {
       return Result.success(fn());
     } catch (e) {
-      return Result.failure(onError ? onError(e) : Err.fromException(e));
+      return fromThrown(e, onError);
     }
   },
 
   /**
-   * Async version of Result.try.
+   * Async version of Result.try. A thrown DomainError keeps its carried errors.
    *
    * With `{ signal }`: `fn` receives the signal, and when the caller's signal is aborted
    * the abort PROPAGATES (the promise rejects with it) instead of becoming a failure —
@@ -259,7 +262,7 @@ export const Result = {
       return Result.success(await withAbort(fn(signal), signal));
     } catch (e) {
       rethrowIfAborted(e, signal);
-      return Result.failure(onError ? onError(e) : Err.fromException(e));
+      return fromThrown(e, onError);
     }
   },
 
@@ -488,7 +491,8 @@ export const Result = {
 
   /**
    * Wraps a function call that may throw, catching exceptions as Result.failure.
-   * Applied to an existing Result's success value.
+   * Applied to an existing Result's success value. A thrown DomainError keeps its
+   * carried errors, even when `error` is given.
    *
    * @example
    * Result.tryCatch(result, user => JSON.parse(user.config), Err.validation('JSON.Invalid', 'Bad config'));
@@ -502,12 +506,7 @@ export const Result = {
     try {
       return Result.success(fn(result.value));
     } catch (e) {
-      const err = error
-        ? typeof error === 'function'
-          ? (error as (error: unknown) => AppError)(e)
-          : error
-        : Err.fromException(e);
-      return Result.failure(err);
+      return fromThrown(e, error);
     }
   },
 
@@ -530,12 +529,7 @@ export const Result = {
     try {
       return Result.success(await fn(result.value));
     } catch (e) {
-      const err = error
-        ? typeof error === 'function'
-          ? (error as (error: unknown) => AppError)(e)
-          : error
-        : Err.fromException(e);
-      return Result.failure(err);
+      return fromThrown(e, error);
     }
   },
 
@@ -1029,11 +1023,22 @@ export async function settleInOrder<T>(
 }
 
 /**
- * Error thrown when calling Result.unwrap() on a failed Result.
+ * Turns a caught value into a failure: a DomainError with errors keeps them as-is,
+ * anything else goes through `error` (a fixed error or a mapper) or `Err.fromException`.
  */
-export class ResultUnwrapError extends Error {
-  constructor(public readonly errors: readonly AppError[]) {
-    super(`Cannot unwrap a failed Result. Errors: ${errors.map((e) => e.code).join(', ')}`);
+function fromThrown<T>(e: unknown, error?: AppError | ((error: unknown) => AppError)): Result<T> {
+  if (e instanceof DomainError && e.errors.length > 0) return Result.failureFrom(e.errors);
+  if (error === undefined) return Result.failure(Err.fromException(e));
+  return Result.failure(typeof error === 'function' ? error(e) : error);
+}
+
+/**
+ * Error thrown when calling Result.unwrap() on a failed Result. It is a DomainError, so
+ * `Result.try(() => Result.unwrap(r))` returns `r`'s errors as-is.
+ */
+export class ResultUnwrapError extends DomainError {
+  constructor(errors: readonly AppError[]) {
+    super(errors, `Cannot unwrap a failed Result. Errors: ${errors.map((e) => e.code).join(', ')}`);
     this.name = 'ResultUnwrapError';
   }
 }

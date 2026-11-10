@@ -8,6 +8,9 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 * **mediator:** `validationBehavior` now calls an object validator as a method, and uses its `validateAsync(request, { signal })` when it has one, instead of calling a detached `validate`. A `Validator` subclass from `tsentials/validation` used to fail every request with `Validator.Exception` because it lost `this`; it now validates, honours its `order`, and receives the caller's signal. An object with both methods now runs `validateAsync`, not `validate`.
 
+* **result:** `ResultUnwrapError` now extends the new `DomainError`, and `Result.try`, `Result.tryAsync`, `Result.tryCatch` and `Result.tryCatchAsync` return the errors a thrown `DomainError` carries as-is, even when an `onError` mapper or fixed error is given. `Result.try(() => Result.unwrap(r))` used to fail with one `ResultUnwrapError` Failure error; it now fails with `r`'s errors. `ResultUnwrapError.errors` is now a frozen copy of the array it was given.
+* **mediator:** `exceptionHandlingBehavior` returns the errors a thrown `DomainError` (including `ResultUnwrapError`) carries as-is instead of one `Err.fromException` Failure error.
+
 ## Behaviour changes in 3.0.0
 
 * **idempotency:** `withIdempotency` now defaults `unscopedKeyBehavior` to `'reject'`: a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) gets 400 `Idempotency.ScopeRequired` in `enforce`; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. It used to run without idempotency (`'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to restore the old behaviour.

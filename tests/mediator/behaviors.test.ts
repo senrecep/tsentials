@@ -1,4 +1,10 @@
-import { type AppError, Err, ErrorMetadata, ErrorType } from '../../src/errors/index.js';
+import {
+  type AppError,
+  DomainError,
+  Err,
+  ErrorMetadata,
+  ErrorType,
+} from '../../src/errors/index.js';
 import { Maybe } from '../../src/maybe/maybe.js';
 import {
   type CacheStore,
@@ -80,6 +86,41 @@ describe('exceptionHandlingBehavior', () => {
       type: ErrorType.Failure,
     });
     expect(r2.ok || r2.errors[0]).toMatchObject({ code: 'Error', description: 'after await' });
+  });
+
+  it('returns the errors of a thrown DomainError as-is', async () => {
+    const errors = [Err.conflict('Order.Shipped', 'shipped'), Err.notFound('Order.X', 'x')];
+    const r = await behavior(
+      1,
+      nextOf(() => {
+        throw new DomainError(errors);
+      }),
+      ctx(),
+    );
+    expect(r).toEqual({ ok: false, errors });
+    const empty = await behavior(
+      1,
+      nextOf(() => {
+        throw new DomainError([]);
+      }),
+      ctx(),
+    );
+    expect(empty.ok || empty.errors[0]?.code).toBe('DomainError');
+  });
+
+  it('propagates the caller abort even when a DomainError is thrown', async () => {
+    const controller = new AbortController();
+    const reason = new DomainError(Err.conflict('C', 'c'));
+    controller.abort(reason);
+    await expect(
+      behavior(
+        1,
+        nextOf(() => {
+          throw reason;
+        }),
+        ctx(controller.signal),
+      ),
+    ).rejects.toBe(reason);
   });
 
   it('converts a thrown value String() rejects (no prototype) instead of rejecting', async () => {

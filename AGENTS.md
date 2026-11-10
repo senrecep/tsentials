@@ -10,7 +10,7 @@
 
 ```typescript
 import { Result, ResultChain, ResultAsync, fromAsync, chain, maybeToResult, resultToMaybe } from 'tsentials/result';
-import { Err, AppError, ErrorType, ErrorMetadata } from 'tsentials/errors';
+import { Err, AppError, ErrorType, ErrorMetadata, DomainError } from 'tsentials/errors';
 import { Maybe, tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
 import { RuleEngine } from 'tsentials/rules';
 import type { Rule } from 'tsentials/rules';
