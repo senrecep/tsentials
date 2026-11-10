@@ -27,6 +27,7 @@ npm install tsentials
 | `tsentials/union` | `Union<T>` discriminated union utility | `tsentials-union` |
 | `tsentials/function` | `pipe`, `flow`, `identity`, `constant`, `flip` | `tsentials-function` |
 | `tsentials/string` | `toPascalCase`, `toCamelCase`, `toKebabCase`, `toSnakeCase`, `toMacroCase`, `toTrainCase`, `toTitleCase`, `toUnderscoreCamelCase` | `tsentials-string` |
+| `tsentials/uuid` | `uuidv7`, `monotonicUuidv7` | `tsentials-uuid` |
 
 ### Data Structures & Types
 
@@ -119,6 +120,7 @@ These modules are **not** re-exported from the root `tsentials` entry — import
 | Type-safe sorting and ordering | `tsentials/ord` |
 | Composable boolean predicates | `tsentials/predicate` |
 | Convert between naming conventions (camelCase, kebab-case, snake_case, ...) | `tsentials/string` |
+| Time-ordered UUIDv7 ids | `tsentials/uuid` |
 
 ---
 
@@ -153,6 +155,7 @@ import { safeJsonParse, safeJsonStringify, parseAndValidate } from 'tsentials/js
 import { isJson, isJsonObject }                         from 'tsentials/json';
 import type { Json, JsonObject }                        from 'tsentials/json';
 import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
+import { uuidv7, monotonicUuidv7 }                     from 'tsentials/uuid';
 import { Validator, CascadeMode }                      from 'tsentials/validation';
 import { ResiliencePolicy, retryIfFailed }             from 'tsentials/resilience';
 import { paginate, keysetOrdering, keysetPaginate }    from 'tsentials/pagination';
