@@ -13,8 +13,8 @@ npm install tsentials
 ## Import
 
 ```typescript
-import { defineEnum } from 'tsentials/enums';
-import type { EnumMember, EnumDefinition, EnumParseOptions, EnumNaming } from 'tsentials/enums';
+import { defineEnum, enumValueErrorToAppError } from 'tsentials/enums';
+import type { EnumMember, EnumDefinition, EnumParseOptions, EnumNaming, EnumValueError } from 'tsentials/enums';
 ```
 
 ---
@@ -45,6 +45,8 @@ Status.parse('x', { path: 'status' });    // path is included in the error
 Status.parseNumber(1);                    // success('Active')
 ```
 
+Ignoring case works like C# `OrdinalIgnoreCase`: each character is upper-cased on its own, so `'STRAßE'` does not match `'strasse'` (`ß` is not expanded to `SS`), and the Turkish dotless `ı` does not match `I` or `i`.
+
 `EnumParseOptions`: `mode` (`'input'` default | `'data'`), `path`, `acceptNumbers`, `acceptMemberNames`, `caseInsensitive`, `unknownValue` (`'useFallback' | 'reject'`).
 
 ## Format and inspect
@@ -60,6 +62,26 @@ Status.members;                     // EnumMemberInfo[] (name, wireName, value, 
 Status.infoOf('Active');
 ```
 
+## Errors
+
+```typescript
+const e: EnumValueError = Status.createError('nope', 'input', 'status');
+// { enumType: 'Status', value: 'nope', allowedValues: ['pending', 'on', 'disabled'], path: 'status', message }
+enumValueErrorToAppError(e);        // Validation AppError, code = path ?? 'Enum.InvalidValue'
+```
+
+`createError(value, mode?, path?)` builds the same details `parse` uses. In `'input'` mode the fallback member is left out of `allowedValues`; the default mode is `'data'`.
+
+## JSON
+
+Store members by wire name and read them back in data mode, so values written by a newer version map to the fallback member:
+
+```typescript
+const json = JSON.stringify({ status: Status.format('Active') });   // '{"status":"on"}'
+const { status } = JSON.parse(json) as { status: string };
+Status.parse(status, { mode: 'data' });                             // success('Active')
+```
+
 ---
 
 ## Patterns and pitfalls
@@ -68,5 +90,6 @@ Status.infoOf('Active');
 - `defineEnum` throws (programmer error): empty member list, more than one fallback, duplicate wire names or aliases, non-int32 values, or a wire name or alias that is empty, contains whitespace or a comma, or starts with a digit, `-`, `+` or `.` (it would be read as a number).
 - Numeric text is strict `-?[0-9]+` within int32; negative zero (`'-0'`, `'-00'`, `parseNumber(-0)`) is rejected.
 - `parse` never throws; invalid text is a `Validation` failure `Enum.InvalidValue`. Use `{ mode: 'data' }` only for trusted persisted data where an unknown value should degrade to the fallback.
+- No bitmask flags: there is no `[Flags]` equivalent. Use an array of members (`Status[]`) and validate each item.
 - Declare `type Status = EnumMember<typeof Status>` next to the const so one name serves as both value and type.
 - Combine with `tsentials/validation` (`rules.for('status').isDefinedEnum(Status)` or `isOneOf(Status, ['Active'])` with the definition itself) or `Result.then` for request validation.

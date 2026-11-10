@@ -426,3 +426,42 @@ describe('naming', () => {
     expect(toCamelCaseName('')).toBe('');
   });
 });
+
+describe('ignore-case matching follows C# OrdinalIgnoreCase', () => {
+  const Street = defineEnum('Street', { Strasse: 'strasse', Kirche: 'kirche' });
+  const Turkish = defineEnum('Turkish', { Ilk: 'ilk', Stop: 'stop', Isik: 'ışık' });
+  const Greek = defineEnum('Greek', { Sigma: 'σίσυφος' });
+
+  it('does not fold ß to SS (no one-to-many mappings)', () => {
+    expect(Street.parse('STRAßE').ok).toBe(false);
+    expect(Street.parse('straße', DATA_REJECT).ok).toBe(false);
+    expect(okValue(Street.parse('STRASSE'))).toBe('Strasse');
+  });
+
+  it('does not fold the Turkish dotless i, the dotted capital I or the long s', () => {
+    expect(Turkish.parse('ılk').ok).toBe(false);
+    expect(Turkish.parse('İLK').ok).toBe(false);
+    expect(Turkish.parse('ſTOP').ok).toBe(false);
+    expect(okValue(Turkish.parse('ILK'))).toBe('Ilk');
+    expect(okValue(Turkish.parse('ıŞık'))).toBe('Isik');
+    expect(Turkish.parse('IŞIK').ok).toBe(false);
+  });
+
+  it('folds final and medial sigma together', () => {
+    expect(okValue(Greek.parse('ΣΊΣΥΦΟΣ'))).toBe('Sigma');
+    expect(okValue(Greek.parse('σίσυφος'))).toBe('Sigma');
+  });
+
+  it('folds astral letters and treats ß and ẞ as different names', () => {
+    const E = defineEnum('E', { Deseret: '𐐨𐐯', Sharp: 'aß', Capital: 'aẞ' });
+    expect(okValue(E.parse('𐐀𐐇'))).toBe('Deseret');
+    expect(okValue(E.parse('Aß'))).toBe('Sharp');
+    expect(okValue(E.parse('Aẞ'))).toBe('Capital');
+  });
+
+  it('does not report names that differ only by ß and SS as ambiguous', () => {
+    const E = defineEnum('E', { Sharp: 'aß', Double: 'ass' });
+    expect(okValue(E.parse('ASS'))).toBe('Double');
+    expect(okValue(E.parse('Aß'))).toBe('Sharp');
+  });
+});
