@@ -60,6 +60,7 @@ Railway-oriented programming for TypeScript: `Result<T>`, `Maybe<T>`, Rule Engin
 - [Tree\<T\>](#treet)
 - [Record Utilities](#record-utilities)
 - [String Utilities](#string-utilities)
+- [UUIDv7](#uuidv7)
 - [Validation](#validation)
 - [Resilience](#resilience)
 - [Pagination](#pagination)
@@ -82,10 +83,10 @@ npm install tsentials
 | Import | Contents |
 |--------|----------|
 | `tsentials/result` | `Result<T>`, `ResultAsync<T>`, `ResultChain<T>`, `fromAsync`, `maybeToResult`, `resultToMaybe` |
-| `tsentials/maybe` | `Maybe<T>`, collection utilities |
+| `tsentials/maybe` | `Maybe<T>`, `MaybeAsync<T>`, collection utilities |
 | `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata` |
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
-| `tsentials/entity` | `createEntityBase`, `createSoftDeletable`, `DomainEvent` |
+| `tsentials/entity` | `createEntityBase`, `createEntityBaseWithId`, `createSoftDeletable`, `DomainEvent` |
 | `tsentials/http` | `fetchResult`, `RequestBuilder` |
 | `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider`, `nextDayOfWeek`, `getAge`, `toDateOnly`, `toTimeOnly`, `msToDate` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
@@ -100,6 +101,7 @@ npm install tsentials
 | `tsentials/tree` | `Tree<T>`, `map`, `filter`, `fold`, `drawTree` |
 | `tsentials/record` | `Record` utilities, `map`, `filter`, `pick`, `omit`, `reduce` |
 | `tsentials/string` | String case conversion utilities (Pascal, Camel, Kebab, Snake, Macro, Train, Title, _camelCase) |
+| `tsentials/uuid` | RFC 9562 UUIDv7 generators (`uuidv7`, `monotonicUuidv7`) |
 | `tsentials/validation` | `Validator<T>`, `RuleContext`, `RuleChain`, `CascadeMode` |
 | `tsentials/resilience` | `ResiliencePolicy`, `retryIfFailed` |
 | `tsentials/pagination` | `paginate`, `keysetOrdering`, `keysetPaginate`, cursor helpers |
@@ -220,11 +222,11 @@ Result.recoverFirst(Result.failure(notFoundError), ErrorType.NotFound, () => Res
 // Transform errors
 Result.mapError(
   Result.failure(err),
-  errs => errs.map(e => ({ ...e, code: `Wrapped.${e.code}` })),
+  errs => errs.map(e => Err.with(e, { code: `Wrapped.${e.code}` })),
 );
 
 // Map every error one by one, in order (mapper never runs on success)
-Result.mapEachError(Result.failure(err), e => ({ ...e, code: `Api.${e.code}` }));
+Result.mapEachError(Result.failure(err), e => Err.with(e, { code: `Api.${e.code}` }));
 
 // Fallback values
 Result.unwrapOr(Result.success(42), 0);       // 42
@@ -404,6 +406,22 @@ const filtered = await Maybe.filterAsync(profile, async p => p.isPublic);
 const found = await Maybe.fromTryAsync(signal => repo.find(id, { signal }), { signal });
 ```
 
+`MaybeAsync` is the fluent form: every step returns a `MaybeAsync` and the chain is awaited once.
+Callbacks can be sync or async, and each step takes an optional `{ signal }`.
+
+```typescript
+import { MaybeAsync } from 'tsentials/maybe';
+
+const name = await MaybeAsync.from(repo.find(id))
+  .filter(u => u.isActive)
+  .bind((u, signal) => loadProfile(u.id, { signal }), { signal })
+  .map(p => p.displayName)
+  .tapNone(() => console.warn('missing'))
+  .getOrElse(() => 'anonymous');
+
+const user = await MaybeAsync.from(repo.find(id)).toResult(Err.notFound('User.NotFound', 'No user')); // Result<User>
+```
+
 ### Collection Utilities
 
 ```typescript
@@ -510,7 +528,7 @@ Err.forbidden('Permissions.Denied', 'Insufficient permissions');
 Err.fromException(new Error('timeout'));
 Err.fromException(new Error('timeout'), ErrorType.Unexpected, 'Network.Timeout');
 
-// Equality: code + description + type + metadata (same keys, Object.is per value)
+// Equality: code + description + type + metadata (same keys; nested maps and Err errors by value, else Object.is)
 Err.equals(errA, errB);
 
 // Combine errors and error arrays into one flat array
@@ -518,6 +536,18 @@ Err.combine(errA, [errB, errC], errD);
 
 // JSON wire shape: { code, description, type, numericType, metadata? }
 JSON.stringify(Err.validation('Field.Required', 'Name is required'));
+
+// Revive with validation: Result<AppError>, a Validation failure (AppError.InvalidJson) on a bad shape.
+// Also reads the CSharpEssentials Error shape (any key case, type as name or ordinal).
+Err.fromJSON(JSON.parse(raw));
+
+// Copy with overrides: stays frozen and keeps toJSON, unlike { ...err }
+Err.with(err, { code: `Api.${err.code}` });
+Err.with(err, { metadata: undefined }); // drop metadata
+
+// Revive a whole Result (tsentials { ok, value | errors } or CSharpEssentials { isSuccess, value, errors })
+// A bad shape becomes a Result.InvalidJson failure; the success value is not validated.
+Result.fromJSON<User>(await response.json());
 ```
 
 ### Error Metadata
@@ -1107,6 +1137,19 @@ toUnderscoreCamelCase('helloWorld') // '_helloWorld'
 ```
 
 All functions handle: spaces, hyphens, underscores, camelCase, PascalCase, and mixed input.
+
+## UUIDv7
+
+RFC 9562 version 7 ids: a 48-bit Unix millisecond timestamp, then random bits from `crypto.getRandomValues`. They sort by creation time, which keeps database indexes compact.
+
+```typescript
+import { uuidv7, monotonicUuidv7 } from 'tsentials/uuid';
+
+uuidv7();          // '019a6f3c-8d2e-7b41-9f3a-1c2d3e4f5a6b'
+monotonicUuidv7(); // always sorts after the previous monotonicUuidv7() in this process
+```
+
+`monotonicUuidv7` puts an 18-bit counter in `rand_a` and the 6 bits after the variant, as the CSharpEssentials `Guider` version 7 monotonic generator does. The counter restarts at zero on each new millisecond. When it overflows, or the clock goes back, the timestamp moves one millisecond ahead so order holds. Use `uuidv7` when ids only need to be unique and roughly ordered.
 
 ## Validation
 

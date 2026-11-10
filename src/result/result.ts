@@ -1,5 +1,5 @@
 import type { AppError } from '../errors/app-error.js';
-import { Err } from '../errors/app-error.js';
+import { decodeAppError, Err, isJsonRecord, readJsonKey } from '../errors/app-error.js';
 import type { ErrorType } from '../errors/error-type.js';
 import {
   type AbortOptions,
@@ -69,6 +69,56 @@ export const Result = {
       throw new Error('Result.failureFrom requires at least one error.');
     }
     return Object.freeze({ ok: false, errors: Object.freeze([...errors]) }) as Result<T>;
+  },
+
+  /**
+   * Validates a parsed JSON value and revives it as a Result. Accepts the tsentials shape
+   * (`{ ok: true, value }` or `{ ok: false, errors }`) and the CSharpEssentials shape
+   * (`isSuccess` and/or `isFailure`, `value`, `errors`, keys in any case). Each error goes
+   * through {@link Err.fromJSON}. A success may carry an empty `errors` array; a failure needs
+   * at least one error. The success `value` is not validated.
+   *
+   * A bad shape returns a Validation failure with code `Result.InvalidJson` (or
+   * `AppError.InvalidJson` for a bad error entry, one per entry) and the offending `path`
+   * in its metadata, so check those codes to tell a bad payload from a decoded failure.
+   *
+   * @example
+   * const r = Result.fromJSON<User>(await response.json());
+   */
+  fromJSON<T = unknown>(json: unknown): Result<T> {
+    const invalid = (path: string, description: string) =>
+      Result.failure<T>(
+        Err.validation('Result.InvalidJson', `${path} ${description}.`, new Map([['path', path]])),
+      );
+    if (!isJsonRecord(json)) return invalid('result', 'must be an object');
+    const isFailure = readJsonKey(json, 'isFailure');
+    const flags = [
+      readJsonKey(json, 'ok'),
+      readJsonKey(json, 'isSuccess'),
+      typeof isFailure === 'boolean' ? !isFailure : isFailure,
+    ].filter((flag) => flag !== undefined);
+    if (flags.length === 0 || flags.some((flag) => typeof flag !== 'boolean')) {
+      return invalid('result', 'must have a boolean ok, isSuccess or isFailure flag');
+    }
+    if (new Set(flags).size > 1) return invalid('result', 'has contradicting success flags');
+    const errors = readJsonKey(json, 'errors');
+    if (flags[0]) {
+      if (
+        errors === undefined ||
+        errors === null ||
+        (Array.isArray(errors) && errors.length === 0)
+      ) {
+        return Result.success(readJsonKey(json, 'value') as T);
+      }
+      return invalid('result.errors', 'must be empty, null or absent on a success');
+    }
+    if (!Array.isArray(errors) || errors.length === 0) {
+      return invalid('result.errors', 'must be a non-empty array on a failure');
+    }
+    const decodedErrors = Result.and(
+      errors.map((e: unknown, i) => decodeAppError(e, `result.errors[${i}]`)),
+    );
+    return Result.failureFrom<T>(decodedErrors.ok ? decodedErrors.value : decodedErrors.errors);
   },
 
   // ─── TYPE GUARDS ──────────────────────────────────────────────────────────
@@ -187,7 +237,7 @@ export const Result = {
    * On success the mapper is never called.
    *
    * @example
-   * Result.mapEachError(r, e => ({ ...e, code: `Api.${e.code}` }));
+   * Result.mapEachError(r, e => Err.with(e, { code: `Api.${e.code}` }));
    */
   mapEachError<T>(result: Result<T>, fn: (error: AppError) => AppError): Result<T> {
     if (result.ok) return result;
