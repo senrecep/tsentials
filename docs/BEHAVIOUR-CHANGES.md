@@ -4,6 +4,8 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 ## Behaviour changes in the next release (unreleased)
 
+* **http:** `fetchResult` and `RequestBuilder` now cancel the response body when they do not read it (a non-JSON error response, 204/205, a non-JSON 2xx), so the connection is released instead of staying busy until the body is garbage collected. Code that reads `response.body` itself is unaffected: these paths never expose the `Response`.
+
 ## Behaviour changes in 3.0.0
 
 * **idempotency:** `withIdempotency` now defaults `unscopedKeyBehavior` to `'reject'`: a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) gets 400 `Idempotency.ScopeRequired` in `enforce`; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. It used to run without idempotency (`'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to restore the old behaviour.
