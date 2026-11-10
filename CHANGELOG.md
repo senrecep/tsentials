@@ -4,6 +4,25 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0](https://github.com/senrecep/tsentials/compare/v4.0.0...v4.1.0) (2026-11-10)
+
+
+### Added
+
+* add DomainEvent timing, Ord.betweenExclusive and stack-safe Tree traversal ([#64](https://github.com/senrecep/tsentials/issues/64)) ([7142239](https://github.com/senrecep/tsentials/commit/71422398e6ca1d8a1ee25c3f1f28ef4892d0da89))
+* **http:** add isBlockedAddress for SSRF checks ([#59](https://github.com/senrecep/tsentials/issues/59)) ([e66018b](https://github.com/senrecep/tsentials/commit/e66018b5e563b460330418389957e36acd5798d0))
+* **http:** resolve Retry-After dates against the response Date and add route and array query values ([#61](https://github.com/senrecep/tsentials/issues/61)) ([8fa613d](https://github.com/senrecep/tsentials/commit/8fa613d7a77d9213a5a572045a3348e5dfd48b79))
+* **pagination:** add a framework-agnostic keyset predicate builder ([#66](https://github.com/senrecep/tsentials/issues/66)) ([715cdba](https://github.com/senrecep/tsentials/commit/715cdbab986e9688206c6899af74b1d5c94d9f69))
+* **result:** add thenEnsure, unwrapOrThrow messages and a fromException description override ([#63](https://github.com/senrecep/tsentials/issues/63)) ([b7cfb4b](https://github.com/senrecep/tsentials/commit/b7cfb4b8a812f41a943e99189a311057e5e4f824))
+* **rules:** accept sync rules in async combinators and add ifTyped ([#65](https://github.com/senrecep/tsentials/issues/65)) ([9202cf6](https://github.com/senrecep/tsentials/commit/9202cf6c6e56dfae215301406371fcfcb8c9965e))
+
+
+### Fixed
+
+* **enums:** fold case like OrdinalIgnoreCase when parsing names ([#58](https://github.com/senrecep/tsentials/issues/58)) ([1ba6df9](https://github.com/senrecep/tsentials/commit/1ba6df9e9116c1c3580416786b7a965e7370a751))
+* **idempotency:** read idempotencyBehavior request settings consistently and document message inboxes ([#60](https://github.com/senrecep/tsentials/issues/60)) ([f571e92](https://github.com/senrecep/tsentials/commit/f571e921aa5f8ec8186d8e9df6d93a5f4114a505))
+* **union:** handle prototype property names as tags and accept iterables in Maybe helpers ([#57](https://github.com/senrecep/tsentials/issues/57)) ([9ac6e2e](https://github.com/senrecep/tsentials/commit/9ac6e2ee78bac1e5db10955307e948c6d629483a))
+
 ## [4.0.0](https://github.com/senrecep/tsentials/compare/v3.1.0...v4.0.0) (2026-11-10)
 
 
