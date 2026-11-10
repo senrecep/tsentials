@@ -59,21 +59,18 @@ describe('retry honours retryAfterMs metadata', () => {
     expect(delays).toEqual([30_000, 5_000]);
   });
 
-  it.each([
-    -1,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    '1000',
-    undefined,
-  ])('ignores an invalid retryAfterMs (%s)', async (value) => {
-    const { delays, time } = recordingTime();
-    await retryIfFailed(async () => Result.failure<number>(withRetryAfter(value)), {
-      maxAttempts: 1,
-      delay: 10,
-      time,
-    });
-    expect(delays).toEqual([10]);
-  });
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, '1000', undefined])(
+    'ignores an invalid retryAfterMs (%s)',
+    async (value) => {
+      const { delays, time } = recordingTime();
+      await retryIfFailed(async () => Result.failure<number>(withRetryAfter(value)), {
+        maxAttempts: 1,
+        delay: 10,
+        time,
+      });
+      expect(delays).toEqual([10]);
+    },
+  );
 
   it('ignores the metadata of a thrown value', async () => {
     const { delays, time } = recordingTime();

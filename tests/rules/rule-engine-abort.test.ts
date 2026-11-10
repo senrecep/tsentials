@@ -150,37 +150,43 @@ describe('async combinators forward the signal and stop on abort', () => {
     ['andAsync', RuleEngine.andAsync, ok],
     ['andAllAsync', RuleEngine.andAllAsync, ok],
     ['orAsync', RuleEngine.orAsync, fail],
-  ] as const)('%s does not run the next child after the caller aborts', async (_name, combinator, cont) => {
-    const controller = new AbortController();
-    const next = vi.fn(fail);
-    const first: AsyncRule<unknown> = async (ctx) => {
-      controller.abort();
-      return cont(ctx);
-    };
-    await expect(
-      RuleEngine.evaluateAsync(combinator(first, next), {}, { signal: controller.signal }),
-    ).rejects.toMatchObject({ name: 'AbortError' });
-    expect(next).not.toHaveBeenCalled();
-  });
+  ] as const)(
+    '%s does not run the next child after the caller aborts',
+    async (_name, combinator, cont) => {
+      const controller = new AbortController();
+      const next = vi.fn(fail);
+      const first: AsyncRule<unknown> = async (ctx) => {
+        controller.abort();
+        return cont(ctx);
+      };
+      await expect(
+        RuleEngine.evaluateAsync(combinator(first, next), {}, { signal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(next).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['linearTypedAsync', RuleEngine.linearTypedAsync, true],
     ['andTypedAsync', RuleEngine.andTypedAsync, true],
     ['orTypedAsync', RuleEngine.orTypedAsync, false],
-  ] as const)('%s forwards the signal and stops after abort', async (_name, combinator, succeed) => {
-    const controller = new AbortController();
-    const first = vi.fn(async (_ctx: unknown, s?: AbortSignal): Promise<ResultT<number>> => {
-      expect(s).toBe(controller.signal);
-      controller.abort();
-      return succeed ? Result.success(1) : Result.failure(err);
-    });
-    const next = vi.fn(okTyped);
-    await expect(combinator(first, next)({}, controller.signal)).rejects.toMatchObject({
-      name: 'AbortError',
-    });
-    expect(first).toHaveBeenCalledTimes(1);
-    expect(next).not.toHaveBeenCalled();
-  });
+  ] as const)(
+    '%s forwards the signal and stops after abort',
+    async (_name, combinator, succeed) => {
+      const controller = new AbortController();
+      const first = vi.fn(async (_ctx: unknown, s?: AbortSignal): Promise<ResultT<number>> => {
+        expect(s).toBe(controller.signal);
+        controller.abort();
+        return succeed ? Result.success(1) : Result.failure(err);
+      });
+      const next = vi.fn(okTyped);
+      await expect(combinator(first, next)({}, controller.signal)).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(next).not.toHaveBeenCalled();
+    },
+  );
 
   it('ifAsync forwards the signal to condition and branch', async () => {
     const controller = new AbortController();

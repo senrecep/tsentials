@@ -173,14 +173,12 @@ describe('string validators', () => {
       expect(Date.now() - start).toBeLessThan(200);
     });
 
-    it.each([
-      'user@example.com',
-      'USER@EXAMPLE.COM',
-      'user+tag@domain.co.uk',
-      'a@..b',
-    ])('passes for %j', (value) => {
-      expect(validate(value, (c) => c.emailAddress()).ok).toBe(true);
-    });
+    it.each(['user@example.com', 'USER@EXAMPLE.COM', 'user+tag@domain.co.uk', 'a@..b'])(
+      'passes for %j',
+      (value) => {
+        expect(validate(value, (c) => c.emailAddress()).ok).toBe(true);
+      },
+    );
   });
 
   describe('matches', () => {

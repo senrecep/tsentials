@@ -221,7 +221,12 @@ describe('deepClone', () => {
     const error = new Error('wrapper', { cause });
     const copy = deepClone(error);
     expect(copy.message).toBe('wrapper');
-    expect((copy as Error & { cause?: unknown }).cause).toStrictEqual(cause);
+    const copiedCause = (copy as Error & { cause?: unknown }).cause as Error;
+    expect(copiedCause).not.toBe(cause);
+    expect(copiedCause).toBeInstanceOf(Error);
+    expect(copiedCause.name).toBe(cause.name);
+    expect(copiedCause.message).toBe(cause.message);
+    expect(copiedCause.stack).toBe(cause.stack);
   });
 
   it('deep clones Boolean wrapper objects', () => {
