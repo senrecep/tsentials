@@ -210,3 +210,43 @@ describe('Union.groupBy', () => {
     expect(groups.circle).toBeUndefined();
   });
 });
+
+describe('Union with tags named like Object.prototype properties', () => {
+  type Odd = Union<{ constructor: number; __proto__: string; toString: boolean; plain: number }>;
+  const items: Odd[] = [
+    { tag: 'constructor', value: 1 },
+    { tag: '__proto__', value: 'a' },
+    { tag: 'toString', value: true },
+    { tag: 'constructor', value: 2 },
+    { tag: '__proto__', value: 'b' },
+  ];
+
+  it('groupBy keeps them as own keys', () => {
+    const groups = Union.groupBy(items);
+    expect(Object.hasOwn(groups, 'constructor')).toBe(true);
+    expect(Object.hasOwn(groups, '__proto__')).toBe(true);
+    expect(groups.constructor).toEqual([1, 2]);
+    expect(Object.getOwnPropertyDescriptor(groups, '__proto__')?.value).toEqual(['a', 'b']);
+    expect(groups.toString).toEqual([true]);
+    expect(Object.getPrototypeOf(groups)).toBe(Object.prototype);
+  });
+
+  it('match calls the own handler for each of them', () => {
+    const handlers = {
+      constructor: (n: number) => `c${n}`,
+      ['__proto__']: (s: string) => `p${s}`,
+      toString: (b: boolean) => `t${b}`,
+      plain: (n: number) => `x${n}`,
+    };
+    expect(items.map((u) => Union.match(u, handlers))).toEqual(['c1', 'pa', 'ttrue', 'c2', 'pb']);
+  });
+
+  it('match throws instead of calling an inherited property', () => {
+    const handlers = { plain: (n: number) => n } as never;
+    for (const tag of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      expect(() => Union.match({ tag, value: 1 } as Odd, handlers)).toThrow(
+        `Unhandled union tag: ${tag}`,
+      );
+    }
+  });
+});
