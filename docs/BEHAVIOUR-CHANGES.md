@@ -2,6 +2,8 @@
 
 This guide lists every change that alters the runtime behaviour of an existing tsentials API. Read the 4.0.0 section when upgrading from 3.x, the 3.1.0 section when upgrading from 3.0.x, the 3.0.0 section when upgrading from 2.x, the 2.0.0 section when upgrading from 1.x and the 1.0.0 section when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](../CHANGELOG.md).
 
+## Behaviour changes in the next release (unreleased)
+
 ## Behaviour changes in 4.0.0
 
 * **string:** the case converters split words on Unicode rules, as CSharpEssentials does. Any character that is not a letter, combining mark or digit now separates words and is dropped: `toSnakeCase('foo.bar')` gives `'foo_bar'` (it was `'foo.bar'`). A digit run is its own word: `toSnakeCase('hello123World')` gives `'hello_123_world'` (it was `'hello123world'`) and `toCamelCase('v2Api')` gives `'v2Api'` (it was `'v2api'`). Non-ASCII uppercase and titlecase letters start a word: `toKebabCase('überÄpfel')` gives `'über-äpfel'` (it was `'überäpfel'`), and `toSnakeCase('user用户Name')` gives `'user用户_name'`. Acronym splitting is unchanged (`'XMLParser'` gives `'xml_parser'`).
