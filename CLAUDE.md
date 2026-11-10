@@ -697,11 +697,7 @@ Vitest. `npm test` runs all 3114 tests across 82 test files (7 skipped by design
 Test files mirror src/ structure under `tests/`.
 
 ## Publishing
-```bash
-npm version patch   # bump version
-npm publish         # runs prepublishOnly: build + test first
-```
-Or push a `v*` tag to trigger the GitHub Actions publish workflow.
+Releases are automated with release-please. `feat`, `fix`, `perf` and `revert` commits on `main` update a release PR; merging it bumps `package.json`, writes CHANGELOG.md, tags `vX.Y.Z`, creates the GitHub Release and starts `publish.yml`. That workflow publishes to npm with trusted publishing (no token) and mirrors the package to GitHub Packages as `@senrecep/tsentials`. Do not bump the version by hand. To republish a tag, run `publish.yml` manually with the `tag` input.
 
 ## Lint (Biome)
 `npm run check` — lints and checks formatting.
