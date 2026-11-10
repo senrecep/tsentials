@@ -62,7 +62,13 @@ jobs:
         run: npm test
 
       - name: Publish
-        run: npm publish --provenance --access public --ignore-scripts
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "tsentials@$VERSION" version >/dev/null 2>&1; then
+            echo "tsentials@$VERSION is already published."
+          else
+            npm publish --provenance --access public --ignore-scripts
+          fi
 
   github-packages:
     name: Publish to GitHub Packages
