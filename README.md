@@ -85,7 +85,7 @@ npm install tsentials
 | `tsentials/maybe` | `Maybe<T>`, collection utilities |
 | `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata` |
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
-| `tsentials/entity` | `createEntityBase`, `createSoftDeletable`, `DomainEvent` |
+| `tsentials/entity` | `createEntityBase`, `createEntityBaseWithId`, `createSoftDeletable`, `DomainEvent` |
 | `tsentials/http` | `fetchResult`, `RequestBuilder` |
 | `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider`, `nextDayOfWeek`, `getAge`, `toDateOnly`, `toTimeOnly`, `msToDate` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
@@ -218,11 +218,11 @@ Result.recoverFirst(Result.failure(notFoundError), ErrorType.NotFound, () => Res
 // Transform errors
 Result.mapError(
   Result.failure(err),
-  errs => errs.map(e => ({ ...e, code: `Wrapped.${e.code}` })),
+  errs => errs.map(e => Err.with(e, { code: `Wrapped.${e.code}` })),
 );
 
 // Map every error one by one, in order (mapper never runs on success)
-Result.mapEachError(Result.failure(err), e => ({ ...e, code: `Api.${e.code}` }));
+Result.mapEachError(Result.failure(err), e => Err.with(e, { code: `Api.${e.code}` }));
 
 // Fallback values
 Result.unwrapOr(Result.success(42), 0);       // 42
@@ -508,7 +508,7 @@ Err.forbidden('Permissions.Denied', 'Insufficient permissions');
 Err.fromException(new Error('timeout'));
 Err.fromException(new Error('timeout'), ErrorType.Unexpected, 'Network.Timeout');
 
-// Equality: code + description + type + metadata (same keys, Object.is per value)
+// Equality: code + description + type + metadata (same keys; nested maps and Err errors by value, else Object.is)
 Err.equals(errA, errB);
 
 // Combine errors and error arrays into one flat array
@@ -516,6 +516,18 @@ Err.combine(errA, [errB, errC], errD);
 
 // JSON wire shape: { code, description, type, numericType, metadata? }
 JSON.stringify(Err.validation('Field.Required', 'Name is required'));
+
+// Revive with validation: Result<AppError>, a Validation failure (AppError.InvalidJson) on a bad shape.
+// Also reads the CSharpEssentials Error shape (any key case, type as name or ordinal).
+Err.fromJSON(JSON.parse(raw));
+
+// Copy with overrides: stays frozen and keeps toJSON, unlike { ...err }
+Err.with(err, { code: `Api.${err.code}` });
+Err.with(err, { metadata: undefined }); // drop metadata
+
+// Revive a whole Result (tsentials { ok, value | errors } or CSharpEssentials { isSuccess, value, errors })
+// A bad shape becomes a Result.InvalidJson failure; the success value is not validated.
+Result.fromJSON<User>(await response.json());
 ```
 
 ### Error Metadata
