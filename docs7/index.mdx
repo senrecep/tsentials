@@ -644,9 +644,13 @@ const users = await RequestBuilder.get('https://api.example.com/users')
   .query('page', '1')
   .query('limit', '10')
   .query({ sort: 'name', q: undefined })   // record form; null/undefined values are skipped
+  .query('tag', ['a', 'b'])                // array: tag=a&tag=b; a Date is sent as ISO 8601
   .timeout(5_000)
   .signal(signal)
   .send<User[]>();
+
+// Route placeholders: every {id} is replaced with the URL-encoded value
+await RequestBuilder.get('/users/{id}').route('id', userId).send<User>();
 
 // Relative URLs stay relative (resolved against the page origin as with plain fetch)
 await RequestBuilder.get('/api/users').send<User[]>();

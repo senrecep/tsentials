@@ -6,6 +6,8 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 ## Behaviour changes in the next release (unreleased)
 
+* **http:** the `retryAfterMs` metadata of a failed `fetchResult` / `RequestBuilder` response measures an HTTP-date `Retry-After` from the response `Date` header, as CSharpEssentials does, so a client whose clock is off still waits what the server asked. It used to measure from the local clock, which is still used when the response has no valid `Date` header. Delta-seconds are unchanged.
+
 ## Behaviour changes in 4.0.0
 
 * **string:** the case converters split words on Unicode rules, as CSharpEssentials does. Any character that is not a letter, combining mark or digit now separates words and is dropped: `toSnakeCase('foo.bar')` gives `'foo_bar'` (it was `'foo.bar'`). A digit run is its own word: `toSnakeCase('hello123World')` gives `'hello_123_world'` (it was `'hello123world'`) and `toCamelCase('v2Api')` gives `'v2Api'` (it was `'v2api'`). Non-ASCII uppercase and titlecase letters start a word: `toKebabCase('überÄpfel')` gives `'über-äpfel'` (it was `'überäpfel'`), and `toSnakeCase('user用户Name')` gives `'user用户_name'`. Acronym splitting is unchanged (`'XMLParser'` gives `'xml_parser'`).
