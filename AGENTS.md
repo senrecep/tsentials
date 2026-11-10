@@ -61,6 +61,7 @@ Result.ok()                                          // void success
 Result.successIf(cond, value, err)                   // conditional success
 Result.failIf(cond, value, err)                      // conditional failure
 Result.try(() => JSON.parse(raw), e => Err.validation('JSON.Invalid', 'Bad JSON'))
+Result.fromJSON<T>(json)                             // revive { ok, value | errors } or C# { isSuccess, value, errors }; bad shape → Result.InvalidJson failure
 
 // Type guards
 Result.isSuccess(r)   // r is { ok: true; value: T }
@@ -238,6 +239,8 @@ Err.forbidden('Permissions.Denied', 'Insufficient permissions')
 Err.fromException(error)                                    // wraps native Error
 Err.fromException(error, ErrorType.Unexpected, 'Net.Timeout')
 Err.equals(errA, errB)                                      // structural equality
+Err.with(err, { code: 'Api.X' })                            // frozen copy with overrides (not { ...err })
+Err.fromJSON(json)                                          // Result<AppError>; bad shape → AppError.InvalidJson
 
 // AppError properties: .code  .description  .type  .metadata
 // NOTE: it is .description, NOT .message

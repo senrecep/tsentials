@@ -1,3 +1,4 @@
+import type { EnumDefinition } from '../enums/enum-definition.js';
 import type { AppError } from '../errors/app-error.js';
 import { Err } from '../errors/app-error.js';
 import type { AbortOptions } from '../result/abort.js';
@@ -10,7 +11,10 @@ import {
   hasOnlyDefinedBits,
   invalidEnumMessage,
   isDefinedMember,
+  isEnumDefinition,
+  notAllowedDefinitionMessage,
   notAllowedEnumMessage,
+  parseWithDefinition,
 } from './enum-support.js';
 import type { Comparable, ContextState, ValidationMessage } from './internal.js';
 import {
@@ -741,16 +745,42 @@ export class RuleChain<TProp> {
    * `'<value>' is not a valid <enumName>. Allowed values: <members>.` Null is skipped.
    * `enumName` stands in for the type name, which TypeScript does not keep at runtime.
    * Flag combinations are not members: use {@link hasOnlyDefinedFlags} for flag enums.
+   *
+   * With an `EnumDefinition`, the value passes when the definition parses it in input mode
+   * (wire names, member names, aliases, int32 values; the fallback member is rejected) and the
+   * message lists the input wire names. Echoed values are cut to 64 characters plus `…`.
    */
+  isDefinedEnum<V extends string | number | null | undefined>(
+    this: RuleChain<V>,
+    definition: EnumDefinition<string>,
+    message?: ValidationMessage,
+  ): RuleChain<V>;
   isDefinedEnum<V extends string | number | null | undefined>(
     this: RuleChain<V>,
     enumObject: EnumLike,
     enumName: string,
     message?: ValidationMessage,
+  ): RuleChain<V>;
+  isDefinedEnum<V extends string | number | null | undefined>(
+    this: RuleChain<V>,
+    source: EnumLike | EnumDefinition<string>,
+    nameOrMessage?: string | ValidationMessage,
+    message?: ValidationMessage,
   ): RuleChain<V> {
     const value = this.value;
-    if (!this.hasFailed && !isNullish(value) && !isDefinedMember(enumObject, value)) {
-      this.#fail('IsDefinedEnum', message, () => invalidEnumMessage(enumObject, enumName, value));
+    if (this.hasFailed || isNullish(value)) return this;
+    if (isEnumDefinition(source)) {
+      if (!parseWithDefinition(source, value).ok) {
+        this.#fail(
+          'IsDefinedEnum',
+          nameOrMessage,
+          () => source.createError(String(value), 'input').message,
+        );
+      }
+    } else if (!isDefinedMember(source, value)) {
+      this.#fail('IsDefinedEnum', message, () =>
+        invalidEnumMessage(source, nameOrMessage as string, value),
+      );
     }
     return this;
   }
@@ -758,19 +788,54 @@ export class RuleChain<TProp> {
   /**
    * Fails when the value is not one of `allowed` → `<path>.IsOneOf`, listing only the
    * allowed members. Null is skipped.
+   *
+   * With an `EnumDefinition`, `allowed` holds member names; the value is parsed as in
+   * {@link isDefinedEnum} and must resolve to one of them. The message lists their wire names.
    */
+  isOneOf<V extends string | number | null | undefined, K extends string>(
+    this: RuleChain<V>,
+    definition: EnumDefinition<K>,
+    allowed: readonly K[],
+    message?: ValidationMessage,
+  ): RuleChain<V>;
   isOneOf<V extends string | number | null | undefined>(
     this: RuleChain<V>,
     enumObject: EnumLike,
     enumName: string,
     allowed: readonly NonNullable<V>[],
     message?: ValidationMessage,
+  ): RuleChain<V>;
+  isOneOf<V extends string | number | null | undefined>(
+    this: RuleChain<V>,
+    source: EnumLike | EnumDefinition<string>,
+    nameOrAllowed: string | readonly string[],
+    allowedOrMessage?: readonly NonNullable<V>[] | ValidationMessage,
+    message?: ValidationMessage,
   ): RuleChain<V> {
+    if (isEnumDefinition(source)) {
+      const allowed = nameOrAllowed as readonly string[];
+      if (!Array.isArray(allowed)) throw new TypeError('allowed must be an array.');
+      const value = this.value;
+      if (this.hasFailed || isNullish(value)) return this;
+      const parsed = parseWithDefinition(source, value);
+      if (!parsed.ok || !allowed.includes(parsed.value)) {
+        this.#fail('IsOneOf', allowedOrMessage as ValidationMessage | undefined, () =>
+          notAllowedDefinitionMessage(source, value, allowed),
+        );
+      }
+      return this;
+    }
+    const allowed = allowedOrMessage as readonly NonNullable<V>[];
     if (!Array.isArray(allowed)) throw new TypeError('allowed must be an array.');
     const value = this.value;
     if (!this.hasFailed && !isNullish(value) && !allowed.includes(value as NonNullable<V>)) {
       this.#fail('IsOneOf', message, () =>
-        notAllowedEnumMessage(enumObject, enumName, value, allowed as readonly (string | number)[]),
+        notAllowedEnumMessage(
+          source,
+          nameOrAllowed as string,
+          value,
+          allowed as readonly (string | number)[],
+        ),
       );
     }
     return this;
