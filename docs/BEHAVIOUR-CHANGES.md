@@ -4,6 +4,9 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 ## Behaviour changes in the next release (unreleased)
 
+* **enums:** `defineEnum` throws a `TypeError` for a wire name or alias that cannot be read back: empty, containing whitespace or a comma, or starting with a digit, a sign (`-`, `+`) or a dot (such text is read as a number). This also applies to wire names derived from member names by the naming policy. It used to accept them (only an empty wire name threw), and such a name could not be parsed.
+* **enums:** negative zero is rejected. `parse` fails for `-00`, `-000` and so on (as it already did for `-0`) instead of returning the member with value 0, and `parseNumber(-0)` fails with the value `-0` instead of returning that member. In data mode these values are not mapped to the fallback member.
+
 ## Behaviour changes in 3.0.0
 
 * **idempotency:** `withIdempotency` now defaults `unscopedKeyBehavior` to `'reject'`: a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) gets 400 `Idempotency.ScopeRequired` in `enforce`; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. It used to run without idempotency (`'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to restore the old behaviour.

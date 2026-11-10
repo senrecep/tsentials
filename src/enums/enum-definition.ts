@@ -197,6 +197,28 @@ function isNumericStart(c: string): boolean {
   return (c >= '0' && c <= '9') || c === '-' || c === '+' || c === '.';
 }
 
+// Same set as .NET char.IsWhiteSpace (JS \s also matches U+FEFF and misses U+0085).
+const WHITESPACE = /[\t-\r\u0085\p{Zs}\u2028\u2029]/u;
+
+/** Why a wire name or alias cannot be read back, or `undefined` when it is valid. */
+function invalidNameReason(text: string): string | undefined {
+  if (text === '') return 'it is empty';
+  if (WHITESPACE.test(text)) return 'it contains whitespace';
+  if (text.includes(',')) return 'it contains a comma, which separates flags';
+  return isNumericStart(text.charAt(0))
+    ? 'it starts with a digit, a sign or a dot, so it is read as a number'
+    : undefined;
+}
+
+function assertNameReadable(enumName: string, member: string, kind: string, text: string): void {
+  const reason = invalidNameReason(text);
+  if (reason !== undefined) {
+    throw new TypeError(
+      `Enum '${enumName}': the ${kind} '${text}' of '${member}' is invalid because ${reason}.`,
+    );
+  }
+}
+
 function hasOuterWhitespace(text: string): boolean {
   return text.trim().length !== text.length;
 }
@@ -237,8 +259,8 @@ export function defineEnum<K extends string>(
     }
     next = value + 1;
     const wireName = opts.wire ?? convertEnumName(key, naming);
-    if (wireName === '')
-      throw new TypeError(`Enum '${name}' member '${key}' has an empty wire name.`);
+    assertNameReadable(name, key, 'wire name', wireName);
+    for (const alias of opts.aliases ?? []) assertNameReadable(name, key, 'alias', alias);
     infos.push(
       Object.freeze({
         name: key,
@@ -357,13 +379,13 @@ export function defineEnum<K extends string>(
       if (
         !ctx.acceptNumbers ||
         text.length > MAX_NUMERIC_TEXT_LENGTH ||
-        !/^-?[0-9]+$/.test(text) ||
-        text === '-0'
+        !/^-?[0-9]+$/.test(text)
       ) {
         return fail(text, ctx);
       }
       const n = Number(text);
-      return isInt32(n) ? acceptRaw(n, text, ctx) : fail(text, ctx);
+      // '-0', '-00', ... give -0, which is not canonical.
+      return isInt32(n) && !Object.is(n, -0) ? acceptRaw(n, text, ctx) : fail(text, ctx);
     }
     if (hasOuterWhitespace(text)) return fail(text, ctx);
     return useFallback(text, ctx);
@@ -371,8 +393,9 @@ export function defineEnum<K extends string>(
 
   const parseNumber = (value: number, o?: EnumParseOptions): Result<K> => {
     const ctx = context(o);
-    const text = String(value);
-    if (!ctx.acceptNumbers || !isInt32(value)) return fail(text, ctx);
+    const negativeZero = Object.is(value, -0);
+    const text = negativeZero ? '-0' : String(value);
+    if (!ctx.acceptNumbers || !isInt32(value) || negativeZero) return fail(text, ctx);
     return acceptRaw(value, text, ctx);
   };
 

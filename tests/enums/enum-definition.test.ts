@@ -120,7 +120,7 @@ describe('parse accepted in both modes', () => {
 });
 
 describe('parse malformed values', () => {
-  it.each(['', ' pending', 'pending ', '1.0', '0x1', '+1', '-0', '99999999999', '.5'])(
+  it.each(['', ' pending', 'pending ', '1.0', '0x1', '+1', '-0', '-00', '-000', '99999999999', '.5'])(
     'rejects %j in both modes with the raw value',
     (text) => {
       for (const opts of [INPUT, DATA]) {
@@ -329,6 +329,64 @@ describe('ambiguous member sets are rejected', () => {
         "Enum 'E': 'U1' is marked as fallback as well as 'U2'; keep one fallback member.",
       ),
     );
+  });
+});
+
+describe('wire name and alias format', () => {
+  it.each([
+    ['', 'it is empty'],
+    ['in progress', 'it contains whitespace'],
+    ['tab\there', 'it contains whitespace'],
+    ['nbsp\u00a0x', 'it contains whitespace'],
+    ['nel\u0085x', 'it contains whitespace'],
+    ['a,b', 'it contains a comma, which separates flags'],
+    ['1st', 'it starts with a digit, a sign or a dot, so it is read as a number'],
+    ['-x', 'it starts with a digit, a sign or a dot, so it is read as a number'],
+    ['+x', 'it starts with a digit, a sign or a dot, so it is read as a number'],
+    ['.x', 'it starts with a digit, a sign or a dot, so it is read as a number'],
+  ])('throws on the wire name %j', (wire, reason) => {
+    expect(() => defineEnum('E', { A: wire })).toThrow(
+      new TypeError(`Enum 'E': the wire name '${wire}' of 'A' is invalid because ${reason}.`),
+    );
+  });
+
+  it('throws on an invalid alias', () => {
+    expect(() => defineEnum('E', { A: { aliases: ['ok', '2'] } })).toThrow(
+      new TypeError(
+        "Enum 'E': the alias '2' of 'A' is invalid because it starts with a digit, a sign or a dot, so it is read as a number.",
+      ),
+    );
+  });
+
+  it('checks derived wire names too', () => {
+    expect(() => defineEnum('E', { '1st': {} })).toThrow(
+      "the wire name '1st' of '1st' is invalid because it starts with a digit",
+    );
+    expect(() => defineEnum('E', { 'Two Words': {} }, { naming: 'camelCase' })).toThrow(
+      "the wire name 'two Words' of 'Two Words' is invalid because it contains whitespace",
+    );
+  });
+
+  it('accepts names with inner signs, dots and digits', () => {
+    const E = defineEnum('E', { A: 'a-1.b+2', B: { aliases: ['x_9', '\ufeffbom'] } });
+    expect(okValue(E.parse('a-1.b+2'))).toBe('A');
+    expect(okValue(E.parse('x_9'))).toBe('B');
+  });
+});
+
+describe('negative zero', () => {
+  it('parseNumber(-0) is rejected', () => {
+    const E = defineEnum('E', { Zero: {}, One: {} });
+    for (const opts of [INPUT, DATA]) {
+      const r = E.parseNumber(-0, opts);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.errors[0]?.metadata?.get('value')).toBe('-0');
+    }
+    expect(okValue(E.parseNumber(0))).toBe('Zero');
+  });
+
+  it("'-00' does not map to the fallback in data mode", () => {
+    expect(ParserStatus.parse('-00', DATA).ok).toBe(false);
   });
 });
 
