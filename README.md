@@ -508,7 +508,7 @@ Err.forbidden('Permissions.Denied', 'Insufficient permissions');
 Err.fromException(new Error('timeout'));
 Err.fromException(new Error('timeout'), ErrorType.Unexpected, 'Network.Timeout');
 
-// Equality: code + description + type + metadata (same keys, Object.is per value)
+// Equality: code + description + type + metadata (same keys; nested maps and Err errors by value, else Object.is)
 Err.equals(errA, errB);
 
 // Combine errors and error arrays into one flat array

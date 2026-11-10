@@ -73,12 +73,40 @@ const make = (
   return Object.freeze(error);
 };
 
-const sameMetadata = (a: ErrorMetadata | undefined, b: ErrorMetadata | undefined): boolean => {
+// Pairs already under comparison; a revisited pair is assumed equal so cyclic metadata terminates.
+type Seen = Map<object, Set<object>>;
+
+const isErrCreated = (value: unknown): value is AppError =>
+  typeof value === 'object' &&
+  value !== null &&
+  (value as { toJSON?: unknown }).toJSON === toJSONMethod;
+
+const sameErrors = (a: AppError, b: AppError, seen: Seen): boolean =>
+  a.code === b.code &&
+  a.description === b.description &&
+  a.type === b.type &&
+  sameMetadata(a.metadata, b.metadata, seen);
+
+// Nested metadata maps and Err-created errors compare by value; other values use Object.is.
+const sameValue = (a: unknown, b: unknown, seen: Seen): boolean => {
+  if (Object.is(a, b)) return true;
+  if (a instanceof Map && b instanceof Map) return sameMetadata(a, b, seen);
+  return isErrCreated(a) && isErrCreated(b) && sameErrors(a, b, seen);
+};
+
+const sameMetadata = (
+  a: ErrorMetadata | undefined,
+  b: ErrorMetadata | undefined,
+  seen: Seen,
+): boolean => {
   if (a === undefined || b === undefined) return a === b;
   if (a === b) return true;
   if (a.size !== b.size) return false;
+  const pairs = seen.get(a) ?? new Set<object>();
+  if (pairs.has(b)) return true;
+  seen.set(a, pairs.add(b));
   for (const [key, value] of a) {
-    if (!b.has(key) || !Object.is(value, b.get(key))) return false;
+    if (!b.has(key) || !sameValue(value, b.get(key), seen)) return false;
   }
   return true;
 };
@@ -194,16 +222,13 @@ export const Err = {
 
   /**
    * Checks equality between two AppError values: code, description and type must match,
-   * and metadata must be both absent or have the same keys with `Object.is`-equal values
-   * (absent metadata never equals present metadata, even if empty).
+   * and metadata must be both absent or have the same keys with equal values
+   * (absent metadata never equals present metadata, even if empty). Nested metadata maps
+   * and nested errors created by `Err` are compared by value, recursively and cycle-safe;
+   * any other value is compared with `Object.is`.
    */
   equals(a: AppError, b: AppError): boolean {
-    return (
-      a.code === b.code &&
-      a.description === b.description &&
-      a.type === b.type &&
-      sameMetadata(a.metadata, b.metadata)
-    );
+    return sameErrors(a, b, new Map());
   },
 
   /**
