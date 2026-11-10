@@ -302,6 +302,7 @@ await fetchResult.post('/users', body)
 await fetchResult.put('/users/1', body)
 await fetchResult.patch('/users/1', partial)
 await fetchResult.delete('/users/1')
+await fetchResult.get<string>('/export.csv', { responseType: 'text' }) // also 'blob' | 'arrayBuffer'
 
 // Fluent builder
 const users = await RequestBuilder.get('/users')

@@ -1,6 +1,6 @@
 import { IDEMPOTENCY_KEY_HEADER } from '../idempotency/constants.js';
 import type { Result } from '../result/result.js';
-import type { FetchResultInit } from './fetch-result.js';
+import type { FetchResultInit, ResponseBodyType } from './fetch-result.js';
 import { fetchResult, sendJson } from './fetch-result.js';
 import { type IdempotencyKeyOptions, idempotencyKeyOrNew } from './idempotency-client.js';
 
@@ -39,6 +39,7 @@ export class RequestBuilder {
   #jsonContentType = false;
   #signal: AbortSignal | undefined;
   #timeout: number | undefined;
+  #responseType: ResponseBodyType | undefined;
   #idempotencyKey: string | undefined;
 
   private constructor(method: string, url: string | URL) {
@@ -184,6 +185,17 @@ export class RequestBuilder {
     return this;
   }
 
+  /**
+   * Sets how a 2xx body is read (default `'json'`). `'text'`, `'blob'` and `'arrayBuffer'` give a
+   * `string`, `Blob` or `ArrayBuffer` whatever the content type; see {@link FetchResultInit.responseType}.
+   * @example
+   * const csv = await RequestBuilder.get('/export.csv').responseType('text').send<string>();
+   */
+  responseType(type: ResponseBodyType): this {
+    this.#responseType = type;
+    return this;
+  }
+
   /** Builds the final URL string: query params are appended, existing query/hash kept as-is. */
   #buildUrl(): string {
     if (this.#query.length === 0) return this.#url;
@@ -208,6 +220,7 @@ export class RequestBuilder {
       body: this.#body,
       ...(this.#signal !== undefined && { signal: this.#signal }),
       ...(this.#timeout !== undefined && { timeout: this.#timeout }),
+      ...(this.#responseType !== undefined && { responseType: this.#responseType }),
     };
 
     return this.#hasJsonPayload

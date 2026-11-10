@@ -67,6 +67,16 @@ POST, PUT, and PATCH automatically set `Content-Type: application/json` and stri
 
 A 2xx JSON response with an empty or `null` body is a NotFound failure (code `NotFound`), except for `fetchResult.delete`, which succeeds with `undefined`. 204/205 and non-JSON responses are void successes. A body that is not read (204/205, a non-JSON 2xx or error response) is cancelled so the connection is released.
 
+### Text and binary bodies
+
+Set `responseType` (`'text'`, `'blob'` or `'arrayBuffer'`) to read a 2xx body as a `string`, `Blob` or `ArrayBuffer` whatever its content type; the default `'json'` keeps the rules above. An empty body or 204/205 gives an empty value, not NotFound. Error responses go through the same ProblemDetails parsing, a read error is an `Unexpected` failure with the response status, a timeout is `Http.Timeout`, and the caller's abort still rejects.
+
+```typescript
+const csv = await fetchResult.get<string>('/export.csv', { responseType: 'text' });
+const pdf = await RequestBuilder.get('/invoice/7').responseType('blob').send<Blob>();
+const bytes = await fetchResult.post<ArrayBuffer>('/render', { id: 7 }, { responseType: 'arrayBuffer' });
+```
+
 ---
 
 ## RequestBuilder — fluent request construction
