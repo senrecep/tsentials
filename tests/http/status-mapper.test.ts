@@ -412,6 +412,18 @@ describe('problemDetailsToErrors with CSharpEssentials.AspNetCore errorCodes', (
     ]);
   });
 
+  it('reads the validation errors of the Dictionary format, keyed by code', () => {
+    // Same three errors with o.ValidationErrorsFormat = ValidationErrorsFormat.Dictionary.
+    const body = JSON.parse(
+      '{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"Validation Error","status":400,"detail":"Email format is incorrect.","instance":"/users","errorCodes":["User.InvalidEmail","User.NameRequired"],"errors":{"User.InvalidEmail":["Email format is incorrect."],"User.NameRequired":["Name is required.","Name must not be blank."]},"traceId":"57b9e27e1842a381e03889e4975314fd"}',
+    );
+    expect(pick(problemDetailsToErrors(400, body))).toEqual([
+      ['User.InvalidEmail', ErrorType.Validation, 'Email format is incorrect.'],
+      ['User.NameRequired', ErrorType.Validation, 'Name is required.'],
+      ['User.NameRequired', ErrorType.Validation, 'Name must not be blank.'],
+    ]);
+  });
+
   it('adds the non-validation codes of a mixed body in errorCodes order', () => {
     // [Error.Validation("User.InvalidEmail", ...), Error.Conflict("User.EmailTaken", ...)].ToProblemResult()
     const body = JSON.parse(

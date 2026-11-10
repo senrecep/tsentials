@@ -94,6 +94,32 @@ describe('fetchResult.get', () => {
     }
   });
 
+  it('keeps the domain code of a CSharpEssentials.AspNetCore problem body', async () => {
+    // Body written verbatim by CSharpEssentials.AspNetCore 8.0.0 with the default options.
+    const body =
+      '{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"detail":"No user with id 42.","instance":"/users/42","errorCodes":["User.NotFound"],"traceId":"550415b3078b017937693bd7d816b4ff"}';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(body, {
+            status: 404,
+            headers: { 'content-type': 'application/problem+json' },
+          }),
+        ),
+      ),
+    );
+    const result = await fetchResult.get<unknown>('https://api.example.com/users/42');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]!.code).toBe('User.NotFound');
+      expect(result.errors[0]!.type).toBe(ErrorType.NotFound);
+      expect(result.errors[0]!.description).toBe('No user with id 42.');
+      expect(result.errors[0]!.metadata?.get('httpStatus')).toBe(404);
+    }
+  });
+
   it('returns failure on 500', async () => {
     vi.stubGlobal(
       'fetch',
