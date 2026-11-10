@@ -4,6 +4,9 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 ## Behaviour changes in the next release (unreleased)
 
+* **entity:** the object from `createEntityBaseWithId` now keeps `domainEvents`, `createdAt`, `createdBy`, `updatedAt` and `updatedBy` live, so they reflect later `raise`, `clearDomainEvents`, `setCreatedInfo` and `setUpdatedInfo` calls. They used to keep the values they had when the object was created. `createEntityBaseWithId` and `EntityBaseWithId` are now also exported from `tsentials/entity`.
+* **entity:** `raise` throws a `TypeError` when the event is `null` or `undefined`, and `setCreatedInfo` / `setUpdatedInfo` throw a `RangeError` when the date is not a valid `Date` (not a `Date`, or an invalid one such as `new Date('x')`). Nothing is stored in that case. They used to store the value.
+
 ## Behaviour changes in 3.0.0
 
 * **idempotency:** `withIdempotency` now defaults `unscopedKeyBehavior` to `'reject'`: a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) gets 400 `Idempotency.ScopeRequired` in `enforce`; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. It used to run without idempotency (`'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to restore the old behaviour.

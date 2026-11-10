@@ -1,6 +1,6 @@
 ---
 name: tsentials-entity
-description: Use when building DDD domain models — createEntityBase() mixin factory for aggregate roots with audit fields and domain events, createSoftDeletable() for soft deletion lifecycle, and DomainEvent marker interface for event-driven design. Uses composition (private field delegation), not class inheritance.
+description: Use when building DDD domain models — createEntityBase() and createEntityBaseWithId() mixin factories for aggregate roots with audit fields and domain events, createSoftDeletable() for soft deletion lifecycle, and DomainEvent marker interface for event-driven design. Uses composition (private field delegation), not class inheritance.
 ---
 
 # tsentials/entity
@@ -16,8 +16,8 @@ npm install tsentials
 ## Import
 
 ```typescript
-import { createEntityBase, createSoftDeletable } from 'tsentials/entity';
-import type { EntityBase, SoftDeletable, DomainEvent, DomainEventTiming } from 'tsentials/entity';
+import { createEntityBase, createEntityBaseWithId, createSoftDeletable } from 'tsentials/entity';
+import type { EntityBase, EntityBaseWithId, SoftDeletable, DomainEvent, DomainEventTiming } from 'tsentials/entity';
 import type { CreationAudit, ModificationAudit, FullAudit } from 'tsentials/entity';
 ```
 
@@ -45,6 +45,12 @@ class Order {
 }
 ```
 
+### Guards
+
+- `raise(event)` throws a `TypeError` when `event` is `null` or `undefined`.
+- `setCreatedInfo` and `setUpdatedInfo` throw a `RangeError` when the date is not a valid `Date` (for example `new Date('x')`).
+- Nothing is stored when a guard throws.
+
 ### EntityBase Interface
 
 ```typescript
@@ -71,6 +77,31 @@ interface ModificationAudit {
 }
 
 interface FullAudit extends CreationAudit, ModificationAudit {}
+```
+
+---
+
+## createEntityBaseWithId()
+
+Same as `createEntityBase()` plus a typed `id` and `setId(id)`. The optional argument is the initial id. Reading `id` before it is set throws `Error('Entity ID has not been set.')`. All `EntityBase` getters stay live: `domainEvents` and the audit fields reflect later `raise` and setter calls.
+
+```typescript
+class User {
+  private readonly _base = createEntityBaseWithId<string>();
+
+  get id() { return this._base.id; }
+  setId(id: string) { this._base.setId(id); }
+  get domainEvents() { return this._base.domainEvents; }
+  raise(event: DomainEvent) { this._base.raise(event); }
+  // ...delegate the other EntityBase members
+}
+```
+
+```typescript
+interface EntityBaseWithId<TId> extends EntityBase {
+  readonly id: TId;
+  setId(id: TId): void;
+}
 ```
 
 ---
@@ -195,6 +226,7 @@ order.clearDomainEvents(); // returns the cleared events array
 | Factory | Returns | Parameters |
 |---------|---------|------------|
 | `createEntityBase()` | `EntityBase` | None |
+| `createEntityBaseWithId<TId>(id?)` | `EntityBaseWithId<TId>` | Optional initial id |
 | `createSoftDeletable()` | `SoftDeletable` | None |
 
 | EntityBase Method | Signature |
