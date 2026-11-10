@@ -7,112 +7,112 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./errors": {
-      "import": "./dist/errors/index.js",
-      "types": "./dist/errors/index.d.ts"
+      "types": "./dist/errors/index.d.ts",
+      "import": "./dist/errors/index.js"
     },
     "./result": {
-      "import": "./dist/result/index.js",
-      "types": "./dist/result/index.d.ts"
+      "types": "./dist/result/index.d.ts",
+      "import": "./dist/result/index.js"
     },
     "./maybe": {
-      "import": "./dist/maybe/index.js",
-      "types": "./dist/maybe/index.d.ts"
+      "types": "./dist/maybe/index.d.ts",
+      "import": "./dist/maybe/index.js"
     },
     "./rules": {
-      "import": "./dist/rules/index.js",
-      "types": "./dist/rules/index.d.ts"
+      "types": "./dist/rules/index.d.ts",
+      "import": "./dist/rules/index.js"
     },
     "./http": {
-      "import": "./dist/http/index.js",
-      "types": "./dist/http/index.d.ts"
+      "types": "./dist/http/index.d.ts",
+      "import": "./dist/http/index.js"
     },
     "./entity": {
-      "import": "./dist/entity/index.js",
-      "types": "./dist/entity/index.d.ts"
+      "types": "./dist/entity/index.d.ts",
+      "import": "./dist/entity/index.js"
     },
     "./time": {
-      "import": "./dist/time/index.js",
-      "types": "./dist/time/index.d.ts"
+      "types": "./dist/time/index.d.ts",
+      "import": "./dist/time/index.js"
     },
     "./clone": {
-      "import": "./dist/clone/index.js",
-      "types": "./dist/clone/index.d.ts"
+      "types": "./dist/clone/index.d.ts",
+      "import": "./dist/clone/index.js"
     },
     "./union": {
-      "import": "./dist/union/index.js",
-      "types": "./dist/union/index.d.ts"
+      "types": "./dist/union/index.d.ts",
+      "import": "./dist/union/index.js"
     },
     "./json": {
-      "import": "./dist/json/index.js",
-      "types": "./dist/json/index.d.ts"
+      "types": "./dist/json/index.d.ts",
+      "import": "./dist/json/index.js"
     },
     "./function": {
-      "import": "./dist/function/index.js",
-      "types": "./dist/function/index.d.ts"
+      "types": "./dist/function/index.d.ts",
+      "import": "./dist/function/index.js"
     },
     "./eq": {
-      "import": "./dist/eq/index.js",
-      "types": "./dist/eq/index.d.ts"
+      "types": "./dist/eq/index.d.ts",
+      "import": "./dist/eq/index.js"
     },
     "./predicate": {
-      "import": "./dist/predicate/index.js",
-      "types": "./dist/predicate/index.d.ts"
+      "types": "./dist/predicate/index.d.ts",
+      "import": "./dist/predicate/index.js"
     },
     "./array": {
-      "import": "./dist/array/index.js",
-      "types": "./dist/array/index.d.ts"
+      "types": "./dist/array/index.d.ts",
+      "import": "./dist/array/index.js"
     },
     "./ord": {
-      "import": "./dist/ord/index.js",
-      "types": "./dist/ord/index.d.ts"
+      "types": "./dist/ord/index.d.ts",
+      "import": "./dist/ord/index.js"
     },
     "./these": {
-      "import": "./dist/these/index.js",
-      "types": "./dist/these/index.d.ts"
+      "types": "./dist/these/index.d.ts",
+      "import": "./dist/these/index.js"
     },
     "./tree": {
-      "import": "./dist/tree/index.js",
-      "types": "./dist/tree/index.d.ts"
+      "types": "./dist/tree/index.d.ts",
+      "import": "./dist/tree/index.js"
     },
     "./record": {
-      "import": "./dist/record/index.js",
-      "types": "./dist/record/index.d.ts"
+      "types": "./dist/record/index.d.ts",
+      "import": "./dist/record/index.js"
     },
     "./string": {
-      "import": "./dist/string/index.js",
-      "types": "./dist/string/index.d.ts"
+      "types": "./dist/string/index.d.ts",
+      "import": "./dist/string/index.js"
     },
     "./uuid": {
-      "import": "./dist/uuid/index.js",
-      "types": "./dist/uuid/index.d.ts"
+      "types": "./dist/uuid/index.d.ts",
+      "import": "./dist/uuid/index.js"
     },
     "./validation": {
-      "import": "./dist/validation/index.js",
-      "types": "./dist/validation/index.d.ts"
+      "types": "./dist/validation/index.d.ts",
+      "import": "./dist/validation/index.js"
     },
     "./resilience": {
-      "import": "./dist/resilience/index.js",
-      "types": "./dist/resilience/index.d.ts"
+      "types": "./dist/resilience/index.d.ts",
+      "import": "./dist/resilience/index.js"
     },
     "./pagination": {
-      "import": "./dist/pagination/index.js",
-      "types": "./dist/pagination/index.d.ts"
+      "types": "./dist/pagination/index.d.ts",
+      "import": "./dist/pagination/index.js"
     },
     "./enums": {
-      "import": "./dist/enums/index.js",
-      "types": "./dist/enums/index.d.ts"
+      "types": "./dist/enums/index.d.ts",
+      "import": "./dist/enums/index.js"
     },
     "./mediator": {
-      "import": "./dist/mediator/index.js",
-      "types": "./dist/mediator/index.d.ts"
+      "types": "./dist/mediator/index.d.ts",
+      "import": "./dist/mediator/index.js"
     },
     "./idempotency": {
-      "import": "./dist/idempotency/index.js",
-      "types": "./dist/idempotency/index.d.ts"
+      "types": "./dist/idempotency/index.d.ts",
+      "import": "./dist/idempotency/index.js"
     }
   },
   "sideEffects": false,
@@ -129,7 +129,8 @@
     "prepublishOnly": "npm run build && npm test",
     "docs7": "node scripts/docs7.mjs",
     "docs7:check": "node scripts/docs7.mjs --check",
-    "typecheck:tests": "tsc --noEmit -p tsconfig.test.json"
+    "typecheck:tests": "tsc --noEmit -p tsconfig.test.json",
+    "check:package": "node scripts/check-package.mjs"
   },
   "files": [
     "dist",
@@ -137,6 +138,7 @@
     "CHANGELOG.md",
     "docs/BEHAVIOUR-CHANGES.md",
     "docs/IDEMPOTENCY.md",
+    ".well-known/agent-skills",
     "LICENSE"
   ],
   "keywords": [
@@ -172,9 +174,11 @@
     "node": ">=22.0.0"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "^2.4.15",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^5.1.0",
+    "publint": "^0.3.25",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   }
