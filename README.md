@@ -1159,7 +1159,7 @@ toTitleCase('hello world foo')      // 'Hello World Foo'
 toUnderscoreCamelCase('helloWorld') // '_helloWorld'
 ```
 
-All functions handle: spaces, hyphens, underscores, camelCase, PascalCase, and mixed input.
+All functions handle camelCase, PascalCase and mixed input in any script. Any character that is not a letter, combining mark or digit separates words, and a digit run is its own word: `toSnakeCase('Hello123World')` gives `'hello_123_world'`.
 
 ## UUIDv7
 
