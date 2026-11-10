@@ -53,6 +53,7 @@ class UserValidator extends Validator<User> {
 const validator = new UserValidator();
 validator.validate(user);        // Result<User>
 validator.toRule();              // Rule<User> — plug into RuleEngine (tsentials/rules)
+// validationBehavior([validator]) in tsentials/mediator calls validateAsync; set `order` to sort it
 ```
 
 ## Cascade and null handling
