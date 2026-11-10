@@ -4,6 +4,7 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 ## Behaviour changes in the next release (unreleased)
 
+* **enums:** case-insensitive matching in `parse` (and the ambiguity checks of `defineEnum`) now follows C# `OrdinalIgnoreCase`: each character is upper-cased on its own. A character whose upper case is longer is no longer expanded, so `'STRAßE'` no longer matches the wire name `'strasse'`. The Turkish dotless `ı` and the long `ſ` no longer match `I` and `S`. Final and medial sigma still match. Members whose names differ only in these characters, such as `'aß'` and `'ASS'`, are no longer rejected as ambiguous.
 * **union:** `Union.match` only uses own properties of the handlers object. A tag such as `constructor` or `toString` with no handler of its own now throws `Unhandled union tag: ...`; it used to call the inherited `Object.prototype` member. `Union.groupBy` no longer throws for the tags `constructor` or `__proto__`: they become own keys of the result.
 
 ## Behaviour changes in 4.0.0
