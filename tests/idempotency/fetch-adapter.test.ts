@@ -153,10 +153,19 @@ describe('withIdempotency', () => {
       const s = setup((_req, run) => created(run), { requireKey: true });
       const response = await s.handler(post(null));
       expect(response.status).toBe(400);
-      expect(await problemOf(response)).toMatchObject({
-        status: 400,
-        code: IdempotencyErrorCodes.KeyMissing,
+      expect(await problemOf(response)).toEqual({
+        type: 'https://tools.ietf.org/html/rfc9110#section-15.5.1',
         title: 'Missing idempotency key',
+        status: 400,
+        detail: 'An idempotency key is required.',
+        code: IdempotencyErrorCodes.KeyMissing,
+        errorCodes: [IdempotencyErrorCodes.KeyMissing],
+        errors: [
+          {
+            code: IdempotencyErrorCodes.KeyMissing,
+            description: 'An idempotency key is required.',
+          },
+        ],
       });
       expect(s.runs()).toBe(0);
     });
@@ -362,6 +371,8 @@ describe('withIdempotency', () => {
         title: 'Result unavailable',
         code: IdempotencyErrorCodes.ResultUnavailable,
         detail: expect.any(String),
+        type: 'https://tools.ietf.org/html/rfc9110#section-15.5.10',
+        errorCodes: [IdempotencyErrorCodes.ResultUnavailable],
       });
     };
 

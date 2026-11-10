@@ -1,4 +1,4 @@
-import type { AppError } from '../errors/index.js';
+import { toProblemResponse } from '../http/problem-response.js';
 import {
   DEFAULT_MAX_KEY_LENGTH,
   IDEMPOTENCY_KEY_HEADER,
@@ -140,30 +140,14 @@ function positiveInteger(name: string, value: number): number {
   return value;
 }
 
-function problem(
-  status: number,
-  title: string,
-  error: AppError | undefined,
-  headers: Record<string, string> = {},
-): Response {
-  const body = {
-    title,
-    status,
-    ...(error === undefined ? {} : { detail: error.description, code: error.code }),
-  };
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/problem+json', ...headers },
-  });
-}
-
 function rejection(code: IdempotencyErrorCode, retryAfterMs: number | null): Response {
   const { status, title } = rejections[code];
-  const retryAfter =
+  const error = idempotencyErrors.forCode(code, retryAfterMs);
+  const headers =
     RETRY_AFTER_CODES.has(code) && retryAfterMs !== null
       ? { 'retry-after': String(Math.max(1, Math.ceil(retryAfterMs / 1000))) }
       : {};
-  return problem(status, title, idempotencyErrors.forCode(code, retryAfterMs), retryAfter);
+  return toProblemResponse([error], { status, title, extensions: { code: error.code }, headers });
 }
 
 /** Method, path with query and body hash, each length-prefixed so parts cannot run together. */
@@ -362,7 +346,10 @@ export function makeWithIdempotency<A extends readonly unknown[]>(
         if (replayed !== undefined) return replayed;
         // Neither replayed nor run again: running it again could repeat the side effect.
         warn(settings, IdempotencyEventNames.StoredResponseUnreadable, namespace);
-        return problem(500, 'Stored response unreadable', undefined);
+        return new Response(JSON.stringify({ title: 'Stored response unreadable', status: 500 }), {
+          status: 500,
+          headers: { 'content-type': 'application/problem+json' },
+        });
       },
       reject: (code) => rejection(code, settings.retryAfterMs),
     });

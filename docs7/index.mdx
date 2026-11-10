@@ -705,6 +705,22 @@ if (rejected) return rejected;   // problem+json: 412 Http.PreconditionFailed, 4
 
 `parseETagList` and `compareETags` expose the header parsing and the strong/weak comparison. The `If-Match` check is not atomic with the write, so also pass the version as a concurrency token to the update.
 
+### Problem responses
+
+Server-side problem+json (RFC 9457) in the shape CSharpEssentials.AspNetCore writes, so `problemDetailsToErrors` and `fetchResult` read it back.
+
+```typescript
+import { resultToResponse, toProblemDetails, toProblemResponse } from 'tsentials/http';
+
+return resultToResponse(result);   // 200 JSON, 204 for Result.ok(), or the problem response on failure
+return toProblemResponse(errors, { extensions: { traceId }, headers: { 'cache-control': 'no-store' } });
+toProblemDetails([Err.notFound('User.NotFound', 'User 7 was not found.')]);
+// { type: 'https://tools.ietf.org/html/rfc9110#section-15.5.5', title: 'Not Found', status: 404,
+//   detail: 'User 7 was not found.', errorCodes: ['User.NotFound'] }
+```
+
+The primary error is the one with the highest status (the first on a tie); it gives `status`, `title` and `detail`. `errorCodes` lists every code once, in order, and `errors` lists the `Validation` errors as `{ code, description }`. Options: `status`, `title`, `typeUri`, `extensions` and (for responses) `headers`.
+
 ---
 
 ## Union\<T\>
