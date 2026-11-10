@@ -1,4 +1,4 @@
-import { type AppError, Err, ErrorMetadata, ErrorType } from '../errors/index.js';
+import { type AppError, DomainError, Err, ErrorMetadata, ErrorType } from '../errors/index.js';
 import { safeString } from '../errors/safe-string.js';
 import { isAbortError, isCallerAbort, Result, throwIfAborted } from '../result/index.js';
 import type { GenericBehavior, NextHandler, RequestContext } from './mediator.js';
@@ -53,7 +53,8 @@ function isCancellation(error: unknown, signal: AbortSignal | undefined): boolea
 
 /**
  * Converts anything the rest of the pipeline throws into a failed Result with
- * `Err.fromException(error)`. Abort errors always propagate.
+ * `Err.fromException(error)`. A thrown DomainError becomes a failure with its carried
+ * errors as-is. Abort errors always propagate.
  */
 export function exceptionHandlingBehavior(): GenericBehavior {
   return async <TReq, TRes>(
@@ -65,6 +66,9 @@ export function exceptionHandlingBehavior(): GenericBehavior {
       return await next();
     } catch (error) {
       if (isCancellation(error, context.signal)) throw error;
+      if (error instanceof DomainError && error.errors.length > 0) {
+        return Result.failureFrom(error.errors);
+      }
       return Result.failure(Err.fromException(error));
     }
   };
@@ -480,19 +484,19 @@ export interface CachingBehaviorOptions {
 
 /**
  * Caches results by key. A non-empty cache entry short-circuits the
- * handler; an entry that does not deserialize to a result throws
- * `Failed to deserialize cached value for key {key}`. Failed results are not stored unless
- * `cacheFailures` is set.
+ * handler; an entry that does not deserialize to a result (the serializer returns `undefined`
+ * or throws) logs a warning and is treated as a miss: the handler runs and its result
+ * overwrites the entry. Failed results are not stored unless `cacheFailures` is set.
  */
 export function cachingBehavior(options: CachingBehaviorOptions): GenericBehavior {
   const { cache, logger } = options;
   const serializer = options.serializer ?? jsonResultSerializer;
   const settingsOf = options.settings ?? defaultCacheSettings;
-  const info = (message: string, key: string): void => {
+  const log = (level: MediatorLogLevel, message: string, key: string): void => {
     // A throwing logger never fails the request: logging is best effort.
     try {
-      if (logger !== undefined && enabled(logger, 'information')) {
-        logger.log('information', message, { CacheKey: key });
+      if (logger !== undefined && enabled(logger, level)) {
+        logger.log(level, message, { CacheKey: key });
       }
     } catch {
       // Ignored: see above.
@@ -510,15 +514,24 @@ export function cachingBehavior(options: CachingBehaviorOptions): GenericBehavio
 
     const cached = await cache.get(key, context.signal);
     if (cached !== null && cached !== undefined && cached.length > 0) {
-      info(`Cache hit for key ${key}`, key);
-      const result = serializer.deserialize(cached);
-      if (result === undefined) {
-        throw new Error(`Failed to deserialize cached value for key ${key}`);
+      let hit: Result<unknown> | undefined;
+      try {
+        hit = serializer.deserialize(cached);
+      } catch {
+        // An unreadable entry is a miss: see below.
       }
-      return result as Result<TRes>;
+      if (hit !== undefined) {
+        log('information', `Cache hit for key ${key}`, key);
+        return hit as Result<TRes>;
+      }
+      log(
+        'warning',
+        `Cached value for key ${key} could not be deserialized; calling the handler`,
+        key,
+      );
+    } else {
+      log('information', `Cache miss for key ${key}`, key);
     }
-
-    info(`Cache miss for key ${key}`, key);
     const result = await next();
     if (settings.cacheFailures !== true && !result.ok) return result;
 
@@ -529,7 +542,7 @@ export function cachingBehavior(options: CachingBehaviorOptions): GenericBehavio
       expirationMs !== undefined && expirationMs > 0 ? { expirationMs } : {},
       context.signal,
     );
-    info(`Cache set for key ${key}`, key);
+    log('information', `Cache set for key ${key}`, key);
     return result;
   };
 }

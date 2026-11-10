@@ -129,8 +129,20 @@ describe('fetchResult failure metadata', () => {
       .execute(() => RequestBuilder.post('/orders').json({}).idempotencyKey('k-1').send());
     if (r.ok) throw new Error('expected failure');
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(r.errors[0]?.type).toBe(ErrorType.Unexpected);
+    expect(r.errors[0]?.type).toBe(ErrorType.Validation);
     expect(r.errors[0]?.metadata?.get(HttpErrorMetadataKeys.HttpStatus)).toBe(201);
+  });
+
+  it('does not retry a 2xx body that cannot be parsed with the default classifier', async () => {
+    const fetchMock = stubFetch(
+      () =>
+        new Response('{not json', { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+    const r = await ResiliencePolicy.create<unknown>()
+      .withRetry({ maxAttempts: 3, delay: 0 })
+      .execute(() => fetchResult.get('/orders/1'));
+    expect(r.ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

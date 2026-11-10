@@ -265,12 +265,12 @@ describe('ResiliencePolicy basics', () => {
     expect(fallback).not.toHaveBeenCalled();
   });
 
-  it('a throwing fallback becomes Err.fromException (type Failure)', async () => {
+  it('a throwing fallback becomes an Unexpected error', async () => {
     const policy = ResiliencePolicy.create<number>().withFallback((): number => {
       throw new TypeError('fallback broke');
     });
     const r = await run(policy.execute(() => Result.failure<number>(Err.unexpected())));
-    expect(firstError(r)).toMatchObject({ code: 'TypeError', type: ErrorType.Failure });
+    expect(firstError(r)).toMatchObject({ code: 'TypeError', type: ErrorType.Unexpected });
   });
 
   it('a fallback that aborts the caller rejects with the abort reason', async () => {

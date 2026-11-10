@@ -46,13 +46,7 @@ export function trackPending<R>(state: ContextState, work: () => Promise<R>): Pr
 /** A custom message (string) or a complete replacement error (AppError, used verbatim). */
 export type ValidationMessage = string | AppError;
 
-export function isThenable(value: unknown): value is PromiseLike<unknown> {
-  return (
-    (typeof value === 'object' || typeof value === 'function') &&
-    value !== null &&
-    typeof (value as { then?: unknown }).then === 'function'
-  );
-}
+export { isThenable } from '../result/abort.js';
 
 /** Values the comparable validators accept. Dates compare by timestamp. */
 export type Comparable = number | bigint | string | Date;

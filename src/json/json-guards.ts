@@ -2,10 +2,18 @@ import type { Json, JsonArray, JsonObject, JsonPrimitive } from './json-types.js
 
 /**
  * A type guard to safely determine if an unknown value is a `JsonPrimitive`.
+ *
+ * @remarks
+ * `NaN` and `Infinity` are rejected because JSON cannot represent them.
  */
 export function isJsonPrimitive(value: unknown): value is JsonPrimitive {
   const type = typeof value;
-  return value === null || type === 'string' || type === 'number' || type === 'boolean';
+  return (
+    value === null ||
+    type === 'string' ||
+    type === 'boolean' ||
+    (type === 'number' && Number.isFinite(value))
+  );
 }
 
 /**
@@ -35,18 +43,22 @@ export function isJsonObject(value: unknown): value is JsonObject {
  * conforms to the `Json` type.
  *
  * @remarks
+ * Returns `false` for circular data (a value that contains itself) and for
+ * `NaN` / `Infinity`. A value referenced twice without a cycle is accepted.
  * Be mindful of performance on very large or deeply nested structures.
  */
 export function isJson(value: unknown): value is Json {
+  return isJsonOnPath(value, new Set());
+}
+
+function isJsonOnPath(value: unknown, path: Set<object>): boolean {
   if (isJsonPrimitive(value)) return true;
+  if (!isJsonArray(value) && !isJsonObject(value)) return false;
+  if (path.has(value)) return false;
 
-  if (isJsonArray(value)) {
-    return value.every(isJson);
-  }
-
-  if (isJsonObject(value)) {
-    return Object.values(value).every(isJson);
-  }
-
-  return false;
+  path.add(value);
+  const items = isJsonArray(value) ? value : Object.values(value);
+  const ok = items.every((item) => isJsonOnPath(item, path));
+  path.delete(value);
+  return ok;
 }

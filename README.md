@@ -60,6 +60,7 @@ Railway-oriented programming for TypeScript: `Result<T>`, `Maybe<T>`, Rule Engin
 - [Tree\<T\>](#treet)
 - [Record Utilities](#record-utilities)
 - [String Utilities](#string-utilities)
+- [UUIDv7](#uuidv7)
 - [Validation](#validation)
 - [Resilience](#resilience)
 - [Pagination](#pagination)
@@ -82,11 +83,11 @@ npm install tsentials
 | Import | Contents |
 |--------|----------|
 | `tsentials/result` | `Result<T>`, `ResultAsync<T>`, `ResultChain<T>`, `fromAsync`, `maybeToResult`, `resultToMaybe` |
-| `tsentials/maybe` | `Maybe<T>`, collection utilities |
-| `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata` |
+| `tsentials/maybe` | `Maybe<T>`, `MaybeAsync<T>`, collection utilities |
+| `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata`, `DomainError` |
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
-| `tsentials/entity` | `createEntityBase`, `createSoftDeletable`, `DomainEvent` |
-| `tsentials/http` | `fetchResult`, `RequestBuilder` |
+| `tsentials/entity` | `createEntityBase`, `createEntityBaseWithId`, `createSoftDeletable`, `DomainEvent` |
+| `tsentials/http` | `fetchResult`, `RequestBuilder`, `notModified`, `checkIfMatch`, `computeETag` |
 | `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider`, `nextDayOfWeek`, `getAge`, `toDateOnly`, `toTimeOnly`, `msToDate` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
 | `tsentials/union` | `Union<T>` |
@@ -100,6 +101,7 @@ npm install tsentials
 | `tsentials/tree` | `Tree<T>`, `map`, `filter`, `fold`, `drawTree` |
 | `tsentials/record` | `Record` utilities, `map`, `filter`, `pick`, `omit`, `reduce` |
 | `tsentials/string` | String case conversion utilities (Pascal, Camel, Kebab, Snake, Macro, Train, Title, _camelCase) |
+| `tsentials/uuid` | RFC 9562 UUIDv7 generators (`uuidv7`, `monotonicUuidv7`) |
 | `tsentials/validation` | `Validator<T>`, `RuleContext`, `RuleChain`, `CascadeMode` |
 | `tsentials/resilience` | `ResiliencePolicy`, `retryIfFailed` |
 | `tsentials/pagination` | `paginate`, `keysetOrdering`, `keysetPaginate`, cursor helpers |
@@ -169,6 +171,8 @@ Result.tap(price, v => console.log('computed', v));
 Result.tapError(price, errs => console.error('failed', errs[0].code));
 ```
 
+The sync `tap`, `tapError`, `tapErrorFirst`, `tapIf`, `tapErrorIf` and `switch*` do not await their callback. Pass async work to `Result.tapAsync` / `Result.tapErrorAsync`, a `ResultAsync` chain, or `await Result.match(...)`. A promise returned to a sync method is dropped; if it rejects, the unhandled rejection is a `TypeError` that names the method and carries the original error as `cause`. Enable the typescript-eslint rule [`@typescript-eslint/no-misused-promises`](https://typescript-eslint.io/rules/no-misused-promises/) to catch this at lint time.
+
 ### Conditional & Guarded Pipeline
 
 ```typescript
@@ -218,11 +222,11 @@ Result.recoverFirst(Result.failure(notFoundError), ErrorType.NotFound, () => Res
 // Transform errors
 Result.mapError(
   Result.failure(err),
-  errs => errs.map(e => ({ ...e, code: `Wrapped.${e.code}` })),
+  errs => errs.map(e => Err.with(e, { code: `Wrapped.${e.code}` })),
 );
 
 // Map every error one by one, in order (mapper never runs on success)
-Result.mapEachError(Result.failure(err), e => ({ ...e, code: `Api.${e.code}` }));
+Result.mapEachError(Result.failure(err), e => Err.with(e, { code: `Api.${e.code}` }));
 
 // Fallback values
 Result.unwrapOr(Result.success(42), 0);       // 42
@@ -402,6 +406,22 @@ const filtered = await Maybe.filterAsync(profile, async p => p.isPublic);
 const found = await Maybe.fromTryAsync(signal => repo.find(id, { signal }), { signal });
 ```
 
+`MaybeAsync` is the fluent form: every step returns a `MaybeAsync` and the chain is awaited once.
+Callbacks can be sync or async, and each step takes an optional `{ signal }`.
+
+```typescript
+import { MaybeAsync } from 'tsentials/maybe';
+
+const name = await MaybeAsync.from(repo.find(id))
+  .filter(u => u.isActive)
+  .bind((u, signal) => loadProfile(u.id, { signal }), { signal })
+  .map(p => p.displayName)
+  .tapNone(() => console.warn('missing'))
+  .getOrElse(() => 'anonymous');
+
+const user = await MaybeAsync.from(repo.find(id)).toResult(Err.notFound('User.NotFound', 'No user')); // Result<User>
+```
+
 ### Collection Utilities
 
 ```typescript
@@ -495,7 +515,7 @@ A rule that throws becomes a failure with code `Rule.EvaluationFailed` (`Unexpec
 ## AppError & Err Factory
 
 ```typescript
-import { Err } from 'tsentials/errors';
+import { DomainError, Err } from 'tsentials/errors';
 
 Err.validation('Field.Required', 'Name is required');
 Err.notFound('User.NotFound', 'User does not exist');
@@ -508,14 +528,30 @@ Err.forbidden('Permissions.Denied', 'Insufficient permissions');
 Err.fromException(new Error('timeout'));
 Err.fromException(new Error('timeout'), ErrorType.Unexpected, 'Network.Timeout');
 
-// Equality: code + description + type + metadata (same keys, Object.is per value)
+// Equality: code + description + type + metadata (same keys; nested maps and Err errors by value, else Object.is)
 Err.equals(errA, errB);
 
 // Combine errors and error arrays into one flat array
 Err.combine(errA, [errB, errC], errD);
 
+// Throw typed errors when you have to throw: Result.try, tryAsync, tryCatch, tryCatchAsync
+// and the mediator's exceptionHandlingBehavior return the carried errors as-is
+throw new DomainError(Err.conflict('Order.Shipped', 'Order is already shipped'));
+
 // JSON wire shape: { code, description, type, numericType, metadata? }
 JSON.stringify(Err.validation('Field.Required', 'Name is required'));
+
+// Revive with validation: Result<AppError>, a Validation failure (AppError.InvalidJson) on a bad shape.
+// Also reads the CSharpEssentials Error shape (any key case, type as name or ordinal).
+Err.fromJSON(JSON.parse(raw));
+
+// Copy with overrides: stays frozen and keeps toJSON, unlike { ...err }
+Err.with(err, { code: `Api.${err.code}` });
+Err.with(err, { metadata: undefined }); // drop metadata
+
+// Revive a whole Result (tsentials { ok, value | errors } or CSharpEssentials { isSuccess, value, errors })
+// A bad shape becomes a Result.InvalidJson failure; the success value is not validated.
+Result.fromJSON<User>(await response.json());
 ```
 
 ### Error Metadata
@@ -580,7 +616,7 @@ class Order implements EntityBase, SoftDeletable {
 
 ## HTTP (fetchResult)
 
-`fetchResult` captures network errors, body parse errors and HTTP error responses as `Result<T>`. The only rejection is the caller's own abort (`signal`), which rejects with the abort reason. The default timeout is 30 s (`timeout` option; `0` or `Infinity` disables it); on expiry the result is a failure with code `Http.Timeout` (`Unexpected`). A 2xx JSON response with an empty or `null` body is a `NotFound` failure ("Response body was empty or could not be deserialized."), except for `fetchResult.delete`, where it is a void success; 204/205 and non-JSON responses are void successes.
+`fetchResult` captures network errors, body parse errors and HTTP error responses as `Result<T>`. The only rejection is the caller's own abort (`signal`), which rejects with the abort reason. The default timeout is 30 s (`timeout` option; `0` or `Infinity` disables it); on expiry the result is a failure with code `Http.Timeout` (`Unexpected`). A 2xx JSON response with an empty or `null` body is a `NotFound` failure ("Response body was empty or could not be deserialized."), except for `fetchResult.delete`, where it is a void success; 204/205 and non-JSON responses are void successes. A 2xx JSON body that cannot be parsed is a `Validation` failure (code `SyntaxError`), and a JSON request body that cannot be serialized (cyclic object, BigInt) is a `Validation` failure (code `TypeError`) with no request sent; `RequestBuilder.json()` serializes once, in `send()`, and never throws.
 
 ```typescript
 import { fetchResult, RequestBuilder } from 'tsentials/http';
@@ -646,6 +682,25 @@ const status: HttpCode = HttpCodes.Ok;           // 200
 const notFound = HttpCodes.NotFound;             // 404
 const serverErr = HttpCodes.InternalServerError; // 500
 ```
+
+### Conditional requests
+
+Framework-agnostic helpers on the standard `Request`/`Response` types (RFC 9110 section 13).
+
+```typescript
+import { checkIfMatch, computeETag, formatETag, notModified } from 'tsentials/http';
+
+// GET: 304 Not Modified when If-None-Match (weak comparison, * matches) or If-Modified-Since matches
+const etag = formatETag(item.version);   // '"7"'; or await computeETag(body) for a SHA-256 tag
+return notModified(request, { etag, lastModified: item.updatedAt }, { 'cache-control': 'max-age=60' })
+  ?? Response.json(item, { headers: { etag, 'cache-control': 'max-age=60' } });
+
+// PUT/PATCH/DELETE/POST: If-Match with strong comparison
+const rejected = checkIfMatch(request, item && { etag: formatETag(item.version) }, { required: true });
+if (rejected) return rejected;   // problem+json: 412 Http.PreconditionFailed, 428 Http.PreconditionRequired, 400 Http.InvalidIfMatch
+```
+
+`parseETagList` and `compareETags` expose the header parsing and the strong/weak comparison. The `If-Match` check is not atomic with the write, so also pass the version as a concurrency token to the update.
 
 ---
 
@@ -845,6 +900,8 @@ isJsonObject({ a: 1 });          // true — plain objects only, rejects Date/Re
 isJson({ nested: [1, null] });   // true — recursive validation
 isJson({ fn: () => {} });        // false — functions are not valid JSON
 isJson({ key: undefined });      // false — undefined is not valid JSON
+isJson({ n: NaN });              // false, NaN and Infinity are not valid JSON
+isJson(circular);                // false, a cycle returns false instead of throwing
 ```
 
 ### Error Codes
@@ -1104,7 +1161,20 @@ toTitleCase('hello world foo')      // 'Hello World Foo'
 toUnderscoreCamelCase('helloWorld') // '_helloWorld'
 ```
 
-All functions handle: spaces, hyphens, underscores, camelCase, PascalCase, and mixed input.
+All functions handle camelCase, PascalCase and mixed input in any script. Any character that is not a letter, combining mark or digit separates words, and a digit run is its own word: `toSnakeCase('Hello123World')` gives `'hello_123_world'`.
+
+## UUIDv7
+
+RFC 9562 version 7 ids: a 48-bit Unix millisecond timestamp, then random bits from `crypto.getRandomValues`. They sort by creation time, which keeps database indexes compact.
+
+```typescript
+import { uuidv7, monotonicUuidv7 } from 'tsentials/uuid';
+
+uuidv7();          // '019a6f3c-8d2e-7b41-9f3a-1c2d3e4f5a6b'
+monotonicUuidv7(); // always sorts after the previous monotonicUuidv7() in this process
+```
+
+`monotonicUuidv7` puts an 18-bit counter in `rand_a` and the 6 bits after the variant, as the CSharpEssentials `Guider` version 7 monotonic generator does. The counter restarts at zero on each new millisecond. When it overflows, or the clock goes back, the timestamp moves one millisecond ahead so order holds. Use `uuidv7` when ids only need to be unique and roughly ordered.
 
 ## Validation
 

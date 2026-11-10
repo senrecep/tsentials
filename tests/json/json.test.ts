@@ -239,3 +239,26 @@ describe('parseAndValidate (non-Error catch branch)', () => {
     }
   });
 });
+
+describe('isJson edge cases', () => {
+  it('rejects NaN and Infinity', () => {
+    expect(isJson(Number.NaN)).toBe(false);
+    expect(isJson([1, Number.POSITIVE_INFINITY])).toBe(false);
+    expect(isJson({ a: Number.NEGATIVE_INFINITY })).toBe(false);
+    expect(isJsonPrimitive(Number.NaN)).toBe(false);
+  });
+
+  it('returns false for a cycle instead of throwing', () => {
+    const obj: Record<string, unknown> = { a: 1 };
+    obj['self'] = obj;
+    const arr: unknown[] = [1];
+    arr.push(arr);
+    expect(isJson(obj)).toBe(false);
+    expect(isJson(arr)).toBe(false);
+  });
+
+  it('accepts a shared reference that is not a cycle', () => {
+    const shared = { x: 1 };
+    expect(isJson({ a: shared, b: shared, c: [shared, shared] })).toBe(true);
+  });
+});
