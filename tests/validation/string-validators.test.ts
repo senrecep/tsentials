@@ -245,6 +245,23 @@ describe('string validators', () => {
     it('notEqual: null passes against a string', () => {
       expect(validate(null, (c) => c.notEqual('x')).ok).toBe(true);
     });
+
+    it('equal / notEqual with ignoreCase compare strings ignoring case', () => {
+      const opts = { ignoreCase: true };
+      expect(validate('Hello', (c) => c.equal('hELLO', undefined, opts)).ok).toBe(true);
+      expect(validate('Hello', (c) => c.equal('world', undefined, opts)).ok).toBe(false);
+      expect(validate(null, (c) => c.equal('x', undefined, opts)).ok).toBe(false);
+      const error = first(validate('Forbidden', (c) => c.notEqual('FORBIDDEN', undefined, opts)));
+      expect(error?.code).toBe('value.NotEqual');
+      expect(error?.description).toBe("'value' must not be equal to 'FORBIDDEN'.");
+      expect(validate('allowed', (c) => c.notEqual('FORBIDDEN', undefined, opts)).ok).toBe(true);
+    });
+
+    it('ignoreCase does not change non-string comparison or null vs null', () => {
+      const opts = { ignoreCase: true };
+      expect(validate(null, (c) => c.equal(null, undefined, opts)).ok).toBe(true);
+      expect(validate(null, (c) => c.notEqual('x', undefined, opts)).ok).toBe(true);
+    });
   });
 
   describe('contains / startsWith / endsWith', () => {

@@ -41,4 +41,5 @@ Tree.drawTree(t, v => v.toUpperCase()); // custom show function
 ## Patterns
 
 - Use `Tree` for any nested structure where parent-child relationships matter.
+- Every function walks the tree with an explicit stack, not recursion, so very deep trees (100k levels) do not overflow the call stack. `map` and `find` visit in pre-order, `fold` and `filter` in post-order.
 - Use `fold` for recursive aggregation (sums, validation, rendering).

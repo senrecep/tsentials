@@ -167,11 +167,12 @@ interface SoftDeletable {
 
 ## DomainEvent
 
-Marker interface — only requires `occurredOn: Date`. Add domain-specific fields in your own event types.
+Marker interface: it only requires `occurredOn: Date`. Add domain-specific fields in your own event types. The optional `timing` says when a dispatcher should publish the event relative to the save; absent means `'post-save'` (CSharpEssentials `DomainEventTiming.AfterSave`), `'pre-save'` maps to `BeforeSave`.
 
 ```typescript
 interface DomainEvent {
   readonly occurredOn: Date;
+  readonly timing?: DomainEventTiming; // absent = 'post-save'
 }
 
 type DomainEventTiming = 'pre-save' | 'post-save';

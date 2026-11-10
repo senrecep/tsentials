@@ -3,6 +3,11 @@
  */
 export interface DomainEvent {
   readonly occurredOn: Date;
+  /**
+   * When the event should be dispatched relative to persistence. Absent means `'post-save'`,
+   * the default of CSharpEssentials' `DomainEventTimingAttribute`.
+   */
+  readonly timing?: DomainEventTiming;
 }
 
 /**

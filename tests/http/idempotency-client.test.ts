@@ -47,6 +47,32 @@ describe('parseRetryAfter', () => {
 });
 
 describe('fetchResult failure metadata', () => {
+  it('measures an HTTP-date Retry-After from the response Date header', async () => {
+    const headers = {
+      'retry-after': 'Wed, 21 Oct 2015 07:28:10 GMT',
+      date: 'Wed, 21 Oct 2015 07:28:00 GMT',
+    };
+    stubFetch(() => new Response(null, { status: 503, headers }));
+    const r = await fetchResult.get('/x');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors[0]?.metadata?.get(HttpErrorMetadataKeys.RetryAfterMs)).toBe(10_000);
+  });
+
+  it('falls back to the local clock when the Date header is missing or invalid', async () => {
+    const retryAfter = new Date(Date.now() + 60_000).toUTCString();
+    for (const date of [undefined, 'not a date', '1']) {
+      const headers: Record<string, string> = { 'retry-after': retryAfter };
+      if (date !== undefined) headers['date'] = date;
+      stubFetch(() => new Response(null, { status: 503, headers }));
+      const r = await fetchResult.get('/x');
+      if (r.ok) throw new Error('expected a failure');
+      const ms = r.errors[0]?.metadata?.get(HttpErrorMetadataKeys.RetryAfterMs) as number;
+      expect(ms).toBeGreaterThan(55_000);
+      expect(ms).toBeLessThanOrEqual(60_000);
+    }
+  });
+
   it('adds status, replay flag, Retry-After and problem code to the first error', async () => {
     stubFetch(
       () =>

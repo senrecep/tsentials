@@ -122,3 +122,14 @@ describe('Ord.between', () => {
     expect(Ord.between(Ord.number, 0, 10, 11)).toBe(false);
   });
 });
+
+describe('Ord.betweenExclusive', () => {
+  it('checks if a value is strictly between bounds', () => {
+    expect(Ord.betweenExclusive(Ord.number, 0, 10, 5)).toBe(true);
+    expect(Ord.betweenExclusive(Ord.number, 0, 10, 0)).toBe(false);
+    expect(Ord.betweenExclusive(Ord.number, 0, 10, 10)).toBe(false);
+    expect(Ord.betweenExclusive(Ord.number, 0, 10, -1)).toBe(false);
+    expect(Ord.betweenExclusive(Ord.number, 0, 10, 11)).toBe(false);
+    expect(Ord.betweenExclusive(Ord.string, 'a', 'c', 'b')).toBe(true);
+  });
+});

@@ -4,6 +4,7 @@ export {
   type IdempotencyErrorCode,
   IdempotencyErrorCodes,
 } from '../idempotency/constants.js';
+export { isBlockedAddress } from './blocked-address.js';
 export type { ResourceValidators } from './conditional.js';
 export {
   ConditionalErrorCodes,
