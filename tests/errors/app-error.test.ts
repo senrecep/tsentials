@@ -311,7 +311,10 @@ describe('Err.equals — nested metadata', () => {
   it('does not treat a map and an error as equal', () => {
     const e = Err.failure('X', 'x');
     expect(
-      Err.equals(Err.failure('A', 'a', meta({ v: e })), Err.failure('A', 'a', meta({ v: meta({}) }))),
+      Err.equals(
+        Err.failure('A', 'a', meta({ v: e })),
+        Err.failure('A', 'a', meta({ v: meta({}) })),
+      ),
     ).toBe(false);
   });
 
@@ -321,9 +324,7 @@ describe('Err.equals — nested metadata', () => {
       m.set('self', m);
       return m;
     };
-    expect(Err.equals(Err.failure('A', 'a', cyclic()), Err.failure('A', 'a', cyclic()))).toBe(
-      true,
-    );
+    expect(Err.equals(Err.failure('A', 'a', cyclic()), Err.failure('A', 'a', cyclic()))).toBe(true);
     const other = new Map<string, unknown>([['x', 2]]);
     other.set('self', other);
     expect(Err.equals(Err.failure('A', 'a', cyclic()), Err.failure('A', 'a', other))).toBe(false);
