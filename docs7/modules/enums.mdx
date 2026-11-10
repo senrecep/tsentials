@@ -68,4 +68,4 @@ Status.infoOf('Active');
 - `defineEnum` throws (programmer error): empty member list, more than one fallback, duplicate wire names or aliases, non-int32 values.
 - `parse` never throws; invalid text is a `Validation` failure `Enum.InvalidValue`. Use `{ mode: 'data' }` only for trusted persisted data where an unknown value should degrade to the fallback.
 - Declare `type Status = EnumMember<typeof Status>` next to the const so one name serves as both value and type.
-- Combine with `tsentials/validation` (`isDefinedEnum`) or `Result.then` for request validation.
+- Combine with `tsentials/validation` (`rules.for('status').isDefinedEnum(Status)` or `isOneOf(Status, ['Active'])` with the definition itself) or `Result.then` for request validation.

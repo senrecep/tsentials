@@ -7,6 +7,7 @@ This guide lists every change that alters the runtime behaviour of an existing t
 ## Behaviour changes in the next release (unreleased)
 
 * **mediator:** `validationBehavior` now calls an object validator as a method, and uses its `validateAsync(request, { signal })` when it has one, instead of calling a detached `validate`. A `Validator` subclass from `tsentials/validation` used to fail every request with `Validator.Exception` because it lost `this`; it now validates, honours its `order`, and receives the caller's signal. An object with both methods now runs `validateAsync`, not `validate`.
+* **validation:** the messages of `isDefinedEnum`, `isOneOf` and `hasOnlyDefinedFlags` now cut the echoed value to 64 characters plus `…`, as the C# enum validators and `EnumDefinition.createError` do. A value of 64 characters or fewer is shown as before.
 
 ## Behaviour changes in 3.0.0
 

@@ -72,6 +72,8 @@ validator.toRule();              // Rule<User> — plug into RuleEngine (tsentia
 | Enum | `isDefinedEnum`, `isOneOf`, `hasOnlyDefinedFlags` |
 | Custom | `must(pred)`, `must(pred, code, message)`, `satisfies(rule)`, `setValidator(v)` |
 
+Enum rules take a plain enum object plus its name (`isDefinedEnum(Status, 'Status')`, `isOneOf(Status, 'Status', [Status.A])`) or an `EnumDefinition` from `tsentials/enums` (`isDefinedEnum(Status)`, `isOneOf(Status, ['Active'])`). With a definition the value goes through its own `parse` / `parseNumber` in input mode: wire names, member names, aliases and int32 values pass, the fallback member fails, and the message lists the input wire names. `isOneOf` then compares the parsed member name with `allowed`. `hasOnlyDefinedFlags` takes plain enum objects only. Messages cut the echoed value to 64 characters plus `…`.
+
 `rules.forEach(path, configure)` validates each element; `rules.self()` validates the model itself; `rules.addFailure(code, description)` adds an error directly.
 
 ## Async validation
