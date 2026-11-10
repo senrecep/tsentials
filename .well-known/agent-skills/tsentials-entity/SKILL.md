@@ -1,6 +1,6 @@
 ---
 name: tsentials-entity
-description: Use when building DDD domain models — createEntityBase() and createEntityBaseWithId() mixin factories for aggregate roots with audit fields and domain events, createSoftDeletable() for soft deletion lifecycle, and DomainEvent marker interface for event-driven design. Uses composition (private field delegation), not class inheritance.
+description: Use when building DDD domain models: createEntityBase() and createEntityBaseWithId() mixin factories for aggregate roots with audit fields and domain events, createSoftDeletable() for soft deletion lifecycle, and DomainEvent marker interface for event-driven design. Uses composition (private field delegation), not class inheritance.
 ---
 
 # tsentials/entity

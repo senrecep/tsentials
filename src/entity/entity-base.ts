@@ -24,6 +24,12 @@ export interface EntityBaseWithId<TId> extends EntityBase {
   setId(id: TId): void;
 }
 
+function assertValidDate(value: Date, name: string): void {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    throw new RangeError(`${name} must be a valid Date.`);
+  }
+}
+
 /**
  * Mixin factory that adds domain event tracking and audit capabilities
  * to any object.
@@ -36,12 +42,6 @@ export interface EntityBaseWithId<TId> extends EntityBase {
  *   // ...delegate other EntityBase methods
  * }
  */
-function assertValidDate(value: Date, name: string): void {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
-    throw new RangeError(`${name} must be a valid Date.`);
-  }
-}
-
 export function createEntityBase(): EntityBase {
   const _domainEvents: DomainEvent[] = [];
   let _createdAt: Date = new Date(0);
