@@ -202,6 +202,20 @@ export const Result = {
   },
 
   /**
+   * Validates the success value with a Result-returning validator (C# `ThenEnsure`).
+   * On success of the validator the original result is returned unchanged (its value is
+   * kept); on failure its errors are returned. Use {@link Result.then} to replace the value.
+   *
+   * @example
+   * Result.thenEnsure(userResult, (u) => checkQuota(u)) // Result<User>
+   */
+  thenEnsure<T>(result: Result<T>, validator: (value: T) => Result<unknown>): Result<T> {
+    if (!result.ok) return result;
+    const check = validator(result.value);
+    return check.ok ? result : Result.failureFrom<T>(check.errors);
+  },
+
+  /**
    * Runs a side effect on success without altering the result.
    *
    * Warning: `fn` is not awaited. A promise it returns is dropped, and its rejection surfaces
@@ -258,6 +272,8 @@ export const Result = {
 
   /**
    * Returns a fallback Result on failure.
+   * A function-typed `fallback` is always called with the errors; to recover with a function
+   * value, wrap it: `Result.else(r, () => fn)`.
    */
   else<T>(result: Result<T>, fallback: T | ((errors: readonly AppError[]) => T)): Result<T> {
     if (result.ok) return result;
@@ -360,11 +376,24 @@ export const Result = {
       : Result.failure(resolveError(error, result.value));
   },
 
+  /**
+   * Async version of Result.thenEnsure.
+   */
+  async thenEnsureAsync<T>(
+    result: Result<T>,
+    validator: (value: T) => Promise<Result<unknown>>,
+  ): Promise<Result<T>> {
+    if (!result.ok) return result;
+    const check = await validator(result.value);
+    return check.ok ? result : Result.failureFrom<T>(check.errors);
+  },
+
   // ─── COMBINATION ──────────────────────────────────────────────────────────
 
   /**
    * Collects multiple Results: succeeds only if ALL succeed.
-   * Collects ALL errors on failure (does not short-circuit).
+   * Collects ALL errors on failure (does not short-circuit), also for void results.
+   * C# non-generic `Result.And` stops at the first failure instead.
    */
   and<T>(results: ReadonlyArray<Result<T>>): Result<T[]> {
     const errors: AppError[] = [];
@@ -403,6 +432,20 @@ export const Result = {
       throw new ResultUnwrapError(result.errors);
     }
     return result.value;
+  },
+
+  /**
+   * Like {@link Result.unwrap}, but on failure throws with your message (C# `GetValueOrThrow`).
+   * A string becomes the message of the thrown ResultUnwrapError, which still carries the
+   * errors; an Error instance is thrown as-is.
+   *
+   * @example
+   * Result.unwrapOrThrow(configResult, 'Config must load before startup');
+   */
+  unwrapOrThrow<T>(result: Result<T>, messageOrError?: string | Error): T {
+    if (result.ok) return result.value;
+    if (messageOrError instanceof Error) throw messageOrError;
+    throw new ResultUnwrapError(result.errors, messageOrError);
   },
 
   /**
@@ -1143,8 +1186,11 @@ function fromThrown<T>(e: unknown, error?: AppError | ((error: unknown) => AppEr
  * `Result.try(() => Result.unwrap(r))` returns `r`'s errors as-is.
  */
 export class ResultUnwrapError extends DomainError {
-  constructor(errors: readonly AppError[]) {
-    super(errors, `Cannot unwrap a failed Result. Errors: ${errors.map((e) => e.code).join(', ')}`);
+  constructor(errors: readonly AppError[], message?: string) {
+    super(
+      errors,
+      message ?? `Cannot unwrap a failed Result. Errors: ${errors.map((e) => e.code).join(', ')}`,
+    );
     this.name = 'ResultUnwrapError';
   }
 }

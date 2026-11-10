@@ -42,6 +42,14 @@ export const ErrorMetadata = {
   },
 
   /**
+   * Captures the current call stack under the `stackTrace` key (C# `CreateWithStackTrace`).
+   * Merge it into other metadata with {@link ErrorMetadata.combine}.
+   */
+  withStackTrace(): ErrorMetadata {
+    return new Map<string, unknown>([['stackTrace', new Error().stack ?? '']]);
+  },
+
+  /**
    * Merges two metadata maps into a new map. On key collision the value from `base`
    * is kept (first wins), so `additional` can only add keys. Inputs are not mutated.
    */

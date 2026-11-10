@@ -16,7 +16,7 @@ import { RuleEngine } from 'tsentials/rules';
 import type { Rule } from 'tsentials/rules';
 import { createEntityBase, createSoftDeletable } from 'tsentials/entity';
 import type { DomainEvent } from 'tsentials/entity';
-import { fetchResult, RequestBuilder, HttpCodes, notModified, checkIfMatch, computeETag, formatETag, toProblemDetails, toProblemResponse, resultToResponse } from 'tsentials/http';
+import { fetchResult, RequestBuilder, HttpCodes, notModified, checkIfMatch, computeETag, formatETag, toProblemDetails, toProblemResponse, resultToResponse, isBlockedAddress } from 'tsentials/http';
 import type { HttpCode } from 'tsentials/http';
 import { SystemDateTimeProvider, createFakeDateTimeProvider } from 'tsentials/time';
 import { deepClone, cloneArray } from 'tsentials/clone';
@@ -74,6 +74,7 @@ Result.lastError(r)   // AppError
 Result.then(r, fn)                // monadic bind → Result<U>  ← NOT .bind()
 Result.map(r, fn)                 // transform value
 Result.ensure(r, pred, err)       // guard — err can be a factory fn
+Result.thenEnsure(r, validator)   // validator returns Result; keeps r's value, or its errors
 Result.tap(r, fn)                 // side effect on success
 Result.tapError(r, fn)            // side effect on failure
 Result.match(r, onOk, onErr)      // exhaustive exit
@@ -94,6 +95,7 @@ Result.else(r, fallback)          // fallback value on failure
 Result.unwrap(r)                  // throws if failure
 Result.unwrapOr(r, default)       // default value on failure
 Result.unwrapOrElse(r, fn)        // computed default on failure
+Result.unwrapOrThrow(r, msg?)     // value, or throws ResultUnwrapError(msg) / a given Error
 Result.deconstruct(r)             // [ok, value, errors] tuple
 
 // Combination
@@ -239,6 +241,7 @@ Err.unauthorized('Auth.InvalidToken', 'Token expired')
 Err.forbidden('Permissions.Denied', 'Insufficient permissions')
 Err.fromException(error)                                    // wraps native Error
 Err.fromException(error, ErrorType.Unexpected, 'Net.Timeout')
+Err.fromException(error, ErrorType.Unexpected, { code: 'Net.Timeout', description: 'Upstream timed out' })
 Err.equals(errA, errB)                                      // structural equality
 Err.with(err, { code: 'Api.X' })                            // frozen copy with overrides (not { ...err })
 Err.fromJSON(json)                                          // Result<AppError>; bad shape → AppError.InvalidJson
@@ -251,6 +254,7 @@ const meta = ErrorMetadata.fromRecord({ field: 'email' })
 Err.validation('Email.Invalid', 'Bad format', meta)
 ErrorMetadata.combine(meta1, meta2)
 ErrorMetadata.toRecord(meta)
+ErrorMetadata.withStackTrace()   // { stackTrace: <current stack> }
 ```
 
 ### Rules — RuleEngine
@@ -284,7 +288,9 @@ RuleEngine.andAsync(r1, r2)
 RuleEngine.andAllAsync(r1, r2)
 RuleEngine.linearAsync(r1, r2)
 RuleEngine.orAsync(r1, r2)
-RuleEngine.ifAsync(cond, then, else?)
+RuleEngine.ifAsync(cond, then, else?)   // async combinators also accept sync rules
+RuleEngine.ifTyped(cond, then, else?)   // typed; no else → condition's failure
+RuleEngine.ifTypedAsync(cond, then, else?)
 
 // Evaluation
 RuleEngine.evaluate(rule, ctx)              // VoidResult (sync, never throws)
@@ -466,7 +472,7 @@ identity(x) / constant(v)() / flip(binaryFn)
 
 ```typescript
 import { Eq } from 'tsentials/eq';
-import { Ord, sortBy, min, max, clamp, between, reverse } from 'tsentials/ord';
+import { Ord, sortBy, min, max, clamp, between, betweenExclusive, reverse } from 'tsentials/ord';
 
 // Instances: Eq.strict/string/number/boolean/date — Ord.number/string/boolean/date
 Eq.struct({ id: Eq.number, name: Eq.string })   // structural equality (works with interfaces)
@@ -478,6 +484,7 @@ sortBy(users, byAge) / sortBy(users, reverse(byAge))
 min(byAge, a, b) / max(byAge, a, b)
 clamp(Ord.number, 0, 100, 150)                  // 100 — throws if lower > upper
 between(Ord.number, 0, 100, 42)                 // true
+betweenExclusive(Ord.number, 0, 100, 100)       // false, bounds excluded
 Ord.struct({ name: Ord.string, age: Ord.number })  // multi-field, short-circuits
 ```
 
@@ -535,6 +542,7 @@ Tree.map(t, fn) / Tree.filter(t, pred)   // filter: parent kept if any descendan
 Tree.find(t, pred) / Tree.findAll(t, pred)
 Tree.fold(t, (value, childResults) => ...)  // post-order
 drawTree(t)                // ├── └── pretty print
+// all functions are iterative: 100k-deep trees do not overflow the stack
 ```
 
 ### Record utilities
@@ -621,7 +629,7 @@ const first = keysetPaginate(orders, { limit: 10 }, byNewest);   // Result<Keyse
 if (first.ok) keysetPaginate(orders, { limit: 10, after: first.value.nextCursor }, byNewest);
 ```
 
-`pageSize` is clamped (max 100). Last keyset key must be unique. Failures: `KeysetPagination.InvalidCursor`, `KeysetPagination.AfterAndBefore`. For databases use `planKeysetPage` + `createKeysetPageResponse`.
+`pageSize` is clamped (max 100). Last keyset key must be unique. Failures: `KeysetPagination.InvalidCursor`, `KeysetPagination.AfterAndBefore`. For databases use `planKeysetPage` + `createKeysetPageResponse`; `keysetPredicate(ordering, plan.cursor, plan.reverse)` gives the filter as data and `keysetPredicateToSql(predicate, { columns, placeholder? })` a parameterised `WHERE` fragment (`columns` required, values only as parameters).
 
 ### Enums — wire names and safe parsing (subpath-only)
 

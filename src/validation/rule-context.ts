@@ -3,6 +3,7 @@ import { Err } from '../errors/app-error.js';
 import type { AbortOptions } from '../result/abort.js';
 import { observe, throwIfAborted, withAbort } from '../result/abort.js';
 import type { AsyncRule, Rule } from '../rules/rule.js';
+import { RuleEngine } from '../rules/rule-engine.js';
 import type { ContextState } from './internal.js';
 import { isThenable, trackPending } from './internal.js';
 import type { CollectionPath, ElementOf, PathValue, PropertyPath } from './property-path.js';
@@ -213,10 +214,11 @@ export class RuleContext<T> {
 
   /**
    * Evaluates a {@link Rule} against the whole model (RuleEngine integration). Every error
-   * of a failing rule is added as-is.
+   * of a failing rule is added as-is. A rule that throws fails with code
+   * `Rule.EvaluationFailed`, as in `RuleEngine.evaluate`.
    */
   satisfies(rule: Rule<T>): this {
-    const result: unknown = rule(this.model);
+    const result: unknown = RuleEngine.evaluate(rule, this.model);
     if (isThenable(result)) {
       observe(result);
       throw new TypeError('satisfies() received an async rule; use satisfiesAsync() instead.');
@@ -226,13 +228,16 @@ export class RuleContext<T> {
     return this;
   }
 
-  /** Async variant of {@link satisfies}; rejects with the signal's reason when it aborts. */
+  /**
+   * Async variant of {@link satisfies}; rejects with the signal's reason when it aborts. Any
+   * other throw or rejection of the rule fails with code `Rule.EvaluationFailed`.
+   */
   satisfiesAsync(rule: AsyncRule<T> | Rule<T>, options?: AbortOptions): Promise<this> {
     const signal = options?.signal ?? this.#state.signal;
     return trackPending(this.#state, async () => {
       throwIfAborted(signal);
       const result = await withAbort(
-        Promise.resolve().then(() => (rule as AsyncRule<T>)(this.model, signal)),
+        RuleEngine.evaluateAsync(rule, this.model, signal === undefined ? undefined : { signal }),
         signal,
       );
       if (!result.ok) this.#state.errors.push(...result.errors);

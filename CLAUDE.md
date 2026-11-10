@@ -239,7 +239,8 @@ RuleEngine.andTyped(r1, r2)        // collects ALL errors; success value = FIRST
 
 // Async
 RuleEngine.fromPredicateAsync<T>(async pred, err)
-RuleEngine.andAsync / andAllAsync / linearAsync / orAsync / ifAsync
+RuleEngine.andAsync / andAllAsync / linearAsync / orAsync / ifAsync   // accept sync rules too
+RuleEngine.ifTyped / ifTypedAsync(cond, then, else?)   // typed; no else → condition's failure
 
 // Evaluation
 RuleEngine.evaluate(rule, ctx)            // VoidResult — SYNC, never throws (throw → Rule.EvaluationFailed)
@@ -632,7 +633,7 @@ if (first.ok) {
 // bad cursor → failure 'KeysetPagination.InvalidCursor'; after + before → 'KeysetPagination.AfterAndBefore'
 ```
 
-For database queries use `planKeysetPage` + `createKeysetPageResponse` (see `src/pagination/keyset.ts`); `encodeCursor`/`decodeCursor` and a `CursorProtector` (e.g. HMAC) are exported.
+For database queries use `planKeysetPage` + `createKeysetPageResponse` (see `src/pagination/keyset.ts`); `encodeCursor`/`decodeCursor` and a `CursorProtector` (e.g. HMAC) are exported. `keysetPredicate` builds the cursor filter as plain data and `keysetPredicateToSql` renders it as a parameterised `WHERE` fragment.
 
 ### Enums (`tsentials/enums`)
 

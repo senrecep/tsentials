@@ -5,7 +5,7 @@ description: Use when composing business validation logic — define rules as ty
 
 # tsentials/rules
 
-Composable rule engine for TypeScript. Define business logic as small typed functions and combine them freely. Sync and async rules are separate types.
+Composable rule engine for TypeScript. Define business logic as small typed functions and combine them freely. Sync and async rules are separate types; async combinators accept both.
 
 ## Installation
 
@@ -28,14 +28,14 @@ import type { Rule, AsyncRule, TypedRule, TypedAsyncRule } from 'tsentials/rules
 // Sync rule — returns VoidResult directly (NOT a Promise)
 type Rule<TContext> = (context: TContext) => VoidResult;
 
-// Async rule — returns Promise<VoidResult>
-type AsyncRule<TContext> = (context: TContext) => Promise<VoidResult>;
+// Async rule: returns Promise<VoidResult> and receives the caller's AbortSignal (if any)
+type AsyncRule<TContext> = (context: TContext, signal?: AbortSignal) => Promise<VoidResult>;
 
 // Typed rule — returns a value on success
 type TypedRule<TContext, TResult> = (context: TContext) => Result<TResult>;
 
 // Async typed rule
-type TypedAsyncRule<TContext, TResult> = (context: TContext) => Promise<Result<TResult>>;
+type TypedAsyncRule<TContext, TResult> = (context: TContext, signal?: AbortSignal) => Promise<Result<TResult>>;
 ```
 
 > **Critical:** `Rule<T>` is **sync only**. Use `AsyncRule<T>` for async predicates. Do NOT type an `async` function as `Rule<T>`.
@@ -116,13 +116,21 @@ if (result.ok) {
 ### `evaluateAsync` — asynchronous, returns `Promise<VoidResult>`
 
 ```typescript
-// evaluateAsync() is for AsyncRule<T>
-const result = await RuleEngine.evaluateAsync(hasVerifiedEmail, user);
+// evaluateAsync() takes an AsyncRule<T> (a sync Rule<T> works too)
+const result = await RuleEngine.evaluateAsync(hasVerifiedEmail, user, { signal });
 
 if (!result.ok) {
   console.log(result.errors[0]?.description);
 }
 ```
+
+### Throwing rules: `Rule.EvaluationFailed`
+
+`evaluate` never throws. A rule that throws (or an async rule that rejects) becomes a failure with code `Rule.EvaluationFailed`, type `Unexpected`, and the thrown message as description. Every combinator node is guarded the same way, so `or` can still succeed on a later child and `if` takes the else branch.
+
+### Abort behaviour
+
+With `{ signal }`, `evaluateAsync` passes the signal to the rule, and the async combinators pass it to every child and check it before each child. When the caller's signal is aborted (before the call, or when a rule throws while it is aborted), the promise rejects with `signal.reason` instead of returning a failure. An in-flight rule is awaited until it settles, so rules should observe the signal themselves.
 
 ---
 
@@ -185,18 +193,18 @@ const featureRule = RuleEngine.if(config.strictMode, strictRule);
 
 ## Async Combinators
 
-All async combinators accept `AsyncRule<TContext>` and return `AsyncRule<TContext>`.
+All async combinators accept `AsyncRule<TContext>` or sync `Rule<TContext>` (mixed in one call) and return `AsyncRule<TContext>`.
 
 ```typescript
 RuleEngine.andAsync(...rules)       // all must pass, stops on first failure
 RuleEngine.andAllAsync(...rules)    // all must pass, collects ALL failures
 RuleEngine.linearAsync(...rules)    // stops on first failure
 RuleEngine.orAsync(...rules)        // at least one must pass
-RuleEngine.ifAsync(cond, onTrue, onFalse?)  // cond: AsyncRule | boolean, returns AsyncRule<TContext>
+RuleEngine.ifAsync(cond, onTrue, onFalse?)  // cond: AsyncRule | Rule | boolean, returns AsyncRule<TContext>
 ```
 
 ```typescript
-const asyncRule = RuleEngine.andAsync(isEmailUnique, hasVerifiedEmail);
+const asyncRule = RuleEngine.andAsync(isAdult, isEmailUnique, hasVerifiedEmail); // sync + async
 const result = await RuleEngine.evaluateAsync(asyncRule, user);
 ```
 
@@ -212,11 +220,17 @@ RuleEngine.linearTyped<TContext, TResult>(...rules: TypedRule<TContext, TResult>
 RuleEngine.andTyped<TContext, TResult>(...rules: TypedRule<TContext, TResult>[])
 RuleEngine.orTyped<TContext, TResult>(...rules: TypedRule<TContext, TResult>[])
 
-// Async typed combinators
-RuleEngine.linearTypedAsync<TContext, TResult>(...rules: TypedAsyncRule<TContext, TResult>[])
-RuleEngine.andTypedAsync<TContext, TResult>(...rules: TypedAsyncRule<TContext, TResult>[])
-RuleEngine.orTypedAsync<TContext, TResult>(...rules: TypedAsyncRule<TContext, TResult>[])
+// Async typed combinators (each rule may be TypedAsyncRule or sync TypedRule)
+RuleEngine.linearTypedAsync<TContext, TResult>(...rules)
+RuleEngine.andTypedAsync<TContext, TResult>(...rules)
+RuleEngine.orTypedAsync<TContext, TResult>(...rules)
+
+// Typed conditional: runs onTrue when condition succeeds, onFalse when it fails
+RuleEngine.ifTyped(condition, onTrue, onFalse?)       // TypedRule<TContext, TResult>
+RuleEngine.ifTypedAsync(condition, onTrue, onFalse?)  // TypedAsyncRule<TContext, TResult>
 ```
+
+`ifTyped` / `ifTypedAsync` return the chosen branch's result. Without `onFalse`, a failing condition returns its own failure (there is no typed value to fall back to).
 
 All three typed combinators return `Result.success(value)` when their rules pass: `andTyped`/`andTypedAsync` run every rule, collect all errors and on success carry the *first* rule's value, `orTyped`/`orTypedAsync` carry the value of the *first passing* rule, and `linearTyped`/`linearTypedAsync` carry the *last* rule's value once the whole sequence passes. With zero rules every typed combinator returns the Validation failure `EMPTY_RULE_ARRAY`, like the untyped ones.
 
@@ -275,7 +289,8 @@ const response = await fromAsync(fetchUser(userId))
 - Prefer `RuleEngine.linear()` for sequential guards where later checks depend on earlier ones passing
 - `RuleEngine.if()` returns a `Rule<TContext>` — evaluate it with `RuleEngine.evaluate(rule, ctx)`
 - `RuleEngine.evaluate()` is sync and returns `VoidResult` directly — no `await` needed
-- `RuleEngine.evaluateAsync()` is for `AsyncRule<T>` — always `await` it
+- `RuleEngine.evaluateAsync()` is for `AsyncRule<T>` (sync rules work too); always `await` it
+- A throwing rule becomes `Rule.EvaluationFailed`; only the caller's abort rejects
 - Use `RuleEngine.fromPredicate()` with a factory error `(ctx) => AppError` for context-aware error messages
 - Group domain errors in `const` objects — rules read like domain language
 - Test each rule in isolation: `RuleEngine.evaluate(rule, context)` → assert result

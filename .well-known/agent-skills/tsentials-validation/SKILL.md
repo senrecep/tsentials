@@ -56,6 +56,20 @@ validator.toRule();              // Rule<User> — plug into RuleEngine (tsentia
 // validationBehavior([validator]) in tsentials/mediator calls validateAsync; set `order` to sort it
 ```
 
+### Composing validators with `include()`
+
+```typescript
+class CustomerValidator extends Validator<User> {
+  readonly #user = new UserValidator();
+  protected configure(rules: RuleContext<User>, model: User) {
+    this.include(this.#user, rules, model); // runs UserValidator's rules in this run
+    rules.for('email').notEmpty();
+  }
+}
+```
+
+`include(other, rules, model, signal?)` runs another validator's `configure` on the same context; its errors land in this run. Await the result when `other` has async rules.
+
 ## Cascade and null handling
 
 - Default cascade is `Stop`: the first failure on a chain skips the remaining rules of that chain. Use `.cascade(CascadeMode.Continue)` to accumulate.
@@ -71,6 +85,8 @@ validator.toRule();              // Rule<User> — plug into RuleEngine (tsentia
 | Collection | `minCount`, `maxCount`, `countBetween` |
 | Enum | `isDefinedEnum`, `isOneOf`, `hasOnlyDefinedFlags` |
 | Custom | `must(pred)`, `must(pred, code, message)`, `satisfies(rule)`, `setValidator(v)` |
+
+`equal(expected, message?, { ignoreCase: true })` / `notEqual(...)` compare strings ignoring case (as C# `StringComparison.OrdinalIgnoreCase`, folded with `toUpperCase()`). `satisfies(rule)` / `satisfiesAsync(rule)` record the rule's errors as-is; a rule that throws or rejects records `Rule.EvaluationFailed`.
 
 Enum rules take a plain enum object plus its name (`isDefinedEnum(Status, 'Status')`, `isOneOf(Status, 'Status', [Status.A])`) or an `EnumDefinition` from `tsentials/enums` (`isDefinedEnum(Status)`, `isOneOf(Status, ['Active'])`). With a definition the value goes through its own `parse` / `parseNumber` in input mode: wire names, member names, aliases and int32 values pass, the fallback member fails, and the message lists the input wire names. `isOneOf` then compares the parsed member name with `allowed`. `hasOnlyDefinedFlags` takes plain enum objects only. Messages cut the echoed value to 64 characters plus `…`.
 
@@ -106,7 +122,7 @@ const checked = Validator.validateWith(Result.success(user), (rules) => {
 ## Patterns and pitfalls
 
 - Import from `tsentials/validation` — never from the root `tsentials` entry.
-- **AbortSignal convention:** the caller's abort makes the promise reject with `signal.reason`; it never becomes a validation error. An exception thrown by an async rule predicate or by `configure` rejects too (never a failure); use `mustAsync` predicates that return `false` for validation failures.
+- **AbortSignal convention:** the caller's abort makes the promise reject with `signal.reason`; it never becomes a validation error. An exception thrown by an async rule predicate or by `configure` rejects too (never a failure); the exception is `satisfies` / `satisfiesAsync`, where a throwing rule records `Rule.EvaluationFailed`; use `mustAsync` predicates that return `false` for validation failures.
 - Subclasses implement `configure(rules)` as a **sync** method; use `validateAsync` with an `AsyncConfigure` for async rules.
 - Errors use `description`, not `message`: `r.errors[0]?.description`.
 - A message argument may be a string or an `AppError`.

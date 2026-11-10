@@ -281,3 +281,42 @@ describe('choose with a selector', () => {
     expect(choose([1, 2], () => Maybe.none<number>())).toEqual([]);
   });
 });
+
+describe('tryFirst / tryLast / choose on non-array iterables', () => {
+  function* gen<T>(...values: T[]): Generator<T> {
+    yield* values;
+  }
+
+  it('tryFirst reads a Set, a generator and stops at the first match', () => {
+    expect(tryFirst(new Set([4, 5]))).toEqual(Maybe.some(4));
+    expect(tryFirst(new Set<number>()).hasValue).toBe(false);
+    let read = 0;
+    const counted = (function* () {
+      for (const n of [1, 2, 3, 4]) {
+        read++;
+        yield n;
+      }
+    })();
+    expect(tryFirst(counted, (n) => n > 1)).toEqual(Maybe.some(2));
+    expect(read).toBe(2);
+    expect(tryFirst(gen(1, 2), (n) => n > 5).hasValue).toBe(false);
+  });
+
+  it('tryLast reads the whole iterable', () => {
+    expect(tryLast(new Set([1, 2, 3]))).toEqual(Maybe.some(3));
+    expect(tryLast(gen(1, 2, 3, 4), (n) => n % 2 === 1)).toEqual(Maybe.some(3));
+    expect(tryLast(gen<number>()).hasValue).toBe(false);
+    expect(tryLast(new Map([['a', 1]]).values())).toEqual(Maybe.some(1));
+  });
+
+  it('tryLast gives None when the last match is null', () => {
+    expect(tryLast(gen<number | null>(1, null)).hasValue).toBe(false);
+  });
+
+  it('choose accepts any iterable', () => {
+    expect(choose(new Set([Maybe.some(1), Maybe.none<number>(), Maybe.some(3)]))).toEqual([1, 3]);
+    expect(choose(gen(1, 2, 3), (n) => (n > 1 ? Maybe.some(n * 10) : Maybe.none()))).toEqual([
+      20, 30,
+    ]);
+  });
+});

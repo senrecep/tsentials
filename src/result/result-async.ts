@@ -168,6 +168,22 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   }
 
   /**
+   * Validates the success value with a validator returning Result<unknown>, ResultAsync or
+   * Promise<Result>. Keeps the original value on success. See {@link Result.thenEnsure}.
+   */
+  thenEnsure(
+    validator: (value: T) => Result<unknown> | ResultAsync<unknown> | Promise<Result<unknown>>,
+  ): ResultAsync<T> {
+    return new ResultAsync(
+      this._promise.then(async (r) => {
+        if (!r.ok) return r;
+        const check = await validator(r.value);
+        return check.ok ? r : Result.failureFrom<T>(check.errors);
+      }),
+    );
+  }
+
+  /**
    * Fails when the (sync or async) predicate matches the success value, opposite of `ensure`.
    * An error factory is called only when the predicate matches.
    */
@@ -254,7 +270,8 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
   }
 
   /**
-   * Returns a fallback value on failure.
+   * Returns a fallback value on failure. A function-typed `fallback` is always called with
+   * the errors; to recover with a function value, wrap it: `.else(() => fn)`.
    */
   else(fallback: T | ((errors: readonly AppError[]) => T | Promise<T>)): ResultAsync<T> {
     return new ResultAsync(
@@ -410,6 +427,13 @@ export class ResultAsync<T> implements PromiseLike<Result<T>> {
    */
   async unwrap(): Promise<T> {
     return Result.unwrap(await this._promise);
+  }
+
+  /**
+   * Resolves to the value, or rejects with your message or Error. See {@link Result.unwrapOrThrow}.
+   */
+  async unwrapOrThrow(messageOrError?: string | Error): Promise<T> {
+    return Result.unwrapOrThrow(await this._promise, messageOrError);
   }
 
   /**

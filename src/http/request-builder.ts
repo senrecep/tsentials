@@ -1,11 +1,19 @@
+import { Err } from '../errors/app-error.js';
 import { IDEMPOTENCY_KEY_HEADER } from '../idempotency/constants.js';
-import type { Result } from '../result/result.js';
+import { Result } from '../result/result.js';
 import type { FetchResultInit, ResponseBodyType } from './fetch-result.js';
 import { fetchResult, sendJson } from './fetch-result.js';
 import { type IdempotencyKeyOptions, idempotencyKeyOrNew } from './idempotency-client.js';
 
-/** Value accepted by {@link RequestBuilder.query}. */
-export type QueryValue = string | number | boolean;
+/**
+ * Value accepted by {@link RequestBuilder.query} and {@link RequestBuilder.route}. A `Date` is sent
+ * as ISO 8601 (`toISOString()`).
+ */
+export type QueryValue = string | number | boolean | Date;
+
+/** @throws RangeError for an invalid `Date`. */
+const formatValue = (value: QueryValue): string =>
+  value instanceof Date ? value.toISOString() : String(value);
 
 /**
  * Fluent builder for HTTP requests that returns Result<T>.
@@ -32,6 +40,7 @@ export class RequestBuilder {
   readonly #url: string;
   readonly #headers: [string, string][] = [];
   readonly #query: [string, string][] = [];
+  readonly #route: [string, string | undefined][] = [];
   #body: BodyInit | null = null;
   #jsonPayload: unknown;
   #hasJsonPayload = false;
@@ -109,20 +118,51 @@ export class RequestBuilder {
 
   /**
    * Appends query string parameters: either one `name`/`value` pair, or every entry of a
-   * record: `null`/`undefined` record values are skipped.
+   * record: `null`/`undefined` record values are skipped. An array repeats the key once per item
+   * (`tag=a&tag=b`); a `Date` is sent as ISO 8601.
+   * @throws RangeError for an invalid `Date`.
    */
-  query(name: string, value: QueryValue): this;
-  query(params: Readonly<Record<string, QueryValue | null | undefined>>): this;
+  query(name: string, value: QueryValue | readonly QueryValue[]): this;
   query(
-    nameOrParams: string | Readonly<Record<string, QueryValue | null | undefined>>,
-    value?: QueryValue,
+    params: Readonly<Record<string, QueryValue | readonly QueryValue[] | null | undefined>>,
+  ): this;
+  query(
+    nameOrParams:
+      | string
+      | Readonly<Record<string, QueryValue | readonly QueryValue[] | null | undefined>>,
+    value?: QueryValue | readonly QueryValue[],
   ): this {
-    if (typeof nameOrParams === 'string') {
-      this.#query.push([nameOrParams, String(value)]);
-      return this;
+    const entries =
+      typeof nameOrParams === 'string'
+        ? [[nameOrParams, value] as const]
+        : Object.entries(nameOrParams);
+    for (const [name, v] of entries) {
+      if (v === null || v === undefined) continue;
+      for (const item of Array.isArray(v) ? v : [v]) this.#query.push([name, formatValue(item)]);
     }
-    for (const [name, v] of Object.entries(nameOrParams)) {
-      if (v !== null && v !== undefined) this.#query.push([name, String(v)]);
+    return this;
+  }
+
+  /**
+   * Replaces every `{name}` placeholder in the URL with the URL-encoded value (`encodeURIComponent`;
+   * a `Date` is sent as ISO 8601): either one `name`/`value` pair or every entry of a record.
+   * `send()` resolves to a Validation failure, without sending a request, when the URL has no such
+   * placeholder (`RequestBuilder.RouteParameterNotFound`) or the value is `null`/`undefined`
+   * (`RequestBuilder.RouteValueRequired`). Pass the URL as a string: a `URL` object percent-encodes
+   * the braces, so its placeholders are not found.
+   * @throws RangeError for an invalid `Date`.
+   * @example
+   * await RequestBuilder.get('/users/{id}').route('id', userId).send<User>();
+   */
+  route(name: string, value: QueryValue): this;
+  route(values: Readonly<Record<string, QueryValue>>): this;
+  route(nameOrValues: string | Readonly<Record<string, QueryValue>>, value?: QueryValue): this {
+    const entries =
+      typeof nameOrValues === 'string'
+        ? [[nameOrValues, value] as const]
+        : Object.entries(nameOrValues);
+    for (const [name, v] of entries) {
+      this.#route.push([name, v === null || v === undefined ? undefined : formatValue(v)]);
     }
     return this;
   }
@@ -196,24 +236,50 @@ export class RequestBuilder {
     return this;
   }
 
-  /** Builds the final URL string: query params are appended, existing query/hash kept as-is. */
-  #buildUrl(): string {
-    if (this.#query.length === 0) return this.#url;
-    const hashIndex = this.#url.indexOf('#');
-    const base = hashIndex === -1 ? this.#url : this.#url.slice(0, hashIndex);
-    const hash = hashIndex === -1 ? '' : this.#url.slice(hashIndex);
+  /**
+   * Builds the final URL string: route placeholders are filled, query params are appended,
+   * existing query/hash kept as-is.
+   */
+  #buildUrl(): Result<string> {
+    let url = this.#url;
+    for (const [name, value] of this.#route) {
+      const placeholder = `{${name}}`;
+      if (!url.includes(placeholder)) {
+        return Result.failure(
+          Err.validation(
+            'RequestBuilder.RouteParameterNotFound',
+            `The URL has no '${placeholder}' placeholder.`,
+          ),
+        );
+      }
+      if (value === undefined) {
+        return Result.failure(
+          Err.validation(
+            'RequestBuilder.RouteValueRequired',
+            `The route value '${name}' cannot be null or undefined.`,
+          ),
+        );
+      }
+      url = url.replaceAll(placeholder, encodeURIComponent(value));
+    }
+    if (this.#query.length === 0) return Result.success(url);
+    const hashIndex = url.indexOf('#');
+    const base = hashIndex === -1 ? url : url.slice(0, hashIndex);
+    const hash = hashIndex === -1 ? '' : url.slice(hashIndex);
     const params = new URLSearchParams(this.#query).toString();
     const separator = !base.includes('?')
       ? '?'
       : base.endsWith('?') || base.endsWith('&')
         ? ''
         : '&';
-    return `${base}${separator}${params}${hash}`;
+    return Result.success(`${base}${separator}${params}${hash}`);
   }
 
   /** Sends the request and returns Result<T>. */
   async send<T>(): Promise<Result<T>> {
-    const url = this.#buildUrl();
+    const built = this.#buildUrl();
+    if (!built.ok) return built;
+    const url = built.value;
     const init: FetchResultInit = {
       method: this.#method,
       headers: this.#headers.map(([name, value]): [string, string] => [name, value]),

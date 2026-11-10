@@ -48,6 +48,11 @@ export class ResultChain<T> {
     return new ResultChain(Result.ensure(this._result, predicate, error));
   }
 
+  /** Validates the value with a Result-returning validator. See {@link Result.thenEnsure}. */
+  thenEnsure(validator: (value: T) => Result<unknown>): ResultChain<T> {
+    return new ResultChain(Result.thenEnsure(this._result, validator));
+  }
+
   tap(fn: (value: T) => void): ResultChain<T> {
     return new ResultChain(Result.tap(this._result, fn));
   }
@@ -179,6 +184,10 @@ export class ResultChain<T> {
     return ResultAsync.from(Result.ensureAsync(this._result, predicate, error));
   }
 
+  thenEnsureAsync(validator: (value: T) => Promise<Result<unknown>>): ResultAsync<T> {
+    return ResultAsync.from(Result.thenEnsureAsync(this._result, validator));
+  }
+
   tapAsync(fn: (value: T) => Promise<void>): ResultAsync<T> {
     return ResultAsync.from(Result.tapAsync(this._result, fn));
   }
@@ -217,6 +226,11 @@ export class ResultChain<T> {
 
   unwrapOrElse(fn: (errors: readonly AppError[]) => T): T {
     return Result.unwrapOrElse(this._result, fn);
+  }
+
+  /** Returns the value or throws. See {@link Result.unwrapOrThrow}. */
+  unwrapOrThrow(messageOrError?: string | Error): T {
+    return Result.unwrapOrThrow(this._result, messageOrError);
   }
 
   /** Wraps a Promise<Result<T>> into a ResultChain<T>. */

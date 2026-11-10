@@ -183,6 +183,12 @@ const sameMetadata = (
   return true;
 };
 
+/** Code and description overrides for {@link Err.fromException}. */
+export interface ExceptionErrorOverride {
+  readonly code?: string | undefined;
+  readonly description?: string | undefined;
+}
+
 /**
  * Factory namespace for creating AppError instances.
  * Without arguments each factory uses the bare type name as code (`Failure`, `Validation`,
@@ -265,18 +271,24 @@ export const Err = {
    * Code defaults to the exception's constructor name; description is its message; metadata
    * holds the exception details (see `ErrorMetadata.fromException`), on key collision the
    * exception details win over the supplied `metadata`.
+   * Pass `{ code, description }` instead of a code string to also replace the description.
+   *
+   * @example
+   * Err.fromException(e, ErrorType.Unexpected, { code: 'Db.Down', description: 'Database is unreachable' });
    */
   fromException(
     error: unknown,
     type: ErrorType = ErrorType.Failure,
-    code?: string,
+    code?: string | ExceptionErrorOverride,
     metadata?: ErrorMetadata,
   ): AppError {
     const err = error instanceof Error ? error : new Error(safeString(error));
     const exceptionMeta = ErrorMetadata.fromException(err);
+    const override: ExceptionErrorOverride =
+      typeof code === 'object' && code !== null ? code : { code };
     return make(
-      code ?? err.constructor.name,
-      err.message,
+      override.code ?? err.constructor.name,
+      override.description ?? err.message,
       type,
       ErrorMetadata.combine(exceptionMeta, metadata),
     );
