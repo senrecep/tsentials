@@ -8,8 +8,8 @@ export interface ProblemDetailsOptions {
   /** Replaces the status of the primary error. */
   readonly status?: number | undefined;
   /**
-   * Replaces the title. Default: the title of the primary error's type, or none when `status`
-   * differs from that type's status.
+   * Replaces the title. Default: the title of the primary error's type or, when `status` differs
+   * from that type's status, the status reason phrase (none for a status without one).
    */
   readonly title?: string | undefined;
   /** Maps the status to `type`; return `undefined` to leave it out. Default: {@link rfc9110TypeUri}. */
@@ -48,6 +48,51 @@ const titles: Readonly<Record<ErrorType, string>> = {
   [ErrorType.Unknown]: 'Unknown Error',
 };
 
+// ASP.NET Core ReasonPhrases for 4xx and 5xx; shortcut: 1xx to 3xx overrides get no title, add them if a caller needs one.
+const reasonPhrases: Readonly<Record<number, string>> = {
+  400: 'Bad Request',
+  401: 'Unauthorized',
+  402: 'Payment Required',
+  403: 'Forbidden',
+  404: 'Not Found',
+  405: 'Method Not Allowed',
+  406: 'Not Acceptable',
+  407: 'Proxy Authentication Required',
+  408: 'Request Timeout',
+  409: 'Conflict',
+  410: 'Gone',
+  411: 'Length Required',
+  412: 'Precondition Failed',
+  413: 'Payload Too Large',
+  414: 'URI Too Long',
+  415: 'Unsupported Media Type',
+  416: 'Range Not Satisfiable',
+  417: 'Expectation Failed',
+  418: "I'm a teapot",
+  419: 'Authentication Timeout',
+  421: 'Misdirected Request',
+  422: 'Unprocessable Entity',
+  423: 'Locked',
+  424: 'Failed Dependency',
+  426: 'Upgrade Required',
+  428: 'Precondition Required',
+  429: 'Too Many Requests',
+  431: 'Request Header Fields Too Large',
+  451: 'Unavailable For Legal Reasons',
+  499: 'Client Closed Request',
+  500: 'Internal Server Error',
+  501: 'Not Implemented',
+  502: 'Bad Gateway',
+  503: 'Service Unavailable',
+  504: 'Gateway Timeout',
+  505: 'HTTP Version Not Supported',
+  506: 'Variant Also Negotiates',
+  507: 'Insufficient Storage',
+  508: 'Loop Detected',
+  510: 'Not Extended',
+  511: 'Network Authentication Required',
+};
+
 /**
  * The RFC 9110 section link of a client or server error status, as ASP.NET Core writes it;
  * `undefined` for a status without a section (418 included).
@@ -84,7 +129,8 @@ export function toProblemDetails(
   );
   const typeStatus = errorTypeToHttpStatus(primary.type);
   const status = options.status ?? typeStatus;
-  const title = options.title ?? (status === typeStatus ? titles[primary.type] : undefined);
+  const title =
+    options.title ?? (status === typeStatus ? titles[primary.type] : reasonPhrases[status]);
   const type = (options.typeUri ?? rfc9110TypeUri)(status);
   const validation = errors
     .filter((e) => e.type === ErrorType.Validation)

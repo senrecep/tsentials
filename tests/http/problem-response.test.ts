@@ -68,6 +68,7 @@ describe('toProblemDetails', () => {
     const error = Err.unexpected('Lost', 'lost');
     expect(toProblemDetails([error], { status: 503 })).toEqual({
       type: 'https://tools.ietf.org/html/rfc9110#section-15.6.4',
+      title: 'Service Unavailable',
       status: 503,
       detail: 'lost',
       errorCodes: ['Lost'],
@@ -86,6 +87,13 @@ describe('toProblemDetails', () => {
       traceId: 't',
       errorCodes: ['Lost'],
     });
+  });
+
+  it('uses the reason phrase as title for an overridden status, none when it has no phrase', () => {
+    const error = Err.validation('Key.Reused', 'reused');
+    expect(toProblemDetails([error], { status: 422 }).title).toBe('Unprocessable Entity');
+    expect(toProblemDetails([error], { status: 400 }).title).toBe('Validation Error');
+    expect(toProblemDetails([error], { status: 420 })).not.toHaveProperty('title');
   });
 
   it('throws for no errors', () => {

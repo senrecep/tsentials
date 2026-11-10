@@ -1,6 +1,6 @@
 ---
 name: tsentials-http
-description: Use when making HTTP calls that should return Result<T> instead of throwing — fetchResult const object with get/post/put/patch/delete methods, RequestBuilder for fluent header/query-param/body construction with .send<T>(), httpStatusToError for status-to-AppError mapping, extractErrorDescription for ProblemDetails parsing, server-side conditional request helpers (computeETag, formatETag, notModified for 304, checkIfMatch for 412/428), and server-side problem+json responses from AppErrors or a Result (toProblemDetails, toProblemResponse, resultToResponse).
+description: Use when making HTTP calls that should return Result<T> instead of throwing: fetchResult const object with get/post/put/patch/delete methods, RequestBuilder for fluent header/query-param/body construction with .send<T>(), httpStatusToError for status-to-AppError mapping, extractErrorDescription for ProblemDetails parsing, server-side conditional request helpers (computeETag, formatETag, notModified for 304, checkIfMatch for 412/428), and server-side problem+json responses from AppErrors or a Result (toProblemDetails, toProblemResponse, resultToResponse).
 ---
 
 # tsentials/http
@@ -221,7 +221,8 @@ const body = toProblemDetails(errors);                    // the plain object
 
 - The body matches CSharpEssentials.AspNetCore: `{ type, title, status, detail, ...extensions, errorCodes, errors? }`. The primary error is the one with the highest `errorTypeToHttpStatus` status (the first on a tie) and gives `status`, `title` (from its `ErrorType`, such as `Not Found` or `Validation Error`) and `detail`.
 - `type` is the RFC 9110 section link (`rfc9110TypeUri`), left out for statuses without one. `errorCodes` lists every code once, in order. `errors` lists the `Validation` errors as `{ code, description }` and is left out when there are none.
-- Options: `status` and `title` replace the defaults (an overridden status without `title` has no title), `typeUri` replaces the link resolver, `extensions` adds members, `headers` adds response headers.
+- Options: `status` and `title` replace the defaults (an overridden status without `title` gets the status reason phrase, such as `Service Unavailable`), `typeUri` replaces the link resolver, `extensions` adds members, `headers` adds response headers.
+- The status comes from the `ErrorType` only. CSharpEssentials also maps some codes to their own status (`Idempotency.KeyReused` to 422, `Idempotency.InFlight` to 409, a failed precondition to 412); pass `status` (and `title` if needed) for those.
 - The body reads back with `problemDetailsToErrors` (and so with `fetchResult` on the client): codes, order and types are kept; a non-validation error that is not primary takes the primary error's description and the type of the status.
 - `toProblemDetails([])` throws a `TypeError`.
 
