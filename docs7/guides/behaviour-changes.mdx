@@ -2,9 +2,11 @@
 title: "Migration guide: behaviour changes"
 ---
 
-This guide lists every change that alters the runtime behaviour of an existing tsentials API. Read the 3.0.0 section when upgrading from 2.x, the 2.0.0 section when upgrading from 1.x and the 1.0.0 section when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](https://github.com/senrecep/tsentials/blob/main/CHANGELOG.md).
+This guide lists every change that alters the runtime behaviour of an existing tsentials API. Read the 3.1.0 section when upgrading from 3.0.x, the 3.0.0 section when upgrading from 2.x, the 2.0.0 section when upgrading from 1.x and the 1.0.0 section when upgrading from 0.1.x. New APIs are listed in [CHANGELOG.md](https://github.com/senrecep/tsentials/blob/main/CHANGELOG.md).
 
 ## Behaviour changes in the next release (unreleased)
+
+## Behaviour changes in 3.1.0
 
 * **errors:** `Err.equals` now compares nested metadata by value: a nested metadata `Map` (such as the `innerException` map from `Err.fromException`) and a nested error created by `Err` (such as a `cause` entry) are compared recursively, and cyclic metadata terminates. Two errors whose nested metadata was built separately with the same content are now equal; they used to differ because nested values were compared by reference. Other values (plain objects, arrays) are still compared with `Object.is`.
 * **http:** `fetchResult` and `RequestBuilder` now cancel the response body when they do not read it (a non-JSON error response, 204/205, a non-JSON 2xx), so the connection is released instead of staying busy until the body is garbage collected. Code that reads `response.body` itself is unaffected: these paths never expose the `Response`.
