@@ -167,6 +167,13 @@ export function between<A>(ord: Ord<A>, lower: A, upper: A, value: A): boolean {
   return ord.compare(value, lower) >= 0 && ord.compare(value, upper) <= 0;
 }
 
+/**
+ * Checks whether a value is strictly between a minimum and maximum (both bounds excluded).
+ */
+export function betweenExclusive<A>(ord: Ord<A>, lower: A, upper: A, value: A): boolean {
+  return ord.compare(value, lower) > 0 && ord.compare(value, upper) < 0;
+}
+
 // ─── Namespace ───────────────────────────────────────────────────────────────
 
 export const Ord = {
@@ -182,4 +189,5 @@ export const Ord = {
   max,
   clamp,
   between,
+  betweenExclusive,
 } as const;

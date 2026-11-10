@@ -95,7 +95,7 @@ npm install tsentials
 | `tsentials/function` | `pipe`, `flow`, `identity`, `constant`, `flip` |
 | `tsentials/array` | `NonEmptyArray<T>`, `head`, `tail`, `last`, `asNonEmptyArray` |
 | `tsentials/eq` | `Eq<T>`, `contramap`, `struct`, `getArrayEq` |
-| `tsentials/ord` | `Ord<T>`, `sortBy`, `min`, `max`, `clamp`, `between` |
+| `tsentials/ord` | `Ord<T>`, `sortBy`, `min`, `max`, `clamp`, `between`, `betweenExclusive` |
 | `tsentials/predicate` | `Predicate<T>`, `Refinement<A, B>`, `and`, `or`, `not`, `all`, `any` |
 | `tsentials/these` | `These<E, A>`, `toResult`, `fromResult`, `partition` |
 | `tsentials/tree` | `Tree<T>`, `map`, `filter`, `fold`, `drawTree` |
@@ -585,6 +585,7 @@ import type { DomainEvent } from 'tsentials/entity';
 interface OrderCreatedEvent extends DomainEvent {
   readonly orderId: string;
 }
+// Optional: { timing: 'pre-save' } asks the dispatcher to publish before the save; absent means 'post-save'.
 
 class Order implements EntityBase, SoftDeletable {
   private readonly _base = createEntityBase();
@@ -1011,7 +1012,7 @@ Composable, type-safe equality and ordering. `Eq<A>` provides `equals`, `Ord<A>`
 
 ```typescript
 import { Eq } from 'tsentials/eq';
-import { Ord, sortBy, min, max, clamp, between, reverse } from 'tsentials/ord';
+import { Ord, sortBy, min, max, clamp, between, betweenExclusive, reverse } from 'tsentials/ord';
 
 interface User { readonly id: number; readonly name: string; readonly age: number; }
 
@@ -1037,6 +1038,7 @@ min(byAge, a, b);                // Alice (30)
 max(byAge, a, b);                // Carol (35)
 clamp(Ord.number, 0, 100, 150);  // 100
 between(Ord.number, 0, 100, 42); // true
+betweenExclusive(Ord.number, 0, 100, 100); // false
 
 // Multi-field ordering — compares fields in order, short-circuits
 const byNameThenAge = Ord.struct({ name: Ord.string, age: Ord.number });
@@ -1136,6 +1138,8 @@ console.log(drawTree(tree));
 // │   └── Android
 // └── Laptops
 ```
+
+Every function walks the tree with an explicit stack, so a tree 100k levels deep does not overflow the call stack.
 
 ## Record Utilities
 

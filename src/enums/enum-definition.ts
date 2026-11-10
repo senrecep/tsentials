@@ -126,8 +126,19 @@ function isInt32(n: number): boolean {
   return Number.isInteger(n) && n >= INT32_MIN && n <= INT32_MAX;
 }
 
+/**
+ * Folds like C# `OrdinalIgnoreCase`: simple per-character upper-casing only.
+ * A character whose upper case is longer (`ß` to `SS`) stays as it is, and the
+ * dotless `ı` and long `ſ` are not folded to `I` and `S`, as in .NET.
+ */
 function foldCase(s: string): string {
-  return s.toUpperCase();
+  if (/^[\x20-\x7e]*$/.test(s)) return s.toUpperCase();
+  let folded = '';
+  for (const c of s) {
+    const upper = c.toUpperCase();
+    folded += upper.length === c.length && c !== '\u0131' && c !== '\u017f' ? upper : c;
+  }
+  return folded;
 }
 
 function addFirst<V>(map: Map<string, V>, key: string, value: V): void {

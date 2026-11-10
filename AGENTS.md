@@ -466,7 +466,7 @@ identity(x) / constant(v)() / flip(binaryFn)
 
 ```typescript
 import { Eq } from 'tsentials/eq';
-import { Ord, sortBy, min, max, clamp, between, reverse } from 'tsentials/ord';
+import { Ord, sortBy, min, max, clamp, between, betweenExclusive, reverse } from 'tsentials/ord';
 
 // Instances: Eq.strict/string/number/boolean/date — Ord.number/string/boolean/date
 Eq.struct({ id: Eq.number, name: Eq.string })   // structural equality (works with interfaces)
@@ -478,6 +478,7 @@ sortBy(users, byAge) / sortBy(users, reverse(byAge))
 min(byAge, a, b) / max(byAge, a, b)
 clamp(Ord.number, 0, 100, 150)                  // 100 — throws if lower > upper
 between(Ord.number, 0, 100, 42)                 // true
+betweenExclusive(Ord.number, 0, 100, 100)       // false, bounds excluded
 Ord.struct({ name: Ord.string, age: Ord.number })  // multi-field, short-circuits
 ```
 
@@ -535,6 +536,7 @@ Tree.map(t, fn) / Tree.filter(t, pred)   // filter: parent kept if any descendan
 Tree.find(t, pred) / Tree.findAll(t, pred)
 Tree.fold(t, (value, childResults) => ...)  // post-order
 drawTree(t)                // ├── └── pretty print
+// all functions are iterative: 100k-deep trees do not overflow the stack
 ```
 
 ### Record utilities
