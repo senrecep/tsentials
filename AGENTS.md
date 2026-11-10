@@ -713,4 +713,5 @@ npm test           # vitest run (2957 tests)
 npm run check      # biome lint + format check
 npm run lint:fix   # auto-fix lint
 npm run check:package  # after build: publint, attw and an import smoke test on the packed tarball
+npm run size       # build, then fail if an entry point's min+gzip size is over scripts/size-budgets.json
 ```

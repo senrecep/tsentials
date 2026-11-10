@@ -17,6 +17,9 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['src/**/index.ts'],
       thresholds: {
+        'src/errors/**': FULL_COVERAGE,
+        'src/result/**': FULL_COVERAGE,
+        'src/http/**': FULL_COVERAGE,
         'src/validation/**': FULL_COVERAGE,
         'src/resilience/**': FULL_COVERAGE,
         'src/pagination/**': FULL_COVERAGE,

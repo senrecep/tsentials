@@ -130,7 +130,8 @@
     "docs7": "node scripts/docs7.mjs",
     "docs7:check": "node scripts/docs7.mjs --check",
     "typecheck:tests": "tsc --noEmit -p tsconfig.test.json",
-    "check:package": "node scripts/check-package.mjs"
+    "check:package": "node scripts/check-package.mjs",
+    "size": "npm run build && node scripts/size.mjs"
   },
   "files": [
     "dist",
@@ -178,6 +179,7 @@
     "@biomejs/biome": "^2.4.15",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^5.1.0",
+    "esbuild": "^0.28.2",
     "publint": "^0.3.25",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
