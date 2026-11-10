@@ -92,6 +92,18 @@ describe('ErrorMetadata.fromException', () => {
   });
 });
 
+describe('ErrorMetadata.withStackTrace', () => {
+  it('uses an empty string when the runtime provides no stack', () => {
+    const original = Error.prepareStackTrace;
+    Error.prepareStackTrace = () => undefined as unknown as string;
+    try {
+      expect(ErrorMetadata.withStackTrace().get('stackTrace')).toBe('');
+    } finally {
+      Error.prepareStackTrace = original;
+    }
+  });
+});
+
 describe('ErrorMetadata.combine', () => {
   it('returns base when additional is undefined', () => {
     const base = ErrorMetadata.fromRecord({ a: 1 });

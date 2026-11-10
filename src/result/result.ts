@@ -576,7 +576,7 @@ export const Result = {
    * Warning: `fn` is not awaited, see {@link Result.tapError}.
    */
   tapErrorFirst<T>(result: Result<T>, fn: (firstError: AppError) => void): Result<T> {
-    if (!result.ok && result.errors.length > 0) {
+    if (!result.ok) {
       const [firstError] = result.errors;
       if (firstError) reportAsyncCallback(fn(firstError), 'Result.tapErrorFirst', TAP_ERROR_ASYNC);
     }

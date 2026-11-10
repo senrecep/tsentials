@@ -78,20 +78,17 @@ function normalize(bytes: readonly number[]): readonly number[] {
 }
 
 function contains([net, prefix]: Network, bytes: readonly number[]): boolean {
-  if (net.length !== bytes.length) return false;
   for (let bit = 0; bit < prefix; bit += 8) {
     const mask = (0xff << (8 - Math.min(8, prefix - bit))) & 0xff;
     const i = bit / 8;
-    if (((net[i] ?? 0) & mask) !== ((bytes[i] ?? 0) & mask)) return false;
+    if (((net[i] as number) & mask) !== ((bytes[i] as number) & mask)) return false;
   }
   return true;
 }
 
 function network(cidr: string): Network {
   const [text = '', prefix = ''] = cidr.split('/');
-  const bytes = parseAddress(text);
-  if (bytes === undefined) throw new Error(`Invalid network ${cidr}`);
-  return [bytes, Number(prefix)];
+  return [parseAddress(text) as number[], Number(prefix)];
 }
 
 function parseAddress(address: string): number[] | undefined {

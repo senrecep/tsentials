@@ -45,6 +45,9 @@ jobs:
       - name: Check the packed package (publint, attw, import smoke test)
         run: npm run check:package
 
+      - name: Check bundle size
+        run: node scripts/size.mjs
+
       - name: Test
         if: matrix.node-version != '22.x'
         run: npm test
