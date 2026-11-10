@@ -4,6 +4,16 @@ export {
   type IdempotencyErrorCode,
   IdempotencyErrorCodes,
 } from '../idempotency/constants.js';
+export type { ResourceValidators } from './conditional.js';
+export {
+  ConditionalErrorCodes,
+  checkIfMatch,
+  compareETags,
+  computeETag,
+  formatETag,
+  notModified,
+  parseETagList,
+} from './conditional.js';
 export type { FetchResultInit } from './fetch-result.js';
 export { fetchResult } from './fetch-result.js';
 export type { HttpCode } from './http-codes.js';

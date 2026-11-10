@@ -36,6 +36,15 @@ const isAbortError = (e: unknown): boolean =>
   ((e as { name?: unknown }).name === 'AbortError' ||
     (e as { name?: unknown }).name === 'TimeoutError');
 
+/** Releases an unread body so the connection can be reused; cancel errors are irrelevant. */
+const discardBody = (response: Response): void => {
+  try {
+    response.body?.cancel().catch(() => undefined);
+  } catch {
+    // ignore
+  }
+};
+
 /**
  * Converts a fetch Response to a Result<T>. A body that cannot be read or parsed is a failure;
  * an abort while reading (caller or timeout) propagates to `execute`.
@@ -57,6 +66,8 @@ async function responseToResult<T>(
         if (signal.aborted) throw e;
         body = undefined; // unreadable error body, fall back to the status error
       }
+    } else {
+      discardBody(response);
     }
     return R.failureFrom(
       withResponseMetadata(problemDetailsToErrors(response.status, body), response, body),
@@ -66,6 +77,7 @@ async function responseToResult<T>(
   // 204 No Content / 205 Reset Content never carry a body, and a non-JSON body is not
   // deserialized: both are void-style successes.
   if (response.status === 204 || response.status === 205 || !isJson) {
+    discardBody(response);
     return R.success(undefined as unknown as T);
   }
 

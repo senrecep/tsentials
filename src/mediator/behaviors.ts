@@ -1,4 +1,4 @@
-import { type AppError, Err, ErrorMetadata, ErrorType } from '../errors/index.js';
+import { type AppError, DomainError, Err, ErrorMetadata, ErrorType } from '../errors/index.js';
 import { safeString } from '../errors/safe-string.js';
 import { isAbortError, isCallerAbort, Result, throwIfAborted } from '../result/index.js';
 import type { GenericBehavior, NextHandler, RequestContext } from './mediator.js';
@@ -53,7 +53,8 @@ function isCancellation(error: unknown, signal: AbortSignal | undefined): boolea
 
 /**
  * Converts anything the rest of the pipeline throws into a failed Result with
- * `Err.fromException(error)`. Abort errors always propagate.
+ * `Err.fromException(error)`. A thrown DomainError becomes a failure with its carried
+ * errors as-is. Abort errors always propagate.
  */
 export function exceptionHandlingBehavior(): GenericBehavior {
   return async <TReq, TRes>(
@@ -65,6 +66,9 @@ export function exceptionHandlingBehavior(): GenericBehavior {
       return await next();
     } catch (error) {
       if (isCancellation(error, context.signal)) throw error;
+      if (error instanceof DomainError && error.errors.length > 0) {
+        return Result.failureFrom(error.errors);
+      }
       return Result.failure(Err.fromException(error));
     }
   };
