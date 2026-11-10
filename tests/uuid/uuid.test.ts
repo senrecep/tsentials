@@ -4,7 +4,9 @@ const PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const timestampOf = (id: string) => Number.parseInt(id.replace(/-/g, '').slice(0, 12), 16);
 const counterOf = (id: string) => {
   const hex = id.replace(/-/g, '');
-  return (Number.parseInt(hex.slice(13, 16), 16) << 6) | (Number.parseInt(hex.slice(16, 18), 16) & 0x3f);
+  return (
+    (Number.parseInt(hex.slice(13, 16), 16) << 6) | (Number.parseInt(hex.slice(16, 18), 16) & 0x3f)
+  );
 };
 
 afterEach(() => {
