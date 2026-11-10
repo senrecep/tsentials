@@ -13,6 +13,9 @@ This guide lists every change that alters the runtime behaviour of an existing t
 
 * **result:** when the callback of a sync `Result.tap`, `tapError`, `tapErrorFirst`, `tapIf`, `tapErrorIf`, `switch`, `switchFirst` or `switchLast` (and the `ResultChain` methods that call them) returns a promise that rejects, the unhandled rejection is now a `TypeError` that names the method and the async alternative, with the original error as `cause`. It used to be the original error with no hint of where it came from. The callback is still not awaited and a fulfilled promise is untouched; use `Result.tapAsync`, `Result.tapErrorAsync`, a `ResultAsync` chain or `await Result.match(...)` for async work.
 
+* **result:** `ResultUnwrapError` now extends the new `DomainError`, and `Result.try`, `Result.tryAsync`, `Result.tryCatch` and `Result.tryCatchAsync` return the errors a thrown `DomainError` carries as-is, even when an `onError` mapper or fixed error is given. `Result.try(() => Result.unwrap(r))` used to fail with one `ResultUnwrapError` Failure error; it now fails with `r`'s errors. `ResultUnwrapError.errors` is now a frozen copy of the array it was given.
+* **mediator:** `exceptionHandlingBehavior` returns the errors a thrown `DomainError` (including `ResultUnwrapError`) carries as-is instead of one `Err.fromException` Failure error.
+
 ## Behaviour changes in 3.0.0
 
 * **idempotency:** `withIdempotency` now defaults `unscopedKeyBehavior` to `'reject'`: a request with an `Idempotency-Key` but no scope (no `scope` option, or a resolver returning `null`/`undefined`) gets 400 `Idempotency.ScopeRequired` in `enforce`; `observe` logs `Idempotency.Observe.WouldRejectScopeRequired` and runs the handler. It used to run without idempotency (`'skip'`). Pass a `scope` resolver, or `unscopedKeyBehavior: 'skip'` to restore the old behaviour.
