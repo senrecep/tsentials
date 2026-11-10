@@ -468,6 +468,7 @@ const parseAge = (raw: string): These<AppError[], number> => {
 
 These.isLeft(t) / These.isRight(t) / These.isBoth(t)   // type guards — narrow
 These.map(t, fn) / These.mapLeft(t, fn) / These.flatMap(t, fn)
+// flatMap from Both: f's Left is returned as is; Right/Both give Both(original left, new value)
 These.tap(t, fn) / These.tapLeft(t, fn)
 These.match(t, onLeft, onRight, onBoth)                // exhaustive
 These.getRight(t) / These.getLeft(t)                   // value | undefined

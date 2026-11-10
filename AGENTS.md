@@ -514,6 +514,7 @@ import { These } from 'tsentials/these';
 These.left([err]) / These.right(value) / These.both([err], value)
 These.isLeft(t) / These.isRight(t) / These.isBoth(t)   // type guards — narrow
 These.map / mapLeft / flatMap / tap / tapLeft
+// flatMap from Both: f's Left is returned as is; Right/Both give Both(original left, new value)
 These.match(t, onLeft, onRight, onBoth)                // exhaustive
 These.toResult(t)         // Both → failure (errors win)
 These.toResultLenient(t)  // Both → success (errors discarded)
