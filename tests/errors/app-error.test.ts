@@ -387,3 +387,93 @@ describe('Err.fromException with values String() rejects', () => {
     expect(Err.fromException(value).description).toBe('[object Object]');
   });
 });
+
+describe('Err.with', () => {
+  const base = Err.validation(
+    'User.Email',
+    'Bad email',
+    ErrorMetadata.fromRecord({ field: 'email' }),
+  );
+
+  it('replaces fields and keeps the rest', () => {
+    const patched = Err.with(base, { code: 'Api.User.Email', type: ErrorType.Conflict });
+    expect(patched.code).toBe('Api.User.Email');
+    expect(patched.type).toBe(ErrorType.Conflict);
+    expect(patched.description).toBe('Bad email');
+    expect(patched.metadata).toBe(base.metadata);
+    expect(base.code).toBe('User.Email');
+  });
+
+  it('returns a frozen error that keeps toJSON', () => {
+    const patched = Err.with(base, { description: 'Other' });
+    expect(Object.isFrozen(patched)).toBe(true);
+    expect(JSON.parse(JSON.stringify(patched))).toEqual({
+      code: 'User.Email',
+      description: 'Other',
+      type: 'Validation',
+      numericType: 2,
+      metadata: { field: 'email' },
+    });
+  });
+
+  it('drops metadata when patched with undefined', () => {
+    expect(Err.with(base, { metadata: undefined }).metadata).toBeUndefined();
+  });
+});
+
+describe('Err.fromJSON', () => {
+  const invalidPath = (json: unknown): unknown => {
+    const r = Err.fromJSON(json);
+    if (r.ok) throw new Error('expected failure');
+    expect(r.errors[0]?.code).toBe('AppError.InvalidJson');
+    expect(r.errors[0]?.type).toBe(ErrorType.Validation);
+    return r.errors[0]?.metadata?.get('path');
+  };
+
+  it('round-trips the toJSON shape', () => {
+    const err = Err.notFound('User.NotFound', 'Missing', ErrorMetadata.fromRecord({ id: 42 }));
+    const r = Err.fromJSON(JSON.parse(JSON.stringify(err)));
+    expect(r.ok && Err.equals(r.value, err)).toBe(true);
+    expect(r.ok && Object.isFrozen(r.value)).toBe(true);
+    expect(r.ok && JSON.stringify(r.value)).toBe(JSON.stringify(err));
+  });
+
+  it('revives an error without metadata', () => {
+    const r = Err.fromJSON({ code: 'A', description: 'a', type: 'Failure' });
+    expect(r.ok && r.value.metadata).toBeUndefined();
+  });
+
+  it('accepts the C# default PascalCase shape with a numeric type and null metadata', () => {
+    const r = Err.fromJSON({
+      Code: 'X',
+      Description: 'x',
+      Type: 2,
+      NumericType: 2,
+      Metadata: null,
+    });
+    expect(r).toEqual({ ok: true, value: Err.validation('X', 'x') });
+  });
+
+  it('matches type names case-insensitively', () => {
+    const r = Err.fromJSON({ code: 'X', description: 'x', type: 'notfound' });
+    expect(r.ok && r.value.type).toBe(ErrorType.NotFound);
+  });
+
+  it('falls back to numericType when type is not a known name', () => {
+    const r = Err.fromJSON({ code: 'X', description: 'x', type: 'not_found', numericType: 4 });
+    expect(r.ok && r.value.type).toBe(ErrorType.NotFound);
+  });
+
+  it('rejects bad shapes with the offending path', () => {
+    expect(invalidPath(null)).toBe('error');
+    expect(invalidPath([])).toBe('error');
+    expect(invalidPath({ description: 'x', type: 'Failure' })).toBe('error.code');
+    expect(invalidPath({ code: 'X', description: 1, type: 'Failure' })).toBe('error.description');
+    expect(invalidPath({ code: 'X', description: 'x', type: 'Bogus' })).toBe('error.type');
+    expect(invalidPath({ code: 'X', description: 'x', type: 9 })).toBe('error.type');
+    expect(invalidPath({ code: 'X', description: 'x' })).toBe('error.type');
+    expect(invalidPath({ code: 'X', description: 'x', type: 'Failure', metadata: [1] })).toBe(
+      'error.metadata',
+    );
+  });
+});

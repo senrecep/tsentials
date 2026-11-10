@@ -88,6 +88,7 @@ All static functions take `(result, ...)` as first argument. They are NOT currie
 | `Result.failIf(cond, value, error)` | Failure if true, success otherwise |
 | `Result.try(fn, onError?)` | Catches thrown exceptions -> `Result<T>` |
 | `Result.tryAsync(fn, onError?, { signal }?)` | Async version of `try` -> `Promise<Result<T>>`; `fn` receives the signal |
+| `Result.fromJSON<T>(json)` | Revives parsed JSON: `{ ok, value }` / `{ ok: false, errors }` or the CSharpEssentials `{ isSuccess, isFailure, value, errors }` (any key case). A bad shape is a `Result.InvalidJson` failure (`AppError.InvalidJson` per bad error entry); `value` is not validated |
 
 > **CRITICAL:** `Result.try()` — NOT `Result.trySync()`. `trySync` does not exist.
 
