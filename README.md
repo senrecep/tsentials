@@ -169,6 +169,8 @@ Result.tap(price, v => console.log('computed', v));
 Result.tapError(price, errs => console.error('failed', errs[0].code));
 ```
 
+The sync `tap`, `tapError`, `tapErrorFirst`, `tapIf`, `tapErrorIf` and `switch*` do not await their callback. Pass async work to `Result.tapAsync` / `Result.tapErrorAsync`, a `ResultAsync` chain, or `await Result.match(...)`. A promise returned to a sync method is dropped; if it rejects, the unhandled rejection is a `TypeError` that names the method and carries the original error as `cause`. Enable the typescript-eslint rule [`@typescript-eslint/no-misused-promises`](https://typescript-eslint.io/rules/no-misused-promises/) to catch this at lint time.
+
 ### Conditional & Guarded Pipeline
 
 ```typescript
