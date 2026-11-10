@@ -86,7 +86,7 @@ npm install tsentials
 | `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata`, `DomainError` |
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
 | `tsentials/entity` | `createEntityBase`, `createEntityBaseWithId`, `createSoftDeletable`, `DomainEvent` |
-| `tsentials/http` | `fetchResult`, `RequestBuilder`, `notModified`, `checkIfMatch`, `computeETag` |
+| `tsentials/http` | `fetchResult`, `RequestBuilder`, `notModified`, `checkIfMatch`, `computeETag`, `isBlockedAddress` |
 | `tsentials/time` | `DateTimeProvider`, `SystemDateTimeProvider`, `createFakeDateTimeProvider`, `nextDayOfWeek`, `getAge`, `toDateOnly`, `toTimeOnly`, `msToDate` |
 | `tsentials/clone` | `Cloneable<T>`, `deepClone`, `cloneArray` |
 | `tsentials/union` | `Union<T>` |
@@ -726,6 +726,21 @@ toProblemDetails([Err.notFound('User.NotFound', 'User 7 was not found.')]);
 ```
 
 The primary error is the one with the highest status (the first on a tie); it gives `status`, `title` and `detail`. `errorCodes` lists every code once, in order, and `errors` lists the `Validation` errors as `{ code, description }`. Options: `status`, `title`, `typeUri`, `extensions` and (for responses) `headers`.
+
+### Blocked addresses (SSRF checks)
+
+`isBlockedAddress` tells whether an IP literal is loopback, private, link-local, unique local, CGNAT, multicast, reserved or a documentation range, using the ranges of the CSharpEssentials SSRF guard. Resolve the host and check every address before a server-side request to a user-supplied URL.
+
+```typescript
+import { lookup } from 'node:dns/promises';
+import { isBlockedAddress } from 'tsentials/http';
+
+const host = new URL(target).hostname.replace(/^\[|\]$/g, '');
+const addresses = await lookup(host, { all: true });
+if (addresses.some((a) => isBlockedAddress(a.address))) throw new Error('Blocked host');
+```
+
+Parsing is strict: anything that is not a plain IPv4 or IPv6 literal (`127.1`, `0177.0.0.1`, a host name) counts as blocked. This is not a full SSRF defence: also handle redirects and DNS rebinding.
 
 ---
 

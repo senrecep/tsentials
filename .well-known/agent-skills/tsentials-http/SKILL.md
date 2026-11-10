@@ -1,6 +1,6 @@
 ---
 name: tsentials-http
-description: Use when making HTTP calls that should return Result<T> instead of throwing: fetchResult const object with get/post/put/patch/delete methods, RequestBuilder for fluent header/query-param/body construction with .send<T>(), httpStatusToError for status-to-AppError mapping, extractErrorDescription for ProblemDetails parsing, server-side conditional request helpers (computeETag, formatETag, notModified for 304, checkIfMatch for 412/428), and server-side problem+json responses from AppErrors or a Result (toProblemDetails, toProblemResponse, resultToResponse).
+description: Use when making HTTP calls that should return Result<T> instead of throwing: fetchResult const object with get/post/put/patch/delete methods, RequestBuilder for fluent header/query-param/body construction with .send<T>(), httpStatusToError for status-to-AppError mapping, extractErrorDescription for ProblemDetails parsing, server-side conditional request helpers (computeETag, formatETag, notModified for 304, checkIfMatch for 412/428), server-side problem+json responses from AppErrors or a Result (toProblemDetails, toProblemResponse, resultToResponse), and isBlockedAddress to reject loopback, private, link-local and other non-public IP literals before an outbound request (SSRF checks).
 ---
 
 # tsentials/http
@@ -19,6 +19,7 @@ npm install tsentials
 import { fetchResult, RequestBuilder, httpStatusToError, extractErrorDescription } from 'tsentials/http';
 import { computeETag, formatETag, notModified, checkIfMatch } from 'tsentials/http';
 import { toProblemDetails, toProblemResponse, resultToResponse } from 'tsentials/http';
+import { isBlockedAddress } from 'tsentials/http';
 ```
 
 ---
@@ -237,6 +238,30 @@ const body = toProblemDetails(errors);                    // the plain object
 - `toProblemDetails([])` throws a `TypeError`.
 
 ---
+
+## Blocked addresses (SSRF checks)
+
+`isBlockedAddress(address)` returns `true` for an IP literal that a server-side request to a user-supplied URL must not reach. The ranges are those of the CSharpEssentials SSRF guard: unspecified, loopback, private (RFC 1918), CGNAT (`100.64.0.0/10`), link-local (including the `169.254.169.254` metadata endpoint), unique local (`fc00::/7`), multicast, broadcast and reserved, and the documentation and benchmark ranges. An IPv4 address inside IPv6 (`::ffff:127.0.0.1`, `::10.0.0.1`, `64:ff9b::a9fe:a9fe`, `2002:c0a8:101::`) is checked as IPv4 too.
+
+```typescript
+import { lookup } from 'node:dns/promises';
+import { isBlockedAddress } from 'tsentials/http';
+
+async function assertPublicHost(url: URL): Promise<void> {
+  const host = url.hostname.replace(/^\[|\]$/g, ''); // URL keeps the brackets of an IPv6 literal
+  const addresses = await lookup(host, { all: true }); // an IP literal comes back as is
+  if (addresses.length === 0 || addresses.some((a) => isBlockedAddress(a.address))) {
+    throw new Error(`Blocked outbound host ${url.hostname}`);
+  }
+}
+
+await assertPublicHost(new URL(target));
+const result = await fetchResult.get<Data>(target, { redirect: 'manual' });
+```
+
+- Parsing is strict. Accepted: dotted-decimal IPv4 with four parts and no leading zeros, and IPv6 with hex groups, `::` and an optional dotted IPv4 tail, optionally in brackets (as `URL.hostname` gives it). Anything else returns `true`: host names, `127.1`, `0177.0.0.1`, `0x7f000001`, zone ids such as `fe80::1%eth0`, and surrounding spaces.
+- Check every address the lookup returns, not just the first.
+- It is a pure check, not a full SSRF defence. `fetch` resolves the host again, so a DNS rebinding answer can still reach a blocked address between the check and the request; pin the checked address in the connection (a custom agent or `lookup`) for that. Redirects are followed by default: pass `redirect: 'manual'` and check each `Location` yourself.
 
 ## Chaining with ResultAsync
 

@@ -16,7 +16,7 @@ import { RuleEngine } from 'tsentials/rules';
 import type { Rule } from 'tsentials/rules';
 import { createEntityBase, createSoftDeletable } from 'tsentials/entity';
 import type { DomainEvent } from 'tsentials/entity';
-import { fetchResult, RequestBuilder, HttpCodes, notModified, checkIfMatch, computeETag, formatETag, toProblemDetails, toProblemResponse, resultToResponse } from 'tsentials/http';
+import { fetchResult, RequestBuilder, HttpCodes, notModified, checkIfMatch, computeETag, formatETag, toProblemDetails, toProblemResponse, resultToResponse, isBlockedAddress } from 'tsentials/http';
 import type { HttpCode } from 'tsentials/http';
 import { SystemDateTimeProvider, createFakeDateTimeProvider } from 'tsentials/time';
 import { deepClone, cloneArray } from 'tsentials/clone';
