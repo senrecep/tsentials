@@ -370,10 +370,10 @@ const display = Maybe.getOrElse(
 | | `map` / `bind` / `filter` / `tap` / `tapNone` / `orElse` | `(fn, { signal }?) => MaybeAsync` |
 | | `toResult` | `(error?) => ResultAsync<T>` |
 | | `match` / `getOrElse` / `getOrDefault` | terminal, `=> Promise<...>` |
-| **Collection** | `tryFirst` | `<T>(arr, pred?) => Maybe<T>` |
-| | `tryLast` | `<T>(arr, pred?) => Maybe<T>` |
+| **Collection** | `tryFirst` | `<T>(items: Iterable<T>, pred?) => Maybe<T>` |
+| | `tryLast` | `<T>(items: Iterable<T>, pred?) => Maybe<T>`; a non-array iterable is read to the end |
 | | `tryFind` | `<T>(arr, pred) => Maybe<T>`; also `(map, key)` and `(record, key)` |
-| | `choose` | `<T>(maybes: Maybe<T>[]) => T[]`; also `(items, selector) => U[]` |
+| | `choose` | `<T>(maybes: Iterable<Maybe<T>>) => T[]`; also `(items: Iterable<T>, selector) => U[]` |
 | | `asMaybe` | `<T>(value: T \| null \| undefined) => Maybe<T>` |
 
 ---
