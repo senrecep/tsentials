@@ -4,6 +4,37 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0](https://github.com/senrecep/tsentials/compare/v3.1.0...v4.0.0) (2026-11-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **http:** a ProblemDetails body with an errorCodes extension now yields AppErrors with those domain codes (for example User.NotFound) instead of a single Http.{status} error.
+* **http:** idempotentRetryClassifier treats only GET, HEAD, PUT, DELETE and OPTIONS as safe. Any other method without a key is never retried, a safe method is retried on every 5xx, and 409 Idempotency.InFlight is retried only when the request had a key.
+* **http:** a 2xx JSON body that cannot be parsed and a JSON request body that cannot be serialized are now Validation failures instead of Unexpected; RequestBuilder.json() no longer serializes eagerly or throws; a throwing resilience fallback now returns an Unexpected error instead of Failure.
+* harden isJson, Predicate.toRule, Eq.number and record against edge cases ([#37](https://github.com/senrecep/tsentials/issues/37))
+* **mediator:** cachingBehavior no longer throws on an unreadable cached entry; it logs a warning, runs the handler and overwrites the entry.
+* **string:** the case converters drop every character that is not a letter, combining mark or digit as a word separator, make digit runs their own word, and split on non-ASCII uppercase and titlecase letters.
+* **enums:** defineEnum throws a TypeError for a wire name or alias that is empty, contains whitespace or a comma, or starts with a digit, a sign or a dot. parse rejects '-00' style negative zero and parseNumber(-0) fails.
+* **these:** These.flatMap on a Both whose continuation returns a Left now returns that Left instead of Both(originalLeft, continuationLeft).
+
+### Added
+
+* **enums:** validate wire name and alias format in defineEnum and reject negative zero ([#34](https://github.com/senrecep/tsentials/issues/34)) ([9abf753](https://github.com/senrecep/tsentials/commit/9abf75335b6d8b5a4bf07c7e6af104a4cc4d652d))
+* **http:** add toProblemDetails and resultToResponse for problem+json responses ([#53](https://github.com/senrecep/tsentials/issues/53)) ([e6a59eb](https://github.com/senrecep/tsentials/commit/e6a59eb69a242cb19d5cf79376212f86ad2220df))
+* **http:** read text and binary response bodies as Results ([#52](https://github.com/senrecep/tsentials/issues/52)) ([bd707e9](https://github.com/senrecep/tsentials/commit/bd707e92dd4991e60458ec4f2851e1e032a6b157))
+
+
+### Fixed
+
+* harden isJson, Predicate.toRule, Eq.number and record against edge cases ([#37](https://github.com/senrecep/tsentials/issues/37)) ([664a264](https://github.com/senrecep/tsentials/commit/664a26479147a6bde5b9b0c3af36b4552c4c3073))
+* **http:** align idempotentRetryClassifier with the CSharpEssentials retry table ([#43](https://github.com/senrecep/tsentials/issues/43)) ([43777c8](https://github.com/senrecep/tsentials/commit/43777c82c97dafe314fcd9513e60301664b8629e))
+* **http:** classify malformed 2xx JSON and request serialization failures as Validation ([#41](https://github.com/senrecep/tsentials/issues/41)) ([247feac](https://github.com/senrecep/tsentials/commit/247feac36ef4836dd2aefa3cf5959cc600791e9f))
+* **http:** read the errorCodes extension in problemDetailsToErrors ([#46](https://github.com/senrecep/tsentials/issues/46)) ([1b1f1d6](https://github.com/senrecep/tsentials/commit/1b1f1d6db16b6829a0ee36e631022958026997be))
+* **mediator:** run the handler when cachingBehavior cannot read a cached entry ([#36](https://github.com/senrecep/tsentials/issues/36)) ([e03022b](https://github.com/senrecep/tsentials/commit/e03022bdbe7d2e3684ab692f31e6bfc0ef5c66ce))
+* **string:** split words on Unicode case, digit and punctuation boundaries in case converters ([#35](https://github.com/senrecep/tsentials/issues/35)) ([668d950](https://github.com/senrecep/tsentials/commit/668d95074ad6457d3d8a0af834e35c896172b9c9))
+* **these:** return the Left from flatMap when a Both continuation fails ([#29](https://github.com/senrecep/tsentials/issues/29)) ([005f4e1](https://github.com/senrecep/tsentials/commit/005f4e1acd040ea349a12add7db11e499f848e4f))
+
 ## [3.1.0](https://github.com/senrecep/tsentials/compare/v3.0.0...v3.1.0) (2026-11-10)
 
 
