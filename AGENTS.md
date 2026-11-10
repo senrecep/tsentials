@@ -11,7 +11,7 @@
 ```typescript
 import { Result, ResultChain, ResultAsync, fromAsync, chain, maybeToResult, resultToMaybe } from 'tsentials/result';
 import { Err, AppError, ErrorType, ErrorMetadata } from 'tsentials/errors';
-import { Maybe, tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
+import { Maybe, MaybeAsync, tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
 import { RuleEngine } from 'tsentials/rules';
 import type { Rule } from 'tsentials/rules';
 import { createEntityBase, createSoftDeletable } from 'tsentials/entity';
@@ -191,8 +191,19 @@ await Maybe.mapAsync(m, async fn)
 await Maybe.bindAsync(m, async fn)
 await Maybe.filterAsync(m, async pred)
 await Maybe.tapAsync(m, async fn)
+await Maybe.tapNoneAsync(m, async fn)   // async side effect when None
 await Maybe.matchAsync(m, async onSome, async onNone)
 await Maybe.orAsync(m, async () => fallbackMaybe)
+
+// Fluent async chain: one await at the end; each step takes sync or async callbacks
+// and an optional { signal } (the callback receives it; an aborted signal rejects the step)
+const name = await MaybeAsync.from(repo.find(id))   // also MaybeAsync.some/none/try
+  .filter(u => u.isActive)
+  .bind((u, signal) => loadProfile(u.id, { signal }), { signal })
+  .map(p => p.displayName)
+  .tap(async n => audit(n))
+  .tapNone(() => log('missing'))
+  .getOrElse(() => 'anonymous');      // also match, getOrDefault, orElse, toResult(err?) → ResultAsync
 
 // Collection utilities
 tryFirst(items, pred?)            // Maybe<T>

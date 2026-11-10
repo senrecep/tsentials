@@ -81,7 +81,7 @@ npm install tsentials
 | Import | Contents |
 |--------|----------|
 | `tsentials/result` | `Result<T>`, `ResultAsync<T>`, `ResultChain<T>`, `fromAsync`, `maybeToResult`, `resultToMaybe` |
-| `tsentials/maybe` | `Maybe<T>`, collection utilities |
+| `tsentials/maybe` | `Maybe<T>`, `MaybeAsync<T>`, collection utilities |
 | `tsentials/errors` | `AppError`, `ErrorType`, `Err` factory, `ErrorMetadata` |
 | `tsentials/rules` | `Rule<T>`, `RuleEngine` |
 | `tsentials/entity` | `createEntityBase`, `createSoftDeletable`, `DomainEvent` |
@@ -399,6 +399,22 @@ const filtered = await Maybe.filterAsync(profile, async p => p.isPublic);
 
 // fromTry: a throw becomes None, but abort errors are rethrown (never swallowed)
 const found = await Maybe.fromTryAsync(signal => repo.find(id, { signal }), { signal });
+```
+
+`MaybeAsync` is the fluent form: every step returns a `MaybeAsync` and the chain is awaited once.
+Callbacks can be sync or async, and each step takes an optional `{ signal }`.
+
+```typescript
+import { MaybeAsync } from 'tsentials/maybe';
+
+const name = await MaybeAsync.from(repo.find(id))
+  .filter(u => u.isActive)
+  .bind((u, signal) => loadProfile(u.id, { signal }), { signal })
+  .map(p => p.displayName)
+  .tapNone(() => console.warn('missing'))
+  .getOrElse(() => 'anonymous');
+
+const user = await MaybeAsync.from(repo.find(id)).toResult(Err.notFound('User.NotFound', 'No user')); // Result<User>
 ```
 
 ### Collection Utilities
