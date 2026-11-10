@@ -21,6 +21,7 @@ const SITE = {
 };
 const LINK = /(\]\()([^)\s]+)(\))/g;
 const IMG_TAG = /(<img\s[^>]*src=")([^"]+)(")/g;
+const HTML_LESS_THAN = /(?<!\\)<(?!\/?(?:a|img|p|br|div|span|details|summary|sub|sup|kbd|code|strong|em|b|i|picture|source|table|thead|tbody|tr|td|th)\b)/g;
 const IMAGE_EXT = new Set(['.png', '.svg', '.jpg', '.jpeg', '.gif', '.webp']);
 
 const dirs = (path) =>
@@ -70,7 +71,7 @@ function rewrite(target, source, pages) {
 function escapeBraces(line) {
   return line
     .split(/(`[^`]*`)/)
-    .map((part, i) => (i % 2 ? part : part.replace(/[{}]/g, (c) => `\\${c}`)))
+    .map((part, i) => (i % 2 ? part : part.replace(/[{}]/g, (c) => `\\${c}`).replace(HTML_LESS_THAN, '\\<')))
     .join('');
 }
 
