@@ -17,6 +17,9 @@ Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`
 | Format | `npm run format` |
 | Full check | `npm run check` |
 | Publish dry-run | `npm pack --dry-run` |
+| Docs7 site | `npm run docs7` (CI runs `npm run docs7:check`) |
+
+`docs7/` is generated from README.md, `docs/`, the example READMEs and the agent skills under `.well-known/agent-skills/`. Regenerate it after editing any of them and never edit `docs7/` by hand.
 
 ## Architecture
 

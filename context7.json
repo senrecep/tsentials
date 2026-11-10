@@ -1,0 +1,28 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "url": "https://context7.com/senrecep/tsentials",
+  "public_key": "pk_JSfkqn5KzkfNTm45nVfhp",
+  "projectTitle": "tsentials",
+  "description": "Railway-oriented programming for TypeScript: Result<T>, Maybe<T>, a rule engine, validation, resilience, idempotency and DDD base classes with async pipeline support.",
+  "folders": [],
+  "excludeFolders": [
+    "docs7",
+    "tests",
+    "dist",
+    "coverage",
+    "node_modules",
+    ".github",
+    ".omc",
+    ".claude"
+  ],
+  "excludeFiles": [
+    "CHANGELOG.md",
+    "CLAUDE.md",
+    "SECURITY.md"
+  ],
+  "rules": [
+    "Import from the subpath of each module, for example tsentials/result or tsentials/idempotency; validation, resilience, pagination, enums, mediator and idempotency are not re-exported from the root entry.",
+    "Return Result<T> from operations that can fail and build failures with the Err factories (Err.validation, Err.notFound, Err.unexpected) instead of throwing.",
+    "Chain results with Result.then, not bind, and parse JSON with safeJsonParse instead of JSON.parse."
+  ]
+}

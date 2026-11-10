@@ -1,0 +1,77 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "tsentials",
+  "colors": {
+    "primary": "#3178c6",
+    "light": "#3178c6",
+    "dark": "#5a9bd8"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/senrecep/tsentials"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/senrecep/tsentials"
+    }
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get started",
+        "pages": [
+          "index"
+        ]
+      },
+      {
+        "group": "Modules",
+        "pages": [
+          "modules/overview",
+          "modules/array",
+          "modules/clone",
+          "modules/entity",
+          "modules/enums",
+          "modules/eq",
+          "modules/errors",
+          "modules/function",
+          "modules/http",
+          "modules/idempotency",
+          "modules/json",
+          "modules/maybe",
+          "modules/mediator",
+          "modules/meta",
+          "modules/ord",
+          "modules/pagination",
+          "modules/predicate",
+          "modules/record",
+          "modules/resilience",
+          "modules/result",
+          "modules/rules",
+          "modules/string",
+          "modules/these",
+          "modules/time",
+          "modules/tree",
+          "modules/union",
+          "modules/validation"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/behaviour-changes",
+          "guides/idempotency"
+        ]
+      },
+      {
+        "group": "Examples",
+        "pages": [
+          "examples/idempotency-redis",
+          "examples/idempotency-sql"
+        ]
+      }
+    ]
+  }
+}
