@@ -86,3 +86,4 @@ export { createFakeDateTimeProvider, SystemDateTimeProvider } from './time/date-
 export { drawTree, Tree, type Tree as TreeType } from './tree/index.js';
 // Utilities
 export { Union } from './union/union.js';
+export { monotonicUuidv7, uuidv7 } from './uuid/index.js';

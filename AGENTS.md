@@ -42,6 +42,7 @@ import type { EnumMember } from 'tsentials/enums';
 import { createMediator, exceptionHandlingBehavior, validationBehavior } from 'tsentials/mediator';
 import { createIdempotency, idempotent, idempotencyBehavior, withIdempotency, idempotencyKeys, idempotencyScopes, InMemoryIdempotencyStore, RedisIdempotencyStore } from 'tsentials/idempotency';
 import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
+import { uuidv7, monotonicUuidv7 } from 'tsentials/uuid';
 ```
 
 ---
