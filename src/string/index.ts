@@ -8,9 +8,9 @@
  * - Consecutive uppercase runs split before the last capital (e.g. "XMLParser" → ["XML", "Parser"])
  */
 
-const WORD = /[\p{L}\p{Mn}\p{Mc}\p{N}]+/gu;
+const WORD = /[\p{L}\p{Mn}\p{Mc}\p{Nd}]+/gu;
 const BOUNDARY =
-  /(?<![\p{Lu}\p{Lt}])(?=[\p{Lu}\p{Lt}])|(?<!\p{N})(?=\p{N})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/u;
+  /(?<![\p{Lu}\p{Lt}])(?=[\p{Lu}\p{Lt}])|(?<!\p{Nd})(?=\p{Nd})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/u;
 
 function splitWords(str: string): string[] {
   return (str.match(WORD) ?? []).flatMap((chunk) => chunk.split(BOUNDARY));

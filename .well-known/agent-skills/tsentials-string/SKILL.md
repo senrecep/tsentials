@@ -1,6 +1,6 @@
 ---
 name: tsentials-string
-description: Use when converting string casing — toPascalCase/toCamelCase/toKebabCase/toSnakeCase/toMacroCase/toTrainCase/toTitleCase/toUnderscoreCamelCase, all word-boundary aware (Unicode case changes, consecutive-uppercase runs like "XMLParser", digit runs, and any punctuation or whitespace).
+description: Use when converting string casing with toPascalCase/toCamelCase/toKebabCase/toSnakeCase/toMacroCase/toTrainCase/toTitleCase/toUnderscoreCamelCase, all word-boundary aware (Unicode case changes, consecutive-uppercase runs like "XMLParser", digit runs, and any punctuation or whitespace).
 ---
 
 # tsentials/string — Skill

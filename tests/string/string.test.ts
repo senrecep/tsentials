@@ -326,6 +326,8 @@ describe('Unicode, digit and punctuation word boundaries', () => {
     ['Über-straßeID', 'title', 'Über Straße Id'],
     // tsentials additions: punctuation separates words, acronyms split before a capitalized word
     ['foo.bar/baz', 'snake', 'foo_bar_baz'],
+    ['x²y½', 'snake', 'x_y'],
+    ['v٣Api', 'snake', 'v_٣_api'],
     ['XMLParser', 'kebab', 'xml-parser'],
     ['ÄÖÜStraße', 'kebab', 'äöü-straße'],
     ['überÄpfel', 'kebab', 'über-äpfel'],
