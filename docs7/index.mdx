@@ -656,7 +656,7 @@ const created = await RequestBuilder.post('https://api.example.com/users')
 
 `idempotencyKey(key?, { idempotencyKeyGenerator })` and `withIdempotencyKey(init, key?, { idempotencyKeyGenerator })` accept your own `() => string` instead of `crypto.randomUUID()`; it runs once per `idempotencyKey()` / `withIdempotencyKey()` call, and its key is validated like an explicit one (`TypeError` when invalid).
 
-Failures carry response metadata (`HttpErrorMetadataKeys`: status, `Retry-After`, ProblemDetails `code`, replay flag). `withIdempotencyKey(init, key?)` adds the header to a plain `RequestInit`, and `idempotentRetryClassifier(method, hasKey)` is a `shouldRetry` for `ResiliencePolicy.withRetry` that never retries a POST or PATCH without a key. See [Idempotency](#idempotency).
+Failures carry response metadata (`HttpErrorMetadataKeys`: status, `Retry-After`, ProblemDetails `code`, replay flag). `withIdempotencyKey(init, key?)` adds the header to a plain `RequestInit`, and `idempotentRetryClassifier(method, hasKey)` is a `shouldRetry` for `ResiliencePolicy.withRetry` that never retries an unsafe method (anything but GET, HEAD, PUT, DELETE and OPTIONS) without a key. See [Idempotency](#idempotency).
 
 Status code mapping:
 

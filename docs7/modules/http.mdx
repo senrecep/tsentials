@@ -167,7 +167,7 @@ await ResiliencePolicy.create()
   .execute((signal) => fetchResult.send<Order>('/orders', { ...init, signal }));
 ```
 
-- `idempotentRetryClassifier(method, hasKey)` never retries a POST/PATCH without a key or a replayed response; it retries network errors, timeouts, 409 `Idempotency.InFlight`, 408, 429, 503 and 504.
+- `idempotentRetryClassifier(method, hasKey)` treats GET, HEAD, PUT, DELETE and OPTIONS as safe and every other method as unsafe. It never retries an unsafe method without a key or a replayed response. It retries network errors, timeouts, 408, 429, 503 and 504, any other 5xx for a safe method only, and 409 `Idempotency.InFlight` only when `hasKey` is `true`.
 - A failed response's first error carries `HttpErrorMetadataKeys` metadata: `httpStatus`, `retryAfterMs` (from `Retry-After`, see `parseRetryAfter`), `idempotencyReplayed`, `problemCode`.
 - Server side: `tsentials/idempotency` (`withIdempotency`).
 
