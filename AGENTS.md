@@ -284,7 +284,9 @@ RuleEngine.andAsync(r1, r2)
 RuleEngine.andAllAsync(r1, r2)
 RuleEngine.linearAsync(r1, r2)
 RuleEngine.orAsync(r1, r2)
-RuleEngine.ifAsync(cond, then, else?)
+RuleEngine.ifAsync(cond, then, else?)   // async combinators also accept sync rules
+RuleEngine.ifTyped(cond, then, else?)   // typed; no else → condition's failure
+RuleEngine.ifTypedAsync(cond, then, else?)
 
 // Evaluation
 RuleEngine.evaluate(rule, ctx)              // VoidResult (sync, never throws)

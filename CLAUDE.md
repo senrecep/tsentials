@@ -238,7 +238,8 @@ RuleEngine.andTyped(r1, r2)        // collects ALL errors; success value = FIRST
 
 // Async
 RuleEngine.fromPredicateAsync<T>(async pred, err)
-RuleEngine.andAsync / andAllAsync / linearAsync / orAsync / ifAsync
+RuleEngine.andAsync / andAllAsync / linearAsync / orAsync / ifAsync   // accept sync rules too
+RuleEngine.ifTyped / ifTypedAsync(cond, then, else?)   // typed; no else → condition's failure
 
 // Evaluation
 RuleEngine.evaluate(rule, ctx)            // VoidResult — SYNC, never throws (throw → Rule.EvaluationFailed)

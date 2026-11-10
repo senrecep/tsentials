@@ -15,6 +15,9 @@ import type { AsyncRule, Rule, TypedAsyncRule, TypedRule } from './rule.js';
  * (so `or` can still succeed on a later child and `if` takes the else branch). In async
  * combinators the caller's own abort (the `signal` passed down) propagates instead.
  *
+ * The async combinators and `evaluateAsync` accept sync rules too (`Rule` / `TypedRule`), so
+ * sync and async rules mix in one call.
+ *
  * Every combinator built from an empty rule list (`and()`, `or()`, `linear()`, ...) evaluates to
  * a Validation failure with code `EMPTY_RULE_ARRAY`; it never throws and never succeeds.
  *
@@ -56,7 +59,7 @@ export const RuleEngine = {
   /**
    * Async sequential chain: stops on first failure.
    */
-  linearAsync<TContext>(...rules: AsyncRule<TContext>[]): AsyncRule<TContext> {
+  linearAsync<TContext>(...rules: (AsyncRule<TContext> | Rule<TContext>)[]): AsyncRule<TContext> {
     return async (context: TContext, signal?: AbortSignal) => {
       if (rules.length === 0) return emptyRuleArray();
       for (const rule of rules) {
@@ -86,7 +89,7 @@ export const RuleEngine = {
   /**
    * Async version of and: stops at the first failure.
    */
-  andAsync<TContext>(...rules: AsyncRule<TContext>[]): AsyncRule<TContext> {
+  andAsync<TContext>(...rules: (AsyncRule<TContext> | Rule<TContext>)[]): AsyncRule<TContext> {
     return async (context: TContext, signal?: AbortSignal) => {
       if (rules.length === 0) return emptyRuleArray();
       for (const rule of rules) {
@@ -118,7 +121,7 @@ export const RuleEngine = {
   /**
    * Async version of andAll: evaluates every rule in order and collects all errors.
    */
-  andAllAsync<TContext>(...rules: AsyncRule<TContext>[]): AsyncRule<TContext> {
+  andAllAsync<TContext>(...rules: (AsyncRule<TContext> | Rule<TContext>)[]): AsyncRule<TContext> {
     return async (context: TContext, signal?: AbortSignal) => {
       if (rules.length === 0) return emptyRuleArray();
       const errors: AppError[] = [];
@@ -150,7 +153,7 @@ export const RuleEngine = {
   /**
    * Async version of or.
    */
-  orAsync<TContext>(...rules: AsyncRule<TContext>[]): AsyncRule<TContext> {
+  orAsync<TContext>(...rules: (AsyncRule<TContext> | Rule<TContext>)[]): AsyncRule<TContext> {
     return async (context: TContext, signal?: AbortSignal) => {
       if (rules.length === 0) return emptyRuleArray();
       const errors: AppError[] = [];
@@ -188,7 +191,7 @@ export const RuleEngine = {
    * Async sequential chain for typed rules: stops on first failure.
    */
   linearTypedAsync<TContext, TResult>(
-    ...rules: TypedAsyncRule<TContext, TResult>[]
+    ...rules: (TypedAsyncRule<TContext, TResult> | TypedRule<TContext, TResult>)[]
   ): TypedAsyncRule<TContext, TResult> {
     return async (context: TContext, signal?: AbortSignal) => {
       if (rules.length === 0) return emptyRuleArray<TResult>();
@@ -234,7 +237,7 @@ export const RuleEngine = {
    * Async version of andTyped: collects all errors; on success returns the first rule's value.
    */
   andTypedAsync<TContext, TResult>(
-    ...rules: TypedAsyncRule<TContext, TResult>[]
+    ...rules: (TypedAsyncRule<TContext, TResult> | TypedRule<TContext, TResult>)[]
   ): TypedAsyncRule<TContext, TResult> {
     return async (context: TContext, signal?: AbortSignal) => {
       if (rules.length === 0) return emptyRuleArray<TResult>();
@@ -279,7 +282,7 @@ export const RuleEngine = {
    * Async version of orTyped.
    */
   orTypedAsync<TContext, TResult>(
-    ...rules: TypedAsyncRule<TContext, TResult>[]
+    ...rules: (TypedAsyncRule<TContext, TResult> | TypedRule<TContext, TResult>)[]
   ): TypedAsyncRule<TContext, TResult> {
     return async (context: TContext, signal?: AbortSignal) => {
       if (rules.length === 0) return emptyRuleArray<TResult>();
@@ -320,9 +323,9 @@ export const RuleEngine = {
    * Async conditional rule. The condition is an async rule (success = true) or a plain boolean.
    */
   ifAsync<TContext>(
-    condition: boolean | AsyncRule<TContext>,
-    onTrue: AsyncRule<TContext>,
-    onFalse?: AsyncRule<TContext>,
+    condition: boolean | AsyncRule<TContext> | Rule<TContext>,
+    onTrue: AsyncRule<TContext> | Rule<TContext>,
+    onFalse?: AsyncRule<TContext> | Rule<TContext>,
   ): AsyncRule<TContext> {
     return async (context: TContext, signal?: AbortSignal) => {
       throwIfAborted(signal);
@@ -334,6 +337,44 @@ export const RuleEngine = {
       if (condResult.ok) return guardAsync(onTrue, context, signal);
       if (onFalse) return guardAsync(onFalse, context, signal);
       return Result.ok();
+    };
+  },
+
+  /**
+   * Typed conditional rule, as CSharpEssentials `RuleEngine.If` with typed rules: evaluates
+   * `condition`, then `onTrue` when it succeeds or `onFalse` when it fails, and returns that
+   * branch's result. Without `onFalse`, a failing condition's own result is returned.
+   *
+   * @example
+   * RuleEngine.ifTyped(hasCoupon, couponPrice, listPrice);
+   */
+  ifTyped<TContext, TResult>(
+    condition: TypedRule<TContext, TResult>,
+    onTrue: TypedRule<TContext, TResult>,
+    onFalse?: TypedRule<TContext, TResult>,
+  ): TypedRule<TContext, TResult> {
+    return (context: TContext) => {
+      const condResult = guard(condition, context);
+      const branch = condResult.ok ? onTrue : onFalse;
+      return branch ? guard(branch, context) : condResult;
+    };
+  },
+
+  /**
+   * Async version of {@link RuleEngine.ifTyped}. Accepts sync or async typed rules and checks
+   * the signal before the condition and before the branch.
+   */
+  ifTypedAsync<TContext, TResult>(
+    condition: TypedAsyncRule<TContext, TResult> | TypedRule<TContext, TResult>,
+    onTrue: TypedAsyncRule<TContext, TResult> | TypedRule<TContext, TResult>,
+    onFalse?: TypedAsyncRule<TContext, TResult> | TypedRule<TContext, TResult>,
+  ): TypedAsyncRule<TContext, TResult> {
+    return async (context: TContext, signal?: AbortSignal) => {
+      throwIfAborted(signal);
+      const condResult = await guardAsync(condition, context, signal);
+      throwIfAborted(signal);
+      const branch = condResult.ok ? onTrue : onFalse;
+      return branch ? guardAsync(branch, context, signal) : condResult;
     };
   },
 
@@ -398,7 +439,7 @@ export const RuleEngine = {
    * await RuleEngine.evaluateAsync(rule, order, { signal: AbortSignal.timeout(5_000) });
    */
   async evaluateAsync<TContext>(
-    rule: AsyncRule<TContext>,
+    rule: AsyncRule<TContext> | Rule<TContext>,
     context: TContext,
     options?: AbortOptions,
   ): Promise<VoidResult> {
@@ -448,7 +489,7 @@ function guard<TContext, T>(rule: (context: TContext) => Result<T>, context: TCo
 
 /** Async {@link guard}: the caller's own abort propagates instead of becoming a failure. */
 async function guardAsync<TContext, T>(
-  rule: (context: TContext, signal?: AbortSignal) => Promise<Result<T>>,
+  rule: (context: TContext, signal?: AbortSignal) => Result<T> | PromiseLike<Result<T>>,
   context: TContext,
   signal: AbortSignal | undefined,
 ): Promise<Result<T>> {

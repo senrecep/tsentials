@@ -61,6 +61,40 @@ describe('RuleContext.satisfies (model level)', () => {
   });
 });
 
+describe('satisfies with a throwing rule', () => {
+  const boom = (): never => {
+    throw new Error('boom');
+  };
+  const codes = (result: { ok: boolean; errors?: readonly { code: string }[] }) =>
+    result.ok ? [] : (result.errors ?? []).map((e) => e.code);
+
+  it('RuleContext.satisfies records Rule.EvaluationFailed instead of throwing', () => {
+    const result = Validator.validate(tagsModel, (rules) => {
+      rules.satisfies(boom);
+    });
+    expect(result.ok ? undefined : result.errors[0]).toMatchObject({
+      code: 'Rule.EvaluationFailed',
+      type: 'Unexpected',
+      description: 'boom',
+    });
+  });
+
+  it('RuleChain.satisfies records Rule.EvaluationFailed and marks the chain failed', () => {
+    const result = Validator.validate(tagsModel, (rules) => {
+      rules.for('name').satisfies(boom).notEmpty().equal('x');
+    });
+    expect(codes(result)).toEqual(['Rule.EvaluationFailed']);
+  });
+
+  it('satisfiesAsync turns a throwing or rejecting rule into Rule.EvaluationFailed', async () => {
+    const result = await Validator.validateAsync(tagsModel, async (rules) => {
+      await rules.satisfiesAsync(boom);
+      await rules.for('name').satisfiesAsync(async () => boom());
+    });
+    expect(codes(result)).toEqual(['Rule.EvaluationFailed', 'Rule.EvaluationFailed']);
+  });
+});
+
 describe('RuleContext.satisfiesAsync (model level)', () => {
   it('adds no error for a passing async rule', async () => {
     const result = await Validator.validateAsync(tagsModel, async (rules) => {

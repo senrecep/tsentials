@@ -501,6 +501,11 @@ RuleEngine.andAllAsync(asyncRule, anotherAsyncRule);
 RuleEngine.linearAsync(asyncRule, anotherAsyncRule);
 RuleEngine.orAsync(asyncRule, fallbackAsyncRule);
 RuleEngine.ifAsync(asyncRule, onTrue, onFalse);
+RuleEngine.andAsync(isAdult, asyncRule);   // async combinators accept sync rules too
+
+// Typed conditional: onTrue when the condition succeeds, else onFalse (or the condition's failure)
+RuleEngine.ifTyped(hasCoupon, couponPrice, listPrice);
+RuleEngine.ifTypedAsync(hasCoupon, couponPrice, listPrice);
 
 // Evaluation — evaluate is synchronous and never throws
 const result = RuleEngine.evaluate(isAdult, user);                  // VoidResult
