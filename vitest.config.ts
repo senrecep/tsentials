@@ -24,6 +24,7 @@ export default defineConfig({
         'src/mediator/**': FULL_COVERAGE,
         'src/idempotency/**': FULL_COVERAGE,
         'src/time/extensions.ts': FULL_COVERAGE,
+        'src/uuid/**': FULL_COVERAGE,
       },
     },
   },

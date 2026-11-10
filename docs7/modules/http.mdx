@@ -61,7 +61,7 @@ fetchResult.delete<T = void>(url: string | URL, init?: RequestInit): Promise<Res
 
 POST, PUT, and PATCH automatically set `Content-Type: application/json` and stringify the body.
 
-A 2xx JSON response with an empty or `null` body is a NotFound failure (code `NotFound`), except for `fetchResult.delete`, which succeeds with `undefined`. 204/205 and non-JSON responses are void successes.
+A 2xx JSON response with an empty or `null` body is a NotFound failure (code `NotFound`), except for `fetchResult.delete`, which succeeds with `undefined`. 204/205 and non-JSON responses are void successes. A body that is not read (204/205, a non-JSON 2xx or error response) is cancelled so the connection is released.
 
 ---
 

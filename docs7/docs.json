@@ -55,6 +55,7 @@
           "modules/time",
           "modules/tree",
           "modules/union",
+          "modules/uuid",
           "modules/validation"
         ]
       },

@@ -49,7 +49,15 @@ export {
   safeJsonStringify,
 } from './json/index.js';
 // Maybe monad
-export { asMaybe, choose, Maybe, tryFind, tryFirst, tryLast } from './maybe/index.js';
+export {
+  asMaybe,
+  choose,
+  Maybe,
+  MaybeAsync,
+  tryFind,
+  tryFirst,
+  tryLast,
+} from './maybe/index.js';
 export { Ord, type Ord as OrdType, type Ordering } from './ord/index.js';
 export { Predicate, type Predicate as PredicateType, type Refinement } from './predicate/index.js';
 export { Record } from './record/index.js';
@@ -86,3 +94,4 @@ export { createFakeDateTimeProvider, SystemDateTimeProvider } from './time/date-
 export { drawTree, Tree, type Tree as TreeType } from './tree/index.js';
 // Utilities
 export { Union } from './union/union.js';
+export { monotonicUuidv7, uuidv7 } from './uuid/index.js';
