@@ -310,7 +310,7 @@ const profile = await fromAsync(fetchUser(userId))
 | `.match(onOk, onErr)` | Exhaustive match — returns `Promise<U>` |
 | `.unwrap()` | Returns `Promise<T>` — throws `ResultUnwrapError` if failed |
 | `.unwrapOr(default)` | Returns `Promise<T>` — value or default |
-| `.unwrapOrThrow(messageOrError?)` | Returns `Promise<T>` — rejects with `ResultUnwrapError(message)` or the given `Error` |
+| `.unwrapOrThrow(messageOrError?)` | Returns `Promise<T>`; rejects with `ResultUnwrapError(message)` or the given `Error` |
 | `.toResult()` | Returns `Promise<Result<T>>` — raw promise |
 
 > **CRITICAL:** There is NO `.getOrElse()` on ResultAsync. Use `.unwrapOr(default)` instead.
