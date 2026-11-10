@@ -58,6 +58,20 @@ export function isEmpty(record: Readonly<Record<string, unknown>>): boolean {
 
 // ─── Transformation ──────────────────────────────────────────────────────────
 
+/** Writes an own data property; a plain `obj['__proto__'] = v` would set the prototype instead. */
+function set(target: object, key: string, value: unknown): void {
+  if (key === '__proto__') {
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  } else {
+    (target as Record<string, unknown>)[key] = value;
+  }
+}
+
 /**
  * Maps over the values of a record, preserving keys.
  */
@@ -67,7 +81,7 @@ export function map<K extends string, V, U>(
 ): Record<K, U> {
   const result = {} as Record<K, U>;
   for (const key of Object.keys(record) as Array<K>) {
-    result[key] = f(record[key], key);
+    set(result, key, f(record[key], key));
   }
   return result;
 }
@@ -82,7 +96,7 @@ export function mapWithKey<K extends string, V, L extends string>(
   const result = {} as Record<L, V>;
   for (const key of Object.keys(record) as Array<K>) {
     const [newKey, newValue] = f(key, record[key]);
-    result[newKey] = newValue;
+    set(result, newKey, newValue);
   }
   return result;
 }
@@ -97,7 +111,7 @@ export function filter<K extends string, V>(
   const result = {} as Partial<Record<K, V>>;
   for (const key of Object.keys(record) as Array<K>) {
     if (predicate(record[key], key)) {
-      result[key] = record[key];
+      set(result, key, record[key]);
     }
   }
   return result;
@@ -114,7 +128,7 @@ export function filterMap<K extends string, V, U>(
   for (const key of Object.keys(record) as Array<K>) {
     const mapped = f(record[key], key);
     if (mapped != null) {
-      result[key] = mapped;
+      set(result, key, mapped);
     }
   }
   return result;
@@ -143,7 +157,7 @@ export function remove<K extends string, L extends string, V>(
   const result = {} as Record<K, V>;
   for (const k of Object.keys(record) as Array<K | L>) {
     if (k !== key) {
-      result[k as K] = record[k];
+      set(result, k, record[k]);
     }
   }
   return result;
@@ -159,7 +173,7 @@ export function pick<K extends string, L extends K, V>(
   const result = {} as Record<L, V>;
   for (const key of keysToPick) {
     if (has(record as Readonly<Record<string, unknown>>, key)) {
-      result[key] = record[key];
+      set(result, key, record[key]);
     }
   }
   return result;
@@ -176,7 +190,7 @@ export function omit<K extends string, L extends K, V>(
   const omitSet = new Set(keysToOmit);
   for (const key of Object.keys(record) as Array<K>) {
     if (!omitSet.has(key as L)) {
-      result[key as Exclude<K, L>] = record[key];
+      set(result, key, record[key]);
     }
   }
   return result;
@@ -210,9 +224,9 @@ export function partition<K extends string, V>(
   const fail = {} as Partial<Record<K, V>>;
   for (const key of Object.keys(record) as Array<K>) {
     if (predicate(record[key], key)) {
-      pass[key] = record[key];
+      set(pass, key, record[key]);
     } else {
-      fail[key] = record[key];
+      set(fail, key, record[key]);
     }
   }
   return { pass, fail };

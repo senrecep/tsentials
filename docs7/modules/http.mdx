@@ -14,6 +14,7 @@ npm install tsentials
 
 ```typescript
 import { fetchResult, RequestBuilder, httpStatusToError, extractErrorDescription } from 'tsentials/http';
+import { computeETag, formatETag, notModified, checkIfMatch } from 'tsentials/http';
 ```
 
 ---
@@ -60,7 +61,7 @@ fetchResult.delete<T = void>(url: string | URL, init?: RequestInit): Promise<Res
 
 POST, PUT, and PATCH automatically set `Content-Type: application/json` and stringify the body.
 
-A 2xx JSON response with an empty or `null` body is a NotFound failure (code `NotFound`), except for `fetchResult.delete`, which succeeds with `undefined`. 204/205 and non-JSON responses are void successes.
+A 2xx JSON response with an empty or `null` body is a NotFound failure (code `NotFound`), except for `fetchResult.delete`, which succeeds with `undefined`. 204/205 and non-JSON responses are void successes. A body that is not read (204/205, a non-JSON 2xx or error response) is cancelled so the connection is released.
 
 ---
 
@@ -150,6 +151,7 @@ await RequestBuilder.get('/users')
 ```
 
 - **AbortSignal convention:** the caller's abort rejects the promise with `signal.reason`; it never becomes a `Result`. Network, HTTP and body-parse errors become failures.
+- A 2xx JSON body that cannot be parsed is a `Validation` failure (code `SyntaxError`, with `httpStatus` metadata), so a retry does not repeat it. A JSON request body that cannot be serialized (cyclic object, BigInt) is a `Validation` failure (code `TypeError`) and no request is sent. `RequestBuilder.json()` never throws: it serializes the value once, in `send()`.
 - Default timeout is 30 s (`timeout` in ms; `0` or `Infinity` disables it). On expiry the result is a failure with code `Http.Timeout` (`Unexpected`).
 
 ---
@@ -165,9 +167,40 @@ await ResiliencePolicy.create()
   .execute((signal) => fetchResult.send<Order>('/orders', { ...init, signal }));
 ```
 
-- `idempotentRetryClassifier(method, hasKey)` never retries a POST/PATCH without a key or a replayed response; it retries network errors, timeouts, 409 `Idempotency.InFlight`, 408, 429, 503 and 504.
+- `idempotentRetryClassifier(method, hasKey)` treats GET, HEAD, PUT, DELETE and OPTIONS as safe and every other method as unsafe. It never retries an unsafe method without a key or a replayed response. It retries network errors, timeouts, 408, 429, 503 and 504, any other 5xx for a safe method only, and 409 `Idempotency.InFlight` only when `hasKey` is `true`.
 - A failed response's first error carries `HttpErrorMetadataKeys` metadata: `httpStatus`, `retryAfterMs` (from `Retry-After`, see `parseRetryAfter`), `idempotencyReplayed`, `problemCode`.
 - Server side: `tsentials/idempotency` (`withIdempotency`).
+
+---
+
+## Conditional requests (ETag, 304, If-Match)
+
+```typescript
+import { computeETag, formatETag, notModified, checkIfMatch } from 'tsentials/http';
+
+// GET: answer 304 when the client's copy is current
+async function getItem(request: Request): Promise<Response> {
+  const item = await load();
+  const etag = formatETag(item.version);                 // '"7"'; computeETag(body) hashes content
+  const headers = { 'cache-control': 'max-age=60' };
+  return notModified(request, { etag, lastModified: item.updatedAt }, headers)
+    ?? Response.json(item, { headers: { ...headers, etag } });
+}
+
+// PUT/PATCH/DELETE: optimistic concurrency
+async function updateItem(request: Request): Promise<Response> {
+  const item = await load();                             // null when it does not exist
+  const rejected = checkIfMatch(request, item && { etag: formatETag(item.version) }, { required: true });
+  if (rejected) return rejected;                         // 400, 412 or 428 problem+json
+  // ... write, passing the version as a concurrency token
+}
+```
+
+- `formatETag(value, { weak })` quotes an opaque value (`RangeError` for spaces, quotes, non-ASCII). `computeETag(stringOrBytes, { weak })` is the base64url SHA-256 (Web Crypto). Both strong by default.
+- `notModified(request, { etag, lastModified }, headers?)` only answers `GET`/`HEAD`. `If-None-Match` uses weak comparison and `*` matches; without it, `If-Modified-Since` is compared with second precision. The 304 has no body and carries `ETag`, `Last-Modified` and `headers`. Returns `undefined` when the full response should be sent.
+- `checkIfMatch(request, current, { required })` only evaluates `POST`, `PUT`, `PATCH`, `DELETE`. `current` is `null`/`undefined` when the resource does not exist. Strong comparison, so weak tags never match; `*` passes for any existing resource. Responses: 428 `Http.PreconditionRequired` (missing header with `required`), 400 `Http.InvalidIfMatch` (malformed, or `*` mixed with tags), 412 `Http.PreconditionFailed` (mismatch or missing resource). Codes are in `ConditionalErrorCodes`.
+- `parseETagList(header)` returns `'*'`, the tags as written, `[]` for a missing header, or `undefined` when malformed. `compareETags(a, b, 'strong' | 'weak')` follows RFC 9110 section 8.8.3.2.
+- The `If-Match` check is not atomic with the write. `If-Unmodified-Since` and `If-None-Match` on unsafe methods are not evaluated.
 
 ---
 
@@ -209,6 +242,8 @@ HTTP errors are automatically mapped to `AppError` with descriptive codes via `h
 | 5xx | Unexpected | All server errors |
 | Other | Failure | Unmapped status codes |
 | Network error | Unexpected | TypeError from fetch |
+| Malformed 2xx JSON body | Validation | Code `SyntaxError` |
+| Unserializable JSON request body | Validation | Code `TypeError`, nothing sent |
 
 The error code format is `Http.{status}` (e.g., `Http.404`, `Http.500`).
 

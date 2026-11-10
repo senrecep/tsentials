@@ -110,3 +110,50 @@ describe('Record.partition', () => {
     expect(fail).toEqual({ a: 1 });
   });
 });
+
+describe('Record own __proto__ key', () => {
+  const source = (): Record<string, number> =>
+    JSON.parse('{"__proto__": 1, "a": 2}') as Record<string, number>;
+
+  const expectOwnProto = (result: object, value: unknown) => {
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(Object.hasOwn(result, '__proto__')).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(result, '__proto__')?.value).toBe(value);
+  };
+
+  it('map keeps __proto__ as an own key', () => {
+    expectOwnProto(
+      R.map(source(), (v) => v * 10),
+      10,
+    );
+  });
+
+  it('mapWithKey, filter, filterMap, remove, pick, omit and partition keep it', () => {
+    const s = source();
+    expectOwnProto(
+      R.mapWithKey(s, (k, v) => [k, v]),
+      1,
+    );
+    expectOwnProto(
+      R.filter(s, () => true),
+      1,
+    );
+    expectOwnProto(
+      R.filterMap(s, (v) => v),
+      1,
+    );
+    expectOwnProto(R.remove(s, 'a'), 1);
+    expectOwnProto(R.pick(s, '__proto__'), 1);
+    expectOwnProto(R.omit(s, 'a'), 1);
+    const { pass, fail } = R.partition(s, (_v, k) => k === '__proto__');
+    expectOwnProto(pass, 1);
+    expect(Object.getPrototypeOf(fail)).toBe(Object.prototype);
+  });
+
+  it('an object value under __proto__ does not change the prototype', () => {
+    const s = JSON.parse('{"__proto__": {"polluted": true}}') as Record<string, object>;
+    const result = R.map(s, (v) => v);
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect((result as { polluted?: boolean }).polluted).toBeUndefined();
+  });
+});

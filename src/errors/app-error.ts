@@ -1,3 +1,4 @@
+import type { Result } from '../result/result.js';
 import { ErrorMetadata } from './error-metadata.js';
 import { ErrorType } from './error-type.js';
 import { safeString } from './safe-string.js';
@@ -30,6 +31,14 @@ export interface AppErrorJson {
   readonly type: ErrorType;
   readonly numericType: number;
   readonly metadata?: Record<string, unknown>;
+}
+
+/** Overrides accepted by {@link Err.with}; pass `metadata: undefined` to drop the metadata. */
+export interface AppErrorPatch {
+  readonly code?: string;
+  readonly description?: string;
+  readonly type?: ErrorType;
+  readonly metadata?: ErrorMetadata | undefined;
 }
 
 /** Numeric value of each ErrorType (stable wire ordinals). */
@@ -73,12 +82,103 @@ const make = (
   return Object.freeze(error);
 };
 
-const sameMetadata = (a: ErrorMetadata | undefined, b: ErrorMetadata | undefined): boolean => {
+const errorTypes = Object.keys(numericTypes) as ErrorType[];
+
+/** @internal Plain non-array object check for the JSON revivers. */
+export const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * @internal Reads a key ignoring case: CSharpEssentials writes PascalCase with the default
+ * System.Text.Json options and camelCase with its web options.
+ */
+export const readJsonKey = (record: Record<string, unknown>, key: string): unknown => {
+  if (Object.hasOwn(record, key)) return record[key];
+  const lower = key.toLowerCase();
+  const match = Object.keys(record).find((k) => k.toLowerCase() === lower);
+  return match === undefined ? undefined : record[match];
+};
+
+// Result is built inline (type-only import) so errors keeps no runtime dependency on result.
+const decoded = <T>(value: T): Result<T> => Object.freeze({ ok: true, value }) as Result<T>;
+
+const invalidJson = (code: string, path: string, expected: string): Result<never> =>
+  Object.freeze({
+    ok: false,
+    errors: Object.freeze([
+      make(
+        code,
+        `${path} must be ${expected}.`,
+        ErrorType.Validation,
+        ErrorMetadata.fromRecord({ path }),
+      ),
+    ]),
+  });
+
+const readType = (record: Record<string, unknown>): ErrorType | undefined => {
+  const type = readJsonKey(record, 'type');
+  const byName =
+    typeof type === 'string'
+      ? errorTypes.find((t) => t.toLowerCase() === type.toLowerCase())
+      : undefined;
+  if (byName !== undefined) return byName;
+  // A numeric `type` (C# enum without a string converter) or the `numericType` field.
+  const ordinal = typeof type === 'number' ? type : readJsonKey(record, 'numericType');
+  return errorTypes.find((t) => numericTypes[t] === ordinal);
+};
+
+/** @internal Validates one AppError JSON value; `path` names it in failure descriptions. */
+export const decodeAppError = (json: unknown, path: string): Result<AppError> => {
+  const fail = (field: string, expected: string) =>
+    invalidJson('AppError.InvalidJson', field ? `${path}.${field}` : path, expected);
+  if (!isJsonRecord(json)) return fail('', 'an object');
+  const code = readJsonKey(json, 'code');
+  if (typeof code !== 'string') return fail('code', 'a string');
+  const description = readJsonKey(json, 'description');
+  if (typeof description !== 'string') return fail('description', 'a string');
+  const type = readType(json);
+  if (type === undefined)
+    return fail('type', `an ErrorType name (${errorTypes.join(', ')}) or ordinal`);
+  const metadata = readJsonKey(json, 'metadata');
+  if (metadata === undefined || metadata === null) return decoded(make(code, description, type));
+  if (!isJsonRecord(metadata)) return fail('metadata', 'an object, null or absent');
+  return decoded(make(code, description, type, ErrorMetadata.fromRecord(metadata)));
+};
+
+// Pairs already under comparison; a revisited pair is assumed equal so cyclic metadata terminates.
+type Seen = Map<object, Set<object>>;
+
+const isErrCreated = (value: unknown): value is AppError =>
+  typeof value === 'object' &&
+  value !== null &&
+  (value as { toJSON?: unknown }).toJSON === toJSONMethod;
+
+const sameErrors = (a: AppError, b: AppError, seen: Seen): boolean =>
+  a.code === b.code &&
+  a.description === b.description &&
+  a.type === b.type &&
+  sameMetadata(a.metadata, b.metadata, seen);
+
+// Nested metadata maps and Err-created errors compare by value; other values use Object.is.
+const sameValue = (a: unknown, b: unknown, seen: Seen): boolean => {
+  if (Object.is(a, b)) return true;
+  if (a instanceof Map && b instanceof Map) return sameMetadata(a, b, seen);
+  return isErrCreated(a) && isErrCreated(b) && sameErrors(a, b, seen);
+};
+
+const sameMetadata = (
+  a: ErrorMetadata | undefined,
+  b: ErrorMetadata | undefined,
+  seen: Seen,
+): boolean => {
   if (a === undefined || b === undefined) return a === b;
   if (a === b) return true;
   if (a.size !== b.size) return false;
+  const pairs = seen.get(a) ?? new Set<object>();
+  if (pairs.has(b)) return true;
+  seen.set(a, pairs.add(b));
   for (const [key, value] of a) {
-    if (!b.has(key) || !Object.is(value, b.get(key))) return false;
+    if (!b.has(key) || !sameValue(value, b.get(key), seen)) return false;
   }
   return true;
 };
@@ -194,16 +294,13 @@ export const Err = {
 
   /**
    * Checks equality between two AppError values: code, description and type must match,
-   * and metadata must be both absent or have the same keys with `Object.is`-equal values
-   * (absent metadata never equals present metadata, even if empty).
+   * and metadata must be both absent or have the same keys with equal values
+   * (absent metadata never equals present metadata, even if empty). Nested metadata maps
+   * and nested errors created by `Err` are compared by value, recursively and cycle-safe;
+   * any other value is compared with `Object.is`.
    */
   equals(a: AppError, b: AppError): boolean {
-    return (
-      a.code === b.code &&
-      a.description === b.description &&
-      a.type === b.type &&
-      sameMetadata(a.metadata, b.metadata)
-    );
+    return sameErrors(a, b, new Map());
   },
 
   /**
@@ -213,6 +310,37 @@ export const Err = {
    */
   toJSON(error: AppError): AppErrorJson {
     return toJSON(error);
+  },
+
+  /**
+   * Validates a parsed JSON value and revives it as a frozen AppError. Accepts the
+   * {@link AppErrorJson} shape and the CSharpEssentials `Error` shape: keys in any case,
+   * `type` as a name (any case) or ordinal, falling back to `numericType`, and `metadata`
+   * as a plain object, `null` or absent. A bad shape is a Validation failure with code
+   * `AppError.InvalidJson` and the offending `path` in its metadata. Nested metadata
+   * records (such as `innerException`) stay plain objects, not maps.
+   *
+   * @example
+   * Err.fromJSON(JSON.parse(JSON.stringify(err))); // Result<AppError>
+   */
+  fromJSON(json: unknown): Result<AppError> {
+    return decodeAppError(json, 'error');
+  },
+
+  /**
+   * Returns a new frozen AppError with the given fields replaced. Unlike `{ ...error }`,
+   * the copy keeps `toJSON` and stays frozen. Pass `metadata: undefined` to drop it.
+   *
+   * @example
+   * Err.with(err, { code: `Api.${err.code}` });
+   */
+  with(error: AppError, patch: AppErrorPatch): AppError {
+    return make(
+      patch.code ?? error.code,
+      patch.description ?? error.description,
+      patch.type ?? error.type,
+      'metadata' in patch ? patch.metadata : error.metadata,
+    );
   },
 } as const;
 

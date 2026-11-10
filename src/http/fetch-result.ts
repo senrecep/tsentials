@@ -36,6 +36,15 @@ const isAbortError = (e: unknown): boolean =>
   ((e as { name?: unknown }).name === 'AbortError' ||
     (e as { name?: unknown }).name === 'TimeoutError');
 
+/** Releases an unread body so the connection can be reused; cancel errors are irrelevant. */
+const discardBody = (response: Response): void => {
+  try {
+    response.body?.cancel().catch(() => undefined);
+  } catch {
+    // ignore
+  }
+};
+
 /**
  * Converts a fetch Response to a Result<T>. A body that cannot be read or parsed is a failure;
  * an abort while reading (caller or timeout) propagates to `execute`.
@@ -57,6 +66,8 @@ async function responseToResult<T>(
         if (signal.aborted) throw e;
         body = undefined; // unreadable error body, fall back to the status error
       }
+    } else {
+      discardBody(response);
     }
     return R.failureFrom(
       withResponseMetadata(problemDetailsToErrors(response.status, body), response, body),
@@ -66,22 +77,23 @@ async function responseToResult<T>(
   // 204 No Content / 205 Reset Content never carry a body, and a non-JSON body is not
   // deserialized: both are void-style successes.
   if (response.status === 204 || response.status === 205 || !isJson) {
+    discardBody(response);
     return R.success(undefined as unknown as T);
   }
 
   // The server declared JSON, so a value is expected: an empty body or a literal `null`
-  // is a NotFound failure (unless `allowEmptyBody`). A body that cannot be read or parsed is
-  // an Unexpected failure that carries the response metadata: the server answered, so a
-  // retry classifier must not treat it as a missing response.
+  // is a NotFound failure (unless `allowEmptyBody`). A body that cannot be parsed is a
+  // Validation failure (retrying returns the same body) and a read error is Unexpected; both
+  // carry the response metadata: the server answered, so a retry classifier must not treat
+  // it as a missing response.
   let value: unknown;
   try {
     const text = await response.text();
     value = text.trim() === '' ? null : JSON.parse(text);
   } catch (e) {
     if (signal.aborted) throw e;
-    return R.failureFrom(
-      withResponseMetadata([Err.fromException(e, ErrorType.Unexpected)], response, undefined),
-    );
+    const type = e instanceof SyntaxError ? ErrorType.Validation : ErrorType.Unexpected;
+    return R.failureFrom(withResponseMetadata([Err.fromException(e, type)], response, undefined));
   }
   if (value === null) {
     return allowEmptyBody
@@ -95,10 +107,9 @@ async function responseToResult<T>(
  * Runs a fetch with these cancellation rules:
  * - caller `signal` aborted → the returned promise rejects with the abort reason (not a Result);
  * - timeout elapsed → failure `Http.Timeout` (Unexpected);
- * - any other error (network, body parse, abort from another source) → Unexpected failure
+ * - `build` throws (JSON body not serializable, invalid header) → Validation failure, no request;
+ * - any other error (network, body read, abort from another source) → Unexpected failure
  *   whose code is the thrown value's constructor name.
- *
- * `build` runs inside the guarded block so header/serialization errors become failures too.
  */
 async function execute<T>(
   url: string | URL,
@@ -117,6 +128,13 @@ async function execute<T>(
     );
   }
   callerSignal?.throwIfAborted();
+
+  let request: RequestInit;
+  try {
+    request = build();
+  } catch (e) {
+    return R.failure(Err.fromException(e, ErrorType.Validation));
+  }
 
   const controller = new AbortController();
   const onCallerAbort = (): void => controller.abort(callerSignal?.reason);
@@ -138,7 +156,7 @@ async function execute<T>(
 
   let response: Response | undefined;
   try {
-    response = await fetch(url, { ...rest, ...build(), signal: controller.signal });
+    response = await fetch(url, { ...rest, ...request, signal: controller.signal });
     return await responseToResult<T>(response, controller.signal, allowEmptyBody);
   } catch (e) {
     if (callerSignal?.aborted && (e === callerSignal.reason || isAbortError(e))) throw e;
@@ -163,10 +181,26 @@ const jsonInit = (method: string, body: unknown, init: RequestInit | undefined):
 };
 
 /**
+ * @internal Sends `body` as JSON with any method. It is serialized once, when the request is
+ * built; a value `JSON.stringify` rejects (cyclic object, BigInt) is a Validation failure.
+ */
+export function sendJson<T>(
+  method: string,
+  url: string | URL,
+  body: unknown,
+  init: FetchResultInit | undefined,
+): Promise<Result<T>> {
+  return execute<T>(url, init, () => jsonInit(method, body, init));
+}
+
+/**
  * fetch()-based HTTP client that returns Result<T> instead of throwing.
  *
- * - Network errors, body parse errors and HTTP error responses become failures
+ * - Network errors and HTTP error responses become failures
  *   (status mapping: {@link httpStatusToErrorType}; ProblemDetails `errors` are parsed).
+ * - A 2xx JSON body that cannot be parsed is a Validation failure (code `SyntaxError`), and a
+ *   JSON request body that cannot be serialized (cyclic object, BigInt) is a Validation failure
+ *   (code `TypeError`) sent before any request, so a retry does not repeat either.
  * - The first error of a failed response carries the metadata `httpStatus`, and when present
  *   `idempotencyReplayed`, `retryAfterMs` and `problemCode` (see `HttpErrorMetadataKeys`).
  * - 2xx bodies: 204/205 and non-JSON content types are void successes (`undefined`); a JSON
@@ -196,21 +230,21 @@ export const fetchResult = {
    * is added unless already present.
    */
   async post<T>(url: string | URL, body: unknown, init?: FetchResultInit): Promise<Result<T>> {
-    return execute<T>(url, init, () => jsonInit('POST', body, init));
+    return sendJson<T>('POST', url, body, init);
   },
 
   /**
    * PUT with JSON body: returns Result<T>. See {@link fetchResult.post} for header handling.
    */
   async put<T>(url: string | URL, body: unknown, init?: FetchResultInit): Promise<Result<T>> {
-    return execute<T>(url, init, () => jsonInit('PUT', body, init));
+    return sendJson<T>('PUT', url, body, init);
   },
 
   /**
    * PATCH with JSON body: returns Result<T>. See {@link fetchResult.post} for header handling.
    */
   async patch<T>(url: string | URL, body: unknown, init?: FetchResultInit): Promise<Result<T>> {
-    return execute<T>(url, init, () => jsonInit('PATCH', body, init));
+    return sendJson<T>('PATCH', url, body, init);
   },
 
   /**

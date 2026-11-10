@@ -125,6 +125,30 @@ describe('createEntityBase', () => {
   });
 });
 
+describe('createEntityBase guards', () => {
+  it('throws a TypeError when raise gets null or undefined', () => {
+    const entity = createEntityBase();
+    expect(() => entity.raise(null as unknown as DomainEvent)).toThrow(TypeError);
+    expect(() => entity.raise(undefined as unknown as DomainEvent)).toThrow(TypeError);
+    expect(entity.domainEvents).toHaveLength(0);
+  });
+
+  it('throws a RangeError when setCreatedInfo gets an invalid Date', () => {
+    const entity = createEntityBase();
+    expect(() => entity.setCreatedInfo(new Date(Number.NaN), 'alice')).toThrow(RangeError);
+    expect(() => entity.setCreatedInfo(undefined as unknown as Date, 'alice')).toThrow(RangeError);
+    expect(entity.createdAt).toEqual(new Date(0));
+    expect(entity.createdBy).toBe('');
+  });
+
+  it('throws a RangeError when setUpdatedInfo gets an invalid Date', () => {
+    const entity = createEntityBase();
+    expect(() => entity.setUpdatedInfo(new Date('not a date'), 'bob')).toThrow(RangeError);
+    expect(entity.updatedAt).toBeUndefined();
+    expect(entity.updatedBy).toBeUndefined();
+  });
+});
+
 describe('createEntityBaseWithId', () => {
   it('initializes with a provided id', () => {
     const entity = createEntityBaseWithId<string>('abc-123');
@@ -166,6 +190,38 @@ describe('createEntityBaseWithId', () => {
   it('initializes domainEvents to empty via base', () => {
     const entity = createEntityBaseWithId<string>('init');
     expect(entity.domainEvents).toHaveLength(0);
+  });
+
+  it('reflects later raise and clearDomainEvents calls', () => {
+    const entity = createEntityBaseWithId<string>('init');
+    const event: DomainEvent = { occurredOn: new Date() };
+    entity.raise(event);
+    expect(entity.domainEvents).toEqual([event]);
+    entity.clearDomainEvents();
+    expect(entity.domainEvents).toHaveLength(0);
+  });
+
+  it('reflects later audit setter calls', () => {
+    const entity = createEntityBaseWithId<string>('init');
+    const created = new Date('2024-01-01T00:00:00Z');
+    const updated = new Date('2024-02-01T00:00:00Z');
+    entity.setCreatedInfo(created, 'alice');
+    entity.setUpdatedInfo(updated, 'bob');
+    expect(entity.createdAt).toBe(created);
+    expect(entity.createdBy).toBe('alice');
+    expect(entity.updatedAt).toBe(updated);
+    expect(entity.updatedBy).toBe('bob');
+  });
+
+  it('guards raise and the audit setters like createEntityBase', () => {
+    const entity = createEntityBaseWithId<string>('init');
+    expect(() => entity.raise(null as unknown as DomainEvent)).toThrow(TypeError);
+    expect(() => entity.setCreatedInfo(new Date(Number.NaN), 'a')).toThrow(RangeError);
+  });
+
+  it('is exported from tsentials/entity', async () => {
+    const entityModule = await import('../../src/entity/index.js');
+    expect(entityModule.createEntityBaseWithId).toBe(createEntityBaseWithId);
   });
 });
 

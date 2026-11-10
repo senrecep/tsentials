@@ -1,4 +1,6 @@
+import { Err } from '../../src/errors/app-error.js';
 import { Predicate } from '../../src/predicate/index.js';
+import { RuleEngine } from '../../src/rules/index.js';
 
 describe('Predicate.from', () => {
   it('creates a predicate from a boolean function', () => {
@@ -68,5 +70,25 @@ describe('Predicate.refinement', () => {
     const isString = Predicate.refinement((x: unknown): x is string => typeof x === 'string');
     expect(isString.test('hello')).toBe(true);
     expect(isString.test(42)).toBe(false);
+  });
+});
+
+describe('Predicate.toRule', () => {
+  const isAdult = Predicate.from((age: number) => age >= 18);
+  const error = Err.validation('Age.Minor', 'Must be an adult');
+  const rule = Predicate.toRule(isAdult, error);
+
+  it('returns an ok Result when the predicate holds', () => {
+    expect(rule(20).ok).toBe(true);
+  });
+
+  it('returns a failure Result with the error when the predicate fails', () => {
+    expect(rule(10)).toEqual({ ok: false, errors: [error] });
+  });
+
+  it('works as a Rule in RuleEngine', () => {
+    expect(RuleEngine.evaluate(rule, 20).ok).toBe(true);
+    const result = RuleEngine.evaluate(rule, 10);
+    expect(result.ok ? [] : result.errors.map((e) => e.code)).toEqual(['Age.Minor']);
   });
 });

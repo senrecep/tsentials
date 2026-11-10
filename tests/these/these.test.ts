@@ -73,7 +73,27 @@ describe('These.flatMap', () => {
   it('chains Both with Right', () => {
     const t = These.flatMap(These.both(err1, 5), (n) => These.right(n * 2));
     expect(These.isBoth(t)).toBe(true);
-    if (These.isBoth(t)) expect(t.right).toBe(10);
+    if (These.isBoth(t)) {
+      expect(t.left).toBe(err1);
+      expect(t.right).toBe(10);
+    }
+  });
+
+  it('returns the continuation Left when Both chains into Left', () => {
+    const t = These.flatMap(These.both(err1, 5), () => These.left(err2));
+    expect(t).toEqual({ _tag: 'Left', left: err2 });
+  });
+
+  it('keeps the original left when Both chains into Both', () => {
+    const t = These.flatMap(These.both(err1, 5), (n) => These.both(err2, n * 2));
+    expect(t).toEqual({ _tag: 'Both', left: err1, right: 10 });
+  });
+
+  it('passes through Left without calling the continuation', () => {
+    const f = vi.fn(() => These.right(1));
+    const t = These.flatMap(These.left(err1), f);
+    expect(t).toEqual({ _tag: 'Left', left: err1 });
+    expect(f).not.toHaveBeenCalled();
   });
 });
 

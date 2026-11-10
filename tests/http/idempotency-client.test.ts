@@ -129,8 +129,20 @@ describe('fetchResult failure metadata', () => {
       .execute(() => RequestBuilder.post('/orders').json({}).idempotencyKey('k-1').send());
     if (r.ok) throw new Error('expected failure');
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(r.errors[0]?.type).toBe(ErrorType.Unexpected);
+    expect(r.errors[0]?.type).toBe(ErrorType.Validation);
     expect(r.errors[0]?.metadata?.get(HttpErrorMetadataKeys.HttpStatus)).toBe(201);
+  });
+
+  it('does not retry a 2xx body that cannot be parsed with the default classifier', async () => {
+    const fetchMock = stubFetch(
+      () =>
+        new Response('{not json', { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+    const r = await ResiliencePolicy.create<unknown>()
+      .withRetry({ maxAttempts: 3, delay: 0 })
+      .execute(() => fetchResult.get('/orders/1'));
+    expect(r.ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -138,13 +150,15 @@ describe('idempotentRetryClassifier', () => {
   const status = (s: number, extra: Record<string, unknown> = {}) =>
     errorWith({ httpStatus: s, ...extra });
 
-  it('never retries POST or PATCH without a key', () => {
-    for (const method of ['POST', 'post', 'PATCH']) {
+  it.each(['POST', 'post', 'PATCH', 'TRACE', 'CONNECT', 'PROPFIND'])(
+    'never retries %s without a key',
+    (method) => {
       const classify = idempotentRetryClassifier(method, false);
       expect(classify(Err.unexpected())).toBe(false);
       expect(classify(status(503))).toBe(false);
-    }
-  });
+      expect(classify(status(409, { problemCode: IdempotencyErrorCodes.InFlight }))).toBe(false);
+    },
+  );
 
   it('retries unanswered calls of safe methods and keyed POSTs', () => {
     expect(idempotentRetryClassifier('GET', false)(Err.unexpected())).toBe(true);
@@ -193,6 +207,23 @@ describe('idempotentRetryClassifier', () => {
     );
   });
 
+  it.each(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS', 'get'])(
+    'retries a safe %s without a key like the C# table',
+    (method) => {
+      const classify = idempotentRetryClassifier(method, false);
+      for (const s of [408, 429, 500, 502, 503, 504]) expect(classify(status(s))).toBe(true);
+      for (const s of [400, 404, 422]) expect(classify(status(s))).toBe(false);
+      expect(classify(status(500, { idempotencyReplayed: true }))).toBe(false);
+    },
+  );
+
+  it('retries 409 Idempotency.InFlight only when the request had a key', () => {
+    const inFlight = status(409, { problemCode: IdempotencyErrorCodes.InFlight });
+    expect(idempotentRetryClassifier('GET', false)(inFlight)).toBe(false);
+    expect(idempotentRetryClassifier('PUT', false)(inFlight)).toBe(false);
+    expect(idempotentRetryClassifier('PUT', true)(inFlight)).toBe(true);
+  });
+
   it.each([
     [408, true],
     [429, true],
@@ -202,8 +233,8 @@ describe('idempotentRetryClassifier', () => {
     [502, false],
     [400, false],
     [422, false],
-  ])('status %i → %s', (s, expected) => {
-    expect(idempotentRetryClassifier('DELETE', false)(status(s))).toBe(expected);
+  ])('keyed POST status %i → %s', (s, expected) => {
+    expect(idempotentRetryClassifier('POST', true)(status(s))).toBe(expected);
   });
 });
 

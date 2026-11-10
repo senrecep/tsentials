@@ -1,7 +1,7 @@
 import { IDEMPOTENCY_KEY_HEADER } from '../idempotency/constants.js';
 import type { Result } from '../result/result.js';
 import type { FetchResultInit } from './fetch-result.js';
-import { fetchResult } from './fetch-result.js';
+import { fetchResult, sendJson } from './fetch-result.js';
 import { type IdempotencyKeyOptions, idempotencyKeyOrNew } from './idempotency-client.js';
 
 /** Value accepted by {@link RequestBuilder.query}. */
@@ -126,9 +126,13 @@ export class RequestBuilder {
     return this;
   }
 
-  /** Sets the request body as JSON and the `Content-Type: application/json` header. */
+  /**
+   * Sets the request body as JSON and the `Content-Type: application/json` header. The value is
+   * serialized once, by `send()`; a value `JSON.stringify` rejects (cyclic object, BigInt) makes
+   * `send()` resolve to a Validation failure (code `TypeError`) without sending a request.
+   */
   json(body: unknown): this {
-    this.#body = JSON.stringify(body);
+    this.#body = null;
     this.#jsonPayload = body;
     this.#hasJsonPayload = true;
     this.header('Content-Type', 'application/json');
@@ -206,25 +210,8 @@ export class RequestBuilder {
       ...(this.#timeout !== undefined && { timeout: this.#timeout }),
     };
 
-    switch (this.#method) {
-      case 'GET':
-        return fetchResult.get<T>(url, init);
-      case 'POST':
-        return this.#hasJsonPayload
-          ? fetchResult.post<T>(url, this.#jsonPayload, init)
-          : fetchResult.send<T>(url, init);
-      case 'PUT':
-        return this.#hasJsonPayload
-          ? fetchResult.put<T>(url, this.#jsonPayload, init)
-          : fetchResult.send<T>(url, init);
-      case 'PATCH':
-        return this.#hasJsonPayload
-          ? fetchResult.patch<T>(url, this.#jsonPayload, init)
-          : fetchResult.send<T>(url, init);
-      case 'DELETE':
-        return fetchResult.send<T>(url, init);
-      default:
-        return fetchResult.get<T>(url, init);
-    }
+    return this.#hasJsonPayload
+      ? sendJson<T>(this.#method, url, this.#jsonPayload, init)
+      : fetchResult.send<T>(url, init);
   }
 }

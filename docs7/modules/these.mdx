@@ -17,7 +17,7 @@ These.both(err, 42);       // partial success
 // Pipeline
 These.map(these, n => n * 2);
 These.mapLeft(these, e => wrap(e));
-These.flatMap(these, n => validate(n));
+These.flatMap(these, n => validate(n)); // from Both: f's Left wins, else Both(original left, new value)
 
 // Type guards
 These.isLeft(these);       // boolean

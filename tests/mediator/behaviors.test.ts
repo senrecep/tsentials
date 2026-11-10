@@ -1,4 +1,10 @@
-import { type AppError, Err, ErrorMetadata, ErrorType } from '../../src/errors/index.js';
+import {
+  type AppError,
+  DomainError,
+  Err,
+  ErrorMetadata,
+  ErrorType,
+} from '../../src/errors/index.js';
 import { Maybe } from '../../src/maybe/maybe.js';
 import {
   type CacheStore,
@@ -10,6 +16,7 @@ import {
   LockTimeoutError,
   lockBehavior,
   loggingBehavior,
+  type MediatorLogger,
   type MediatorLogLevel,
   type NextHandler,
   type RequestContext,
@@ -80,6 +87,41 @@ describe('exceptionHandlingBehavior', () => {
       type: ErrorType.Failure,
     });
     expect(r2.ok || r2.errors[0]).toMatchObject({ code: 'Error', description: 'after await' });
+  });
+
+  it('returns the errors of a thrown DomainError as-is', async () => {
+    const errors = [Err.conflict('Order.Shipped', 'shipped'), Err.notFound('Order.X', 'x')];
+    const r = await behavior(
+      1,
+      nextOf(() => {
+        throw new DomainError(errors);
+      }),
+      ctx(),
+    );
+    expect(r).toEqual({ ok: false, errors });
+    const empty = await behavior(
+      1,
+      nextOf(() => {
+        throw new DomainError([]);
+      }),
+      ctx(),
+    );
+    expect(empty.ok || empty.errors[0]?.code).toBe('DomainError');
+  });
+
+  it('propagates the caller abort even when a DomainError is thrown', async () => {
+    const controller = new AbortController();
+    const reason = new DomainError(Err.conflict('C', 'c'));
+    controller.abort(reason);
+    await expect(
+      behavior(
+        1,
+        nextOf(() => {
+          throw reason;
+        }),
+        ctx(controller.signal),
+      ),
+    ).rejects.toBe(reason);
   });
 
   it('converts a thrown value String() rejects (no prototype) instead of rejecting', async () => {
@@ -474,15 +516,42 @@ describe('cachingBehavior', () => {
     expect(store.get).not.toHaveBeenCalled();
   });
 
-  it('throws when the cached value is not a result', async () => {
+  it.each([
+    ['not a result', 'null'],
+    ['not JSON', '{bad'],
+  ])('runs the handler and overwrites an entry that is %s', async (_, entry) => {
+    const { store, data } = memoryCache({ 'user:1': entry });
+    const logger = memoryLogger();
+    const r = await cachingBehavior({ cache: store, logger })(
+      request,
+      nextOf(() => Result.success(1)),
+      ctx(),
+    );
+    expect(r).toEqual(Result.success(1));
+    expect(data.get('user:1')).toBe('{"ok":true,"value":1}');
+    expect(logger.entries.map((e) => [e.level, e.message])).toEqual([
+      ['warning', 'Cached value for key user:1 could not be deserialized; calling the handler'],
+      ['information', 'Cache set for key user:1'],
+    ]);
+  });
+
+  it('runs the handler on an unreadable entry when the logger throws or warnings are off', async () => {
     const { store } = memoryCache({ 'user:1': 'null' });
-    await expect(
-      cachingBehavior({ cache: store })(
-        request,
-        nextOf(() => Result.success(1)),
+    const throwing: MediatorLogger = {
+      log: () => {
+        throw new Error('log down');
+      },
+    };
+    const quiet = memoryLogger(['warning']);
+    for (const logger of [throwing, quiet]) {
+      const r = await cachingBehavior({ cache: store, logger })(
+        { cacheKey: 'user:1' },
+        nextOf(() => Result.failure(Err.failure('E', 'e'))),
         ctx(),
-      ),
-    ).rejects.toThrow('Failed to deserialize cached value for key user:1');
+      );
+      expect(r.ok).toBe(false);
+    }
+    expect(quiet.entries.map((e) => e.level)).not.toContain('warning');
   });
 
   it('passes the signal to the cache', async () => {

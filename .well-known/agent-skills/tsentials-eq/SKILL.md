@@ -9,6 +9,7 @@ import { Eq } from 'tsentials/eq';
 
 // Primitive instances
 Eq.number.equals(1, 1);   // true
+Eq.number.equals(NaN, NaN); // true (consistent with Ord.number); 0 and -0 are equal
 Eq.string.equals('a', 'b'); // false
 Eq.boolean.equals(true, true); // true
 Eq.date.equals(new Date('2024-01-01'), new Date('2024-01-01')); // true
