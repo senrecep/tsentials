@@ -218,11 +218,11 @@ Result.recoverFirst(Result.failure(notFoundError), ErrorType.NotFound, () => Res
 // Transform errors
 Result.mapError(
   Result.failure(err),
-  errs => errs.map(e => ({ ...e, code: `Wrapped.${e.code}` })),
+  errs => errs.map(e => Err.with(e, { code: `Wrapped.${e.code}` })),
 );
 
 // Map every error one by one, in order (mapper never runs on success)
-Result.mapEachError(Result.failure(err), e => ({ ...e, code: `Api.${e.code}` }));
+Result.mapEachError(Result.failure(err), e => Err.with(e, { code: `Api.${e.code}` }));
 
 // Fallback values
 Result.unwrapOr(Result.success(42), 0);       // 42
@@ -516,6 +516,18 @@ Err.combine(errA, [errB, errC], errD);
 
 // JSON wire shape: { code, description, type, numericType, metadata? }
 JSON.stringify(Err.validation('Field.Required', 'Name is required'));
+
+// Revive with validation: Result<AppError>, a Validation failure (AppError.InvalidJson) on a bad shape.
+// Also reads the CSharpEssentials Error shape (any key case, type as name or ordinal).
+Err.fromJSON(JSON.parse(raw));
+
+// Copy with overrides: stays frozen and keeps toJSON, unlike { ...err }
+Err.with(err, { code: `Api.${err.code}` });
+Err.with(err, { metadata: undefined }); // drop metadata
+
+// Revive a whole Result (tsentials { ok, value | errors } or CSharpEssentials { isSuccess, value, errors })
+// A bad shape becomes a Result.InvalidJson failure; the success value is not validated.
+Result.fromJSON<User>(await response.json());
 ```
 
 ### Error Metadata
