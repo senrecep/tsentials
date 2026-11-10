@@ -10,13 +10,13 @@
 
 ```typescript
 import { Result, ResultChain, ResultAsync, fromAsync, chain, maybeToResult, resultToMaybe } from 'tsentials/result';
-import { Err, AppError, ErrorType, ErrorMetadata } from 'tsentials/errors';
-import { Maybe, tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
+import { Err, AppError, ErrorType, ErrorMetadata, DomainError } from 'tsentials/errors';
+import { Maybe, MaybeAsync, tryFirst, tryLast, tryFind, choose, asMaybe } from 'tsentials/maybe';
 import { RuleEngine } from 'tsentials/rules';
 import type { Rule } from 'tsentials/rules';
 import { createEntityBase, createSoftDeletable } from 'tsentials/entity';
 import type { DomainEvent } from 'tsentials/entity';
-import { fetchResult, RequestBuilder, HttpCodes } from 'tsentials/http';
+import { fetchResult, RequestBuilder, HttpCodes, notModified, checkIfMatch, computeETag, formatETag } from 'tsentials/http';
 import type { HttpCode } from 'tsentials/http';
 import { SystemDateTimeProvider, createFakeDateTimeProvider } from 'tsentials/time';
 import { deepClone, cloneArray } from 'tsentials/clone';
@@ -42,6 +42,7 @@ import type { EnumMember } from 'tsentials/enums';
 import { createMediator, exceptionHandlingBehavior, validationBehavior } from 'tsentials/mediator';
 import { createIdempotency, idempotent, idempotencyBehavior, withIdempotency, idempotencyKeys, idempotencyScopes, InMemoryIdempotencyStore, RedisIdempotencyStore } from 'tsentials/idempotency';
 import { toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase } from 'tsentials/string';
+import { uuidv7, monotonicUuidv7 } from 'tsentials/uuid';
 ```
 
 ---
@@ -61,6 +62,7 @@ Result.ok()                                          // void success
 Result.successIf(cond, value, err)                   // conditional success
 Result.failIf(cond, value, err)                      // conditional failure
 Result.try(() => JSON.parse(raw), e => Err.validation('JSON.Invalid', 'Bad JSON'))
+Result.fromJSON<T>(json)                             // revive { ok, value | errors } or C# { isSuccess, value, errors }; bad shape → Result.InvalidJson failure
 
 // Type guards
 Result.isSuccess(r)   // r is { ok: true; value: T }
@@ -191,8 +193,19 @@ await Maybe.mapAsync(m, async fn)
 await Maybe.bindAsync(m, async fn)
 await Maybe.filterAsync(m, async pred)
 await Maybe.tapAsync(m, async fn)
+await Maybe.tapNoneAsync(m, async fn)   // async side effect when None
 await Maybe.matchAsync(m, async onSome, async onNone)
 await Maybe.orAsync(m, async () => fallbackMaybe)
+
+// Fluent async chain: one await at the end; each step takes sync or async callbacks
+// and an optional { signal } (the callback receives it; an aborted signal rejects the step)
+const name = await MaybeAsync.from(repo.find(id))   // also MaybeAsync.some/none/try
+  .filter(u => u.isActive)
+  .bind((u, signal) => loadProfile(u.id, { signal }), { signal })
+  .map(p => p.displayName)
+  .tap(async n => audit(n))
+  .tapNone(() => log('missing'))
+  .getOrElse(() => 'anonymous');      // also match, getOrDefault, orElse, toResult(err?) → ResultAsync
 
 // Collection utilities
 tryFirst(items, pred?)            // Maybe<T>
@@ -227,6 +240,8 @@ Err.forbidden('Permissions.Denied', 'Insufficient permissions')
 Err.fromException(error)                                    // wraps native Error
 Err.fromException(error, ErrorType.Unexpected, 'Net.Timeout')
 Err.equals(errA, errB)                                      // structural equality
+Err.with(err, { code: 'Api.X' })                            // frozen copy with overrides (not { ...err })
+Err.fromJSON(json)                                          // Result<AppError>; bad shape → AppError.InvalidJson
 
 // AppError properties: .code  .description  .type  .metadata
 // NOTE: it is .description, NOT .message

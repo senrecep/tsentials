@@ -1,6 +1,6 @@
 {
   "name": "tsentials",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Railway-oriented programming for TypeScript — Result<T>, Maybe<T>, Rule Engine, and DDD base classes with full async pipeline support",
   "type": "module",
   "main": "./dist/index.js",
@@ -85,6 +85,10 @@
     "./string": {
       "import": "./dist/string/index.js",
       "types": "./dist/string/index.d.ts"
+    },
+    "./uuid": {
+      "import": "./dist/uuid/index.js",
+      "types": "./dist/uuid/index.d.ts"
     },
     "./validation": {
       "import": "./dist/validation/index.js",

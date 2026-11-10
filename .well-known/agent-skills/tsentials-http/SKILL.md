@@ -1,6 +1,6 @@
 ---
 name: tsentials-http
-description: Use when making HTTP calls that should return Result<T> instead of throwing — fetchResult const object with get/post/put/patch/delete methods, RequestBuilder for fluent header/query-param/body construction with .send<T>(), httpStatusToError for status-to-AppError mapping, extractErrorDescription for ProblemDetails parsing.
+description: Use when making HTTP calls that should return Result<T> instead of throwing — fetchResult const object with get/post/put/patch/delete methods, RequestBuilder for fluent header/query-param/body construction with .send<T>(), httpStatusToError for status-to-AppError mapping, extractErrorDescription for ProblemDetails parsing, and server-side conditional request helpers (computeETag, formatETag, notModified for 304, checkIfMatch for 412/428).
 ---
 
 # tsentials/http
@@ -17,6 +17,7 @@ npm install tsentials
 
 ```typescript
 import { fetchResult, RequestBuilder, httpStatusToError, extractErrorDescription } from 'tsentials/http';
+import { computeETag, formatETag, notModified, checkIfMatch } from 'tsentials/http';
 ```
 
 ---
@@ -63,7 +64,7 @@ fetchResult.delete<T = void>(url: string | URL, init?: RequestInit): Promise<Res
 
 POST, PUT, and PATCH automatically set `Content-Type: application/json` and stringify the body.
 
-A 2xx JSON response with an empty or `null` body is a NotFound failure (code `NotFound`), except for `fetchResult.delete`, which succeeds with `undefined`. 204/205 and non-JSON responses are void successes.
+A 2xx JSON response with an empty or `null` body is a NotFound failure (code `NotFound`), except for `fetchResult.delete`, which succeeds with `undefined`. 204/205 and non-JSON responses are void successes. A body that is not read (204/205, a non-JSON 2xx or error response) is cancelled so the connection is released.
 
 ---
 
@@ -171,6 +172,37 @@ await ResiliencePolicy.create()
 - `idempotentRetryClassifier(method, hasKey)` never retries a POST/PATCH without a key or a replayed response; it retries network errors, timeouts, 409 `Idempotency.InFlight`, 408, 429, 503 and 504.
 - A failed response's first error carries `HttpErrorMetadataKeys` metadata: `httpStatus`, `retryAfterMs` (from `Retry-After`, see `parseRetryAfter`), `idempotencyReplayed`, `problemCode`.
 - Server side: `tsentials/idempotency` (`withIdempotency`).
+
+---
+
+## Conditional requests (ETag, 304, If-Match)
+
+```typescript
+import { computeETag, formatETag, notModified, checkIfMatch } from 'tsentials/http';
+
+// GET: answer 304 when the client's copy is current
+async function getItem(request: Request): Promise<Response> {
+  const item = await load();
+  const etag = formatETag(item.version);                 // '"7"'; computeETag(body) hashes content
+  const headers = { 'cache-control': 'max-age=60' };
+  return notModified(request, { etag, lastModified: item.updatedAt }, headers)
+    ?? Response.json(item, { headers: { ...headers, etag } });
+}
+
+// PUT/PATCH/DELETE: optimistic concurrency
+async function updateItem(request: Request): Promise<Response> {
+  const item = await load();                             // null when it does not exist
+  const rejected = checkIfMatch(request, item && { etag: formatETag(item.version) }, { required: true });
+  if (rejected) return rejected;                         // 400, 412 or 428 problem+json
+  // ... write, passing the version as a concurrency token
+}
+```
+
+- `formatETag(value, { weak })` quotes an opaque value (`RangeError` for spaces, quotes, non-ASCII). `computeETag(stringOrBytes, { weak })` is the base64url SHA-256 (Web Crypto). Both strong by default.
+- `notModified(request, { etag, lastModified }, headers?)` only answers `GET`/`HEAD`. `If-None-Match` uses weak comparison and `*` matches; without it, `If-Modified-Since` is compared with second precision. The 304 has no body and carries `ETag`, `Last-Modified` and `headers`. Returns `undefined` when the full response should be sent.
+- `checkIfMatch(request, current, { required })` only evaluates `POST`, `PUT`, `PATCH`, `DELETE`. `current` is `null`/`undefined` when the resource does not exist. Strong comparison, so weak tags never match; `*` passes for any existing resource. Responses: 428 `Http.PreconditionRequired` (missing header with `required`), 400 `Http.InvalidIfMatch` (malformed, or `*` mixed with tags), 412 `Http.PreconditionFailed` (mismatch or missing resource). Codes are in `ConditionalErrorCodes`.
+- `parseETagList(header)` returns `'*'`, the tags as written, `[]` for a missing header, or `undefined` when malformed. `compareETags(a, b, 'strong' | 'weak')` follows RFC 9110 section 8.8.3.2.
+- The `If-Match` check is not atomic with the write. `If-Unmodified-Since` and `If-None-Match` on unsafe methods are not evaluated.
 
 ---
 

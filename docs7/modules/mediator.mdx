@@ -55,8 +55,8 @@ mediator.has('GetUser');                                               // true
 
 | Behavior | Purpose |
 |----------|---------|
-| `exceptionHandlingBehavior()` | thrown handler error becomes `Err.fromException(e)` (type `Failure`) |
-| `validationBehavior(validators, { defaultMode, observers })` | run validators before the handler; modes `'enforce' \| 'logOnly' \| 'off'` (from `request.validationMode`); a `Rule<T>` is a valid validator |
+| `exceptionHandlingBehavior()` | thrown handler error becomes `Err.fromException(e)` (type `Failure`); a thrown `DomainError` becomes a failure with its carried errors as-is |
+| `validationBehavior(validators, { defaultMode, observers })` | run validators before the handler; modes `'enforce' \| 'logOnly' \| 'off'` (from `request.validationMode`); a `Rule<T>`, a function, an `{ order, validate }` object or a `Validator<T>` subclass instance is a valid validator; objects with `validateAsync` are called through it with the signal; lower `order` runs first |
 | `loggingBehavior({ logger })` | log request/response via a `MediatorLogger` |
 | `cachingBehavior({ cache })` | cache results by `request.cacheKey` (`CacheStore` get/set of strings); the key is caller-supplied, so include tenant/user in it for per-user data |
 | `lockBehavior(new InProcessResourceLock())` | serialize requests with the same `request.lockKey` |

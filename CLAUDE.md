@@ -1,7 +1,7 @@
 # tsentials — Developer Guide
 
 Railway-oriented programming toolkit for TypeScript.  
-Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`, `union`, `json`, `string`, `function`, `array`, `eq`, `ord`, `predicate`, `these`, `tree`, `record`, `validation`, `resilience`, `pagination`, `enums`, `mediator`, `idempotency`.
+Modules: `result`, `maybe`, `errors`, `rules`, `entity`, `http`, `time`, `clone`, `union`, `json`, `string`, `uuid`, `function`, `array`, `eq`, `ord`, `predicate`, `these`, `tree`, `record`, `validation`, `resilience`, `pagination`, `enums`, `mediator`, `idempotency`.
 
 **Subpath-only policy:** `validation`, `resilience`, `pagination`, `enums`, `mediator` and `idempotency` are NOT re-exported from the root `tsentials` entry. Import them from `tsentials/validation`, `tsentials/resilience`, `tsentials/pagination`, `tsentials/enums`, `tsentials/mediator`, `tsentials/idempotency`. The time extensions (`nextDayOfWeek`, `getAge`, …) are likewise exported from `tsentials/time` only.
 
@@ -37,6 +37,7 @@ src/
   union/          — Union<T> discriminated union utility
   json/           — Json types, isJson/isJsonObject guards, safeJsonParse(), safeJsonStringify(), parseAndValidate()
   string/         — String case conversion (toPascalCase, toCamelCase, toKebabCase, toSnakeCase, toMacroCase, toTrainCase, toTitleCase, toUnderscoreCamelCase)
+  uuid/           - RFC 9562 UUIDv7 generators (uuidv7, monotonicUuidv7)
   function/       — pipe, flow, identity, constant, flip — function composition
   array/          — NonEmptyArray<T>, head/tail/last/init, isNonEmpty, asNonEmptyArray
   eq/             — Eq<T> equality type class (strict/string/number/boolean/date, contramap, struct, getArrayEq)
