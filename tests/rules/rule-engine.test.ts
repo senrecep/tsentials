@@ -578,3 +578,115 @@ describe('RuleEngine.evaluate with values String() rejects', () => {
     expect(r.ok || r.errors[0]?.description).toBe('[object Object]');
   });
 });
+
+describe('RuleEngine async combinators with sync rules', () => {
+  const asyncEmail = async (u: UserContext, signal?: AbortSignal) => {
+    signal?.throwIfAborted();
+    return hasEmail(u);
+  };
+
+  it('andAsync / linearAsync / andAllAsync / orAsync accept sync and async rules together', async () => {
+    expect((await RuleEngine.andAsync(isAdult, asyncEmail)(validUser)).ok).toBe(true);
+    expect(await RuleEngine.linearAsync(isAdult, asyncEmail)(minorUser)).toEqual(
+      Result.failure(ageErr),
+    );
+    expect(await RuleEngine.andAllAsync(isAdult, asyncEmail, acceptedTerms)(invalidUser)).toEqual(
+      Result.failureFrom([ageErr, emailErr, termsErr]),
+    );
+    expect((await RuleEngine.orAsync(asyncEmail, isAdult)(minorUser)).ok).toBe(true);
+  });
+
+  it('ifAsync and evaluateAsync accept sync rules', async () => {
+    const rule = RuleEngine.ifAsync(isAdult, asyncEmail, acceptedTerms);
+    expect(await RuleEngine.evaluateAsync(rule, invalidUser)).toEqual(Result.failure(termsErr));
+    expect((await RuleEngine.evaluateAsync(isAdult, validUser)).ok).toBe(true);
+  });
+
+  it('a throwing sync rule inside an async combinator becomes Rule.EvaluationFailed', async () => {
+    const boom = (): VoidResult => {
+      throw new Error('boom');
+    };
+    const result = await RuleEngine.andAsync(isAdult, boom)(validUser);
+    expect(result.ok ? undefined : result.errors[0]?.code).toBe('Rule.EvaluationFailed');
+  });
+
+  it('typed async combinators accept sync typed rules', async () => {
+    const one = (_: UserContext) => Result.success(1);
+    const two = async (_: UserContext) => Result.success(2);
+    expect(await RuleEngine.linearTypedAsync(one, two)(validUser)).toEqual(Result.success(2));
+    expect(await RuleEngine.andTypedAsync(one, two)(validUser)).toEqual(Result.success(1));
+    expect(await RuleEngine.orTypedAsync(one, two)(validUser)).toEqual(Result.success(1));
+  });
+});
+
+describe('RuleEngine.ifTyped', () => {
+  const failErr = Err.failure('E1', 'Fail');
+  const pass = (_: UserContext) => Result.success(0);
+  const fail = (_: UserContext) => Result.failure<number>(failErr);
+  const onTrue = (_: UserContext) => Result.success(42);
+  const onFalse = (_: UserContext) => Result.success(-1);
+
+  it('runs onTrue when the condition succeeds', () => {
+    expect(RuleEngine.ifTyped(pass, onTrue, onFalse)(validUser)).toEqual(Result.success(42));
+  });
+
+  it('runs onFalse when the condition fails', () => {
+    expect(RuleEngine.ifTyped(fail, onTrue, onFalse)(validUser)).toEqual(Result.success(-1));
+  });
+
+  it("returns the condition's failure when there is no onFalse", () => {
+    expect(RuleEngine.ifTyped(fail, onTrue)(validUser)).toEqual(Result.failure(failErr));
+  });
+
+  it('a throwing condition takes onFalse; a throwing branch becomes Rule.EvaluationFailed', () => {
+    const boom = (): Result<number> => {
+      throw new Error('boom');
+    };
+    expect(RuleEngine.ifTyped(boom, onTrue, onFalse)(validUser)).toEqual(Result.success(-1));
+    const result = RuleEngine.ifTyped(pass, boom)(validUser);
+    expect(result.ok ? undefined : result.errors[0]?.code).toBe('Rule.EvaluationFailed');
+  });
+});
+
+describe('RuleEngine.ifTypedAsync', () => {
+  const failErr = Err.failure('E1', 'Fail');
+  const pass = async (_: UserContext) => Result.success(0);
+  const fail = (_: UserContext) => Result.failure<number>(failErr);
+  const onTrue = async (_: UserContext) => Result.success(42);
+  const onFalse = (_: UserContext) => Result.success(-1);
+
+  it('picks the branch from the condition and mixes sync and async rules', async () => {
+    expect(await RuleEngine.ifTypedAsync(pass, onTrue, onFalse)(validUser)).toEqual(
+      Result.success(42),
+    );
+    expect(await RuleEngine.ifTypedAsync(fail, onTrue, onFalse)(validUser)).toEqual(
+      Result.success(-1),
+    );
+    expect(await RuleEngine.ifTypedAsync(fail, onTrue)(validUser)).toEqual(Result.failure(failErr));
+  });
+
+  it('passes the signal to the rules and rejects when the caller aborts', async () => {
+    const controller = new AbortController();
+    const seen: (AbortSignal | undefined)[] = [];
+    const cond = async (_: UserContext, signal?: AbortSignal) => {
+      seen.push(signal);
+      return Result.success(0);
+    };
+    const branch = async (_: UserContext, signal?: AbortSignal) => {
+      seen.push(signal);
+      return Result.success(1);
+    };
+    expect(await RuleEngine.ifTypedAsync(cond, branch)(validUser, controller.signal)).toEqual(
+      Result.success(1),
+    );
+    expect(seen).toEqual([controller.signal, controller.signal]);
+
+    const aborting = async (_: UserContext) => {
+      controller.abort(new Error('stop'));
+      return Result.success(0);
+    };
+    await expect(
+      RuleEngine.ifTypedAsync(aborting, branch)(validUser, controller.signal),
+    ).rejects.toThrow('stop');
+  });
+});
