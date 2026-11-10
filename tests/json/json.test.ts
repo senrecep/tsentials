@@ -115,7 +115,9 @@ interface User {
 }
 
 function isUser(value: unknown): value is User {
-  return isJsonObject(value) && typeof value.name === 'string' && typeof value.age === 'number';
+  return (
+    isJsonObject(value) && typeof value['name'] === 'string' && typeof value['age'] === 'number'
+  );
 }
 
 describe('parseAndValidate', () => {
@@ -196,7 +198,7 @@ describe('safeJsonStringify (error branch)', () => {
 
   it('returns Json.StringifyFailed on circular reference', () => {
     const circular: Record<string, unknown> = {};
-    circular.self = circular;
+    circular['self'] = circular;
     const result = safeJsonStringify(circular as never);
     expect(result.ok).toBe(false);
     if (!result.ok) {

@@ -33,7 +33,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('chains headers fluently', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -53,7 +53,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('adds another value for a header with the same name', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -74,7 +74,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('appends query parameters', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -92,7 +92,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('appends duplicate query keys', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -109,7 +109,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('preserves existing query string and appends new params', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -124,7 +124,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sets JSON body and Content-Type header', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -140,7 +140,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('json() overwrites previous body', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -157,7 +157,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('body() sets raw body on init', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -172,7 +172,9 @@ describe('RequestBuilder fluent API', () => {
 
   describe('body() after json()', () => {
     const sentHeaders = async (build: (b: RequestBuilder) => RequestBuilder): Promise<Headers> => {
-      const fetchSpy = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
+      const fetchSpy = vi.fn<typeof fetch>(() =>
+        Promise.resolve(new Response(null, { status: 204 })),
+      );
       vi.stubGlobal('fetch', fetchSpy);
       await build(RequestBuilder.post('https://api.example.com/upload')).send<void>();
       const init = fetchSpy.mock.calls[0]![1] as RequestInit;
@@ -205,7 +207,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('overwrites Content-Type when json() is called after header()', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -228,7 +230,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('accepts URL object', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -241,7 +243,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends GET request correctly', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -255,7 +257,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends POST request correctly', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 201, headers: { 'content-type': 'application/json' } }),
       ),
@@ -271,7 +273,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends PUT request correctly', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -287,7 +289,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends PATCH request correctly', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -303,7 +305,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends DELETE request correctly in send()', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -317,7 +319,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('parses JSON body before passing to fetchResult.post', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -333,7 +335,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('keeps a relative URL relative (no localhost base)', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -380,7 +382,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends POST without body (null body fallback)', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -394,7 +396,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends PUT without body (null body fallback)', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -408,7 +410,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends PATCH without body (null body fallback)', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -422,7 +424,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends a raw non-JSON body on POST without throwing', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -441,7 +443,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends a raw non-JSON body on PUT without throwing', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -458,7 +460,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('sends a raw non-JSON body on PATCH without throwing', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -475,7 +477,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('does not double-encode JSON bodies (no parse/stringify round-trip)', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -491,7 +493,7 @@ describe('RequestBuilder fluent API', () => {
   });
 
   it('falls back to GET for unknown HTTP method (default branch)', async () => {
-    const fetchSpy = vi.fn(() =>
+    const fetchSpy = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -511,7 +513,7 @@ describe('RequestBuilder fluent API', () => {
 
 describe('RequestBuilder — URL, query, headers, signal, timeout', () => {
   const capture = () => {
-    const fetchSpy = vi.fn((_url: string | URL | Request, _init?: RequestInit) =>
+    const fetchSpy = vi.fn<typeof fetch>((_url: string | URL | Request, _init?: RequestInit) =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),
@@ -621,7 +623,7 @@ describe('RequestBuilder — URL, query, headers, signal, timeout', () => {
   });
 
   it('the builder can be sent twice without sharing header state', async () => {
-    const fetchSpy = vi.fn((_url: string | URL | Request, _init?: RequestInit) =>
+    const fetchSpy = vi.fn<typeof fetch>((_url: string | URL | Request, _init?: RequestInit) =>
       Promise.resolve(
         new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
       ),

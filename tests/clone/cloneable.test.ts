@@ -303,10 +303,10 @@ describe('deepClone', () => {
       unknown
     >;
     const copy = deepClone(malicious);
-    expect(copy.safe).toBe(1);
-    expect((copy as Record<string, unknown>).polluted).toBeUndefined();
+    expect(copy['safe']).toBe(1);
+    expect((copy as Record<string, unknown>)['polluted']).toBeUndefined();
     // Object.prototype must not be polluted
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
   });
 
   it('preserves sparse array holes', () => {

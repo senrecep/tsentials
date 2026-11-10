@@ -41,7 +41,7 @@ describe('stableStringify', () => {
 
   it('throws on a circular reference', () => {
     const a: Record<string, unknown> = {};
-    a.self = a;
+    a['self'] = a;
     expect(() => stableStringify(a)).toThrow(TypeError);
   });
 });

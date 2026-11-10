@@ -98,7 +98,10 @@ describe('Tree.findAll', () => {
 describe('Tree.fold', () => {
   it('folds the tree into a single value', () => {
     const t = Tree.of(1, [Tree.of(2, [Tree.leaf(3)]), Tree.leaf(4)]);
-    const sum = Tree.fold(t, (value, children) => value + children.reduce((a, b) => a + b, 0));
+    const sum = Tree.fold<number, number>(
+      t,
+      (value, children) => value + children.reduce((a, b) => a + b, 0),
+    );
     expect(sum).toBe(10);
   });
 });

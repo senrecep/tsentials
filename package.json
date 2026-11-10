@@ -124,7 +124,8 @@
     "check": "biome check src tests",
     "prepublishOnly": "npm run build && npm test",
     "docs7": "node scripts/docs7.mjs",
-    "docs7:check": "node scripts/docs7.mjs --check"
+    "docs7:check": "node scripts/docs7.mjs --check",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.test.json"
   },
   "files": [
     "dist",

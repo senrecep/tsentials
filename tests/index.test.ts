@@ -149,7 +149,7 @@ describe('index runtime integration', () => {
   });
 
   it('can use Union', () => {
-    const u = Union.of<{ a: number; b: string }>('a', 42);
+    const u = Union.of<{ a: number; b: string }, 'a'>('a', 42);
     const result = Union.match(u, {
       a: (n) => n * 2,
       b: (s) => s.length,

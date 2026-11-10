@@ -65,7 +65,7 @@ describe('Record.filterMap', () => {
 
 describe('Record.upsert', () => {
   it('inserts a new key', () => {
-    const result = R.upsert({ a: 1 }, 'b', 2);
+    const result = R.upsert<string, number>({ a: 1 }, 'b', 2);
     expect(result).toEqual({ a: 1, b: 2 });
   });
 
