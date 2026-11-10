@@ -845,6 +845,8 @@ isJsonObject({ a: 1 });          // true — plain objects only, rejects Date/Re
 isJson({ nested: [1, null] });   // true — recursive validation
 isJson({ fn: () => {} });        // false — functions are not valid JSON
 isJson({ key: undefined });      // false — undefined is not valid JSON
+isJson({ n: NaN });              // false, NaN and Infinity are not valid JSON
+isJson(circular);                // false, a cycle returns false instead of throwing
 ```
 
 ### Error Codes

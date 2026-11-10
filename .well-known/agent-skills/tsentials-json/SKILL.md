@@ -95,6 +95,8 @@ isJsonObject([]);                   // false — arrays are not objects
 isJson({ nested: [1, null] });      // true  — recursive validation
 isJson({ fn: () => {} });           // false — functions not valid JSON
 isJson({ key: undefined });         // false — undefined not valid JSON
+isJson({ n: NaN });                 // false, NaN and Infinity are not valid JSON
+isJson(circular);                   // false, a cycle returns false instead of throwing
 ```
 
 > **Important:** `isJsonObject` only accepts plain objects (`Object.prototype` or `null` prototype). `new Date()`, `new Map()`, class instances all return `false`.

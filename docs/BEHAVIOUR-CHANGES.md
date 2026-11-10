@@ -5,6 +5,10 @@ This guide lists every change that alters the runtime behaviour of an existing t
 ## Behaviour changes in the next release (unreleased)
 
 * **mediator:** `validationBehavior` now calls an object validator as a method, and uses its `validateAsync(request, { signal })` when it has one, instead of calling a detached `validate`. A `Validator` subclass from `tsentials/validation` used to fail every request with `Validator.Exception` because it lost `this`; it now validates, honours its `order`, and receives the caller's signal. An object with both methods now runs `validateAsync`, not `validate`.
+* **json:** `isJson` returns `false` for circular data instead of throwing `RangeError`. `isJson` and `isJsonPrimitive` return `false` for `NaN`, `Infinity` and `-Infinity`, which JSON cannot represent; they used to return `true`.
+* **predicate:** `Predicate.toRule(p, error)` now returns a real `Rule<A>` from `tsentials/rules`: `Result.ok()` when the predicate holds, otherwise `Result.failure(error)`. `error` must be an `AppError`. It used to return `undefined` or the raw `error`, which `RuleEngine` could not use.
+* **eq:** `Eq.number.equals(NaN, NaN)` is now `true`, consistent with `Ord.number`. `0` and `-0` stay equal. It used to be `false` (`===`).
+* **record:** `map`, `mapWithKey`, `filter`, `filterMap`, `remove`, `pick`, `omit` and `partition` keep an own `__proto__` key (e.g. from `JSON.parse`) as an own data property of the result. They used to drop it, and an object value under that key became the result's prototype.
 
 ## Behaviour changes in 3.0.0
 

@@ -1,14 +1,22 @@
+import type { AppError } from '../errors/app-error.js';
+import { Result } from '../result/result.js';
+import type { Rule } from '../rules/rule.js';
+
 /**
  * Predicate<T>: composable, type-safe boolean functions.
  *
  * @example
+ * import { Err } from 'tsentials/errors';
  * import { Predicate } from 'tsentials/predicate';
  *
  * const isAdult = Predicate.from((u: User) => u.age >= 18);
  * const isActive = Predicate.from((u: User) => u.isActive);
  *
  * const isValidUser = Predicate.and(isAdult, isActive);
- * isValidUser({ age: 20, isActive: true }); // true
+ * isValidUser.test({ age: 20, isActive: true }); // true
+ *
+ * const adultRule = Predicate.toRule(isAdult, Err.validation('User.Minor', 'Must be 18 or older'));
+ * adultRule({ age: 20, isActive: true }); // Result.ok()
  */
 
 /**
@@ -76,9 +84,12 @@ export function andRefinement<A, B extends A, C extends A>(
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
-/** Converts a Predicate to a Rule-compatible function. */
-export function toRule<A>(p: Predicate<A>, error: unknown): (value: A) => unknown {
-  return (value) => (p.test(value) ? undefined : error);
+/**
+ * Converts a Predicate to a `Rule<A>` from `tsentials/rules`: `Result.ok()` when the
+ * predicate holds, otherwise a failure carrying `error`.
+ */
+export function toRule<A>(p: Predicate<A>, error: AppError): Rule<A> {
+  return (value) => (p.test(value) ? Result.ok() : Result.failure(error));
 }
 
 // ─── Namespace ───────────────────────────────────────────────────────────────
